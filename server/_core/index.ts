@@ -124,7 +124,7 @@ export default async function handler(req: any, res: any) {
 
 // Local development server
 if (process.env.NODE_ENV === "development" || !process.env.VERCEL) {
-  async function startLocalServer() {
+  const startLocalServer = async () => {
     const { app, server } = await createMainApp();
     const preferredPort = parseInt(process.env.PORT || "3000");
     const port = await findAvailablePort(preferredPort);
@@ -136,7 +136,7 @@ if (process.env.NODE_ENV === "development" || !process.env.VERCEL) {
     server.listen(port, () => {
       console.log(`Server running on http://localhost:${port}/`);
     });
-  }
+  };
 
   // Only start server if not running in Vercel environment
   if (!process.env.VERCEL) {

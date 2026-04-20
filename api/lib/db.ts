@@ -4,6 +4,10 @@ import * as schema from "./drizzle/schema.js";
 import { eq, desc, and } from "drizzle-orm";
 
 let _db: any = null;
+/** Raw postgres.js client — required for self-heal DDL (`unsafe`), not the `postgres` factory. */
+let _pg: ReturnType<typeof postgres> | null = null;
+
+const ANONYMOUS_OPEN_ID = "__flow_guru_anonymous__";
 
 export async function getDb() {
   if (_db) return _db;
@@ -15,17 +19,51 @@ export async function getDb() {
   }
 
   try {
-    const client = postgres(dbUrl, { 
-        ssl: 'require',
-        connect_timeout: 10,
-        max: 1 
+    const client = postgres(dbUrl, {
+      ssl: "require",
+      connect_timeout: 10,
+      max: 1,
     });
+    _pg = client;
     _db = drizzle(client, { schema });
     return _db;
   } catch (error) {
     console.error("[Database] Connection failed:", error);
     return null;
   }
+}
+
+/**
+ * Public assistant routes allow unauthenticated use; DB rows must still reference a real user.
+ * Uses a stable synthetic openId so guest chat shares one logical profile (or upgrade later).
+ */
+export async function getOrCreateAnonymousUser(): Promise<schema.User> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("DATABASE_URL is not configured");
+  }
+  await ensureTables(db);
+  const existing = await getUserByOpenId(ANONYMOUS_OPEN_ID);
+  if (existing) return existing;
+
+  await db.insert(schema.users).values({
+    openId: ANONYMOUS_OPEN_ID,
+    name: "Guest",
+    email: null,
+    loginMethod: "anonymous",
+    lastSignedIn: new Date(),
+  });
+  const created = await getUserByOpenId(ANONYMOUS_OPEN_ID);
+  if (!created) {
+    throw new Error("Failed to create anonymous user row");
+  }
+  return created;
+}
+
+export async function resolveAssistantUserId(user: schema.User | null): Promise<number> {
+  if (user?.id != null) return user.id;
+  const anon = await getOrCreateAnonymousUser();
+  return anon.id;
 }
 
 /**
@@ -105,8 +143,12 @@ async function ensureTables(db: any) {
                     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
                 );
             `;
-            await db.execute((postgres as any).unsafe(sql));
-            console.log("[DB] Self-healing successful! Prefixed tables created.");
+            if (!_pg) {
+              console.error("[DB] Self-healing skipped: postgres client not initialized.");
+            } else {
+              await _pg.unsafe(sql);
+              console.log("[DB] Self-healing successful! Prefixed tables created.");
+            }
         } catch (mErr) {
             console.error("[DB] Self-healing FAILED:", mErr);
         }
@@ -283,6 +325,7 @@ export async function listUserMemoryFacts(userId: number): Promise<schema.UserMe
 
 export async function createUserMemoryFacts(userId: number, facts: any[]): Promise<void> {
     try {
+      if (!facts.length) return;
       const db = await getDb();
       if (!db) return;
       await ensureTables(db);

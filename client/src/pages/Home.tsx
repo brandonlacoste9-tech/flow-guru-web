@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, Calendar, Cloud, MapPin, Newspaper, LogOut } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { ActionResultCard } from "@/components/ActionResultCard";
 
 interface Message {
   id: string | number;
@@ -11,14 +12,6 @@ interface Message {
   content: string;
   actionResult?: any;
 }
-
-const getActionIcon = (action: string) => {
-  if (action?.includes('calendar')) return Calendar;
-  if (action?.includes('weather')) return Cloud;
-  if (action?.includes('route')) return MapPin;
-  if (action?.includes('news')) return Newspaper;
-  return Sparkles;
-};
 
 export default function Home() {
   const { user, logout, isAuthenticated } = useAuth({ redirectOnUnauthenticated: false });
@@ -33,11 +26,14 @@ export default function Home() {
   // tRPC Hooks
   const bootstrap = trpc.assistant.bootstrap.useQuery(undefined, {
     enabled: true,
-    onSuccess: (data) => {
-      if (data.messages) setMessages(data.messages as Message[]);
-      if (data.thread) setCurrentThreadId(data.thread.id);
-    }
   });
+
+  useEffect(() => {
+    const data = bootstrap.data;
+    if (!data) return;
+    if (data.messages) setMessages(data.messages as Message[]);
+    if (data.thread) setCurrentThreadId(data.thread.id);
+  }, [bootstrap.data]);
 
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
@@ -138,9 +134,7 @@ export default function Home() {
       {/* Chat Area */}
       <main className="flex-1 overflow-y-auto px-6 py-4 scrollbar-hide">
         <div className="max-w-3xl mx-auto space-y-8 pb-40">
-          {messages.map((message) => {
-             const Icon = getActionIcon(message.actionResult?.action);
-             return (
+          {messages.map((message) => (
                 <div key={message.id} className={cn("flex flex-col gap-3", message.role === 'user' ? "items-end" : "items-start")}>
                     <div className={cn(
                         "px-8 py-5 rounded-[32px] text-[20px] font-medium leading-relaxed max-w-[85%] shadow-2xl transition-all hover:scale-[1.01]",
@@ -149,19 +143,10 @@ export default function Home() {
                         {message.content}
                     </div>
                     {message.actionResult && message.actionResult.action !== 'none' && (
-                        <div className="bg-[#1C1C1E]/50 border border-white/5 rounded-[24px] p-6 max-w-[85%] backdrop-blur-xl animate-in zoom-in-95 duration-500">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="p-2 bg-blue-500/10 rounded-full">
-                                    <Icon className="text-blue-500 w-5 h-5" />
-                                </div>
-                                <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">{message.actionResult.title}</h3>
-                            </div>
-                            <p className="text-zinc-300 text-[16px] leading-relaxed">{message.actionResult.summary}</p>
-                        </div>
+                        <ActionResultCard result={message.actionResult} />
                     )}
                 </div>
-             );
-          })}
+             ))}
           {sendMutation.isPending && (
              <div className="flex justify-start">
                 <div className="bg-[#1C1C1E] px-8 py-5 rounded-[32px] rounded-tl-md">

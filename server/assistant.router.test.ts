@@ -11,6 +11,7 @@ const dbMocks = vi.hoisted(() => ({
   listConversationMessages: vi.fn(),
   listProviderConnections: vi.fn(),
   listUserMemoryFacts: vi.fn(),
+  resolveAssistantUserId: vi.fn(async (user: { id: number } | null) => user?.id ?? 1),
   touchConversationThread: vi.fn(),
   upsertUserMemoryProfile: vi.fn(),
 }));
@@ -285,7 +286,7 @@ describe("assistant router", () => {
       content: "That sounds like a steady start. I’ll keep that rhythm in mind.",
     });
 
-    expect(dbMocks.upsertUserMemoryProfile).toHaveBeenCalledWith({
+    expect(dbMocks.upsertUserMemoryProfile).toHaveBeenCalledWith(ctx.user!.id, {
       userId: ctx.user!.id,
       wakeUpTime: "6:15 AM",
       dailyRoutine: "Usually stretches before coffee after waking.",
@@ -293,7 +294,7 @@ describe("assistant router", () => {
       recurringEventsSummary: null,
     });
 
-    expect(dbMocks.createUserMemoryFacts).toHaveBeenCalledWith([
+    expect(dbMocks.createUserMemoryFacts).toHaveBeenCalledWith(ctx.user!.id, [
       {
         userId: ctx.user!.id,
         category: "wake_up_time",

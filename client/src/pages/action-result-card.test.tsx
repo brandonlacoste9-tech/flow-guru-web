@@ -6,7 +6,7 @@ vi.mock("streamdown", () => ({
   Streamdown: ({ children }: { children: string }) => children,
 }));
 
-import { ActionResultCard, type AssistantActionResult } from "./Home";
+import { ActionResultCard, type AssistantActionResult } from "@/components/ActionResultCard";
 
 function renderCard(result: AssistantActionResult) {
   return renderToStaticMarkup(<ActionResultCard result={result} />);
@@ -56,7 +56,7 @@ describe("ActionResultCard", () => {
 
   it("renders the non-executed status guidance for incomplete actions", () => {
     const html = renderCard({
-      action: "calendar.create",
+      action: "calendar.create_event",
       status: "needs_input",
       title: "More detail needed",
       summary: "I still need a start time.",

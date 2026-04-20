@@ -21,9 +21,10 @@ import {
   listConversationMessages,
   listProviderConnections,
   listUserMemoryFacts,
+  resolveAssistantUserId,
   touchConversationThread,
   upsertUserMemoryProfile,
-  } from "./db.js";
+} from "./db.js";
 
 const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
@@ -326,7 +327,7 @@ export const appRouter = router({
   }),
   assistant: router({
     bootstrap: publicProcedure.query(async ({ ctx }) => {
-      const userId = ctx.user?.id || 1; // Fallback to demo user
+      const userId = await resolveAssistantUserId(ctx.user);
       const profile = await getUserMemoryProfile(userId);
       const memoryFacts = await listUserMemoryFacts(userId);
       const thread = await findLatestConversationThread(userId);
@@ -343,7 +344,7 @@ export const appRouter = router({
       };
     }),
     startFresh: publicProcedure.mutation(async ({ ctx }) => {
-      const userId = ctx.user?.id || 1;
+      const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await createConversationThread({
         userId,
         title: "Flow Guru Chat",
@@ -363,7 +364,7 @@ export const appRouter = router({
       };
     }),
     history: publicProcedure.query(async ({ ctx }) => {
-      const userId = ctx.user?.id || 1;
+      const userId = await resolveAssistantUserId(ctx.user);
       const thread = await findLatestConversationThread(userId);
       if (!thread || thread.userId !== userId) {
         return {
@@ -379,7 +380,7 @@ export const appRouter = router({
       };
     }),
     send: publicProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
-      const userId = ctx.user?.id || 1;
+      const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
 
       await createConversationMessage({
