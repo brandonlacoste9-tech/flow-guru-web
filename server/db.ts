@@ -175,6 +175,22 @@ export async function findLatestConversationThread(userId: number) {
   return result[0];
 }
 
+export async function getConversationThreadById(threadId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot load conversation thread by id: database not available");
+    return undefined;
+  }
+
+  const result = await db
+    .select()
+    .from(conversationThreads)
+    .where(eq(conversationThreads.id, threadId))
+    .limit(1);
+
+  return result[0];
+}
+
 export async function createConversationThread(input: InsertConversationThread) {
   const db = await getDb();
   if (!db) {

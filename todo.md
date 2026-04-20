@@ -96,3 +96,9 @@
 - [x] Refresh the Flow Guru visual design with a more polished chat-first layout, typography, spacing, and surface treatment
 - [x] Improve the chat composer, message bubbles, and action-card styling so the interface feels cleaner and more intentional
 - [x] Browser-validate the refreshed visual design in the running app and iterate on any obvious layout or readability issues
+- [x] Remove mock chat history and any placeholder conversation data from the authenticated Flow Guru interface
+- [x] Replace mock content with real conversation state plus a cleaner empty-state experience when no live messages exist
+- [x] Browser-validate the mock-data cleanup and confirm the refreshed interface still feels intentional without seeded demo content
+- [x] Remove remaining seeded welcome copy and hardcoded suggestion chips from the authenticated empty state so the chat opens without demo-style content
+- [x] Add Vitest coverage for the assistant fresh-chat flow and for sending messages into an explicitly selected active thread
+- [x] Browser-verify that authenticated Flow Guru opens without seeded conversation content after the final cleanup pass

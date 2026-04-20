@@ -76,18 +76,6 @@ type ProviderConnection = {
   externalAccountLabel?: string | null;
 };
 
-const SUGGESTED_PROMPTS = [
-  "What should my morning look like tomorrow?",
-  "Remember that I prefer calm evening routines.",
-  "Help me plan my recurring weekly priorities.",
-];
-
-const FALLBACK_WELCOME =
-  "I’m here. Tell me what matters today, and I’ll keep your rhythm in mind.";
-
-const EXPERIENCE_PILLARS = ["Google Calendar ready", "Voice-enabled", "Memory-aware"];
-const COMPOSER_PROMISES = ["Schedule", "Navigate", "Weather", "News"];
-
 function formatRelativeTime(value: Date | string | number) {
   const date = value instanceof Date ? value : new Date(value);
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -318,6 +306,7 @@ export default function Home() {
   });
 
   const [draft, setDraft] = useState("");
+  const [currentThreadId, setCurrentThreadId] = useState<number | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [actionResultsByMessageId, setActionResultsByMessageId] = useState<Record<number, AssistantActionResult>>({});
   const [isListening, setIsListening] = useState(false);
@@ -332,6 +321,7 @@ export default function Home() {
   const listeningBaseTextRef = useRef("");
   const listeningActiveRef = useRef(false);
   const heardSpeechRef = useRef(false);
+  const hasPreparedFreshChatRef = useRef(false);
 
   const displayedMessages = useMemo(() => getDisplayedMessages(messages), [messages]);
   const providerConnections = ((bootstrapQuery.data?.providerConnections as ProviderConnection[] | undefined) ?? []).filter(Boolean);
@@ -402,9 +392,28 @@ export default function Home() {
     }
   };
 
+  const startFreshMutation = trpc.assistant.startFresh.useMutation({
+    onSuccess: result => {
+      setCurrentThreadId((result.thread as { id: number } | null | undefined)?.id ?? null);
+      setMessages([]);
+      setActionResultsByMessageId({});
+      setDraft("");
+      setInterimTranscript("");
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    },
+    onError: mutationError => {
+      toast.error(mutationError.message || "Flow Guru couldn’t prepare a fresh chat just now.");
+    },
+  });
+
+  const isPreparingFreshChat = bootstrapQuery.isLoading || startFreshMutation.isPending;
+
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: result => {
       const nextMessages = (result.messages as UiMessage[]) ?? [];
+      setCurrentThreadId(result.threadId ?? null);
       setMessages(nextMessages);
       setActionResultsByMessageId(current => {
         const next = { ...current };
@@ -426,9 +435,24 @@ export default function Home() {
   });
 
   useEffect(() => {
-    if (bootstrapQuery.data) {
-      setMessages((bootstrapQuery.data.messages as UiMessage[]) ?? []);
+    if (!bootstrapQuery.data) {
+      return;
     }
+
+    const bootstrapMessages = (bootstrapQuery.data.messages as UiMessage[]) ?? [];
+    const bootstrapThreadId = (bootstrapQuery.data.thread as { id: number } | null | undefined)?.id ?? null;
+
+    if (bootstrapMessages.length > 0 && !hasPreparedFreshChatRef.current) {
+      hasPreparedFreshChatRef.current = true;
+      setMessages([]);
+      setActionResultsByMessageId({});
+      setCurrentThreadId(null);
+      startFreshMutation.mutate();
+      return;
+    }
+
+    setCurrentThreadId(bootstrapThreadId);
+    setMessages(bootstrapMessages);
   }, [bootstrapQuery.data]);
 
   useEffect(() => {
@@ -522,13 +546,14 @@ export default function Home() {
 
   const handleSend = (content?: string) => {
     const value = (content ?? draft).trim();
-    if (!value || sendMutation.isPending) return;
+    if (!value || sendMutation.isPending || startFreshMutation.isPending) return;
 
     setDraft("");
     setInterimTranscript("");
     sendMutation.mutate({
       message: value,
       timeZone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined,
+      threadId: currentThreadId ?? undefined,
     });
   };
 
@@ -645,14 +670,17 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2.5">
-                  {EXPERIENCE_PILLARS.map(pillar => (
-                    <span
-                      key={pillar}
-                      className="rounded-full border border-white/12 bg-black/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-                    >
-                      {pillar}
-                    </span>
-                  ))}
+                  <span className="rounded-full border border-white/12 bg-black/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    {providerConnections.some(connection => connection.provider === "google-calendar" && connection.status === "connected")
+                      ? "Calendar connected"
+                      : "Calendar available"}
+                  </span>
+                  <span className="rounded-full border border-white/12 bg-black/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    {speechSupported ? "Voice ready" : "Voice unavailable"}
+                  </span>
+                  <span className="rounded-full border border-white/12 bg-black/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    {currentThreadId ? "Live thread active" : "Fresh chat ready"}
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-2 self-start lg:self-auto">
@@ -688,18 +716,32 @@ export default function Home() {
                     <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Conversation</p>
                     <p className="mt-1 text-sm text-foreground">Natural language requests, responses, and live action summaries.</p>
                   </div>
-                  <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                    {displayedMessages.length} messages
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                      {displayedMessages.length} messages
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        hasPreparedFreshChatRef.current = true;
+                        startFreshMutation.mutate();
+                      }}
+                      disabled={startFreshMutation.isPending || sendMutation.isPending}
+                      className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-muted-foreground hover:bg-white/[0.12] hover:text-foreground"
+                    >
+                      New chat
+                    </Button>
                   </div>
                 </div>
               </div>
 
               <div ref={messageViewportRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-7">
-                {bootstrapQuery.isLoading ? (
+                {isPreparingFreshChat ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="flex items-center gap-3 rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-muted-foreground shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
                       <Loader2 className="size-4 animate-spin text-primary" />
-                      Loading your conversation...
+                      {startFreshMutation.isPending ? "Preparing a fresh chat..." : "Loading your conversation..."}
                     </div>
                   </div>
                 ) : displayedMessages.length === 0 ? (
@@ -709,24 +751,14 @@ export default function Home() {
                         <Sparkles className="size-7" />
                       </div>
                       <div className="space-y-3">
-                        <h2 className="text-3xl font-semibold tracking-[-0.03em] text-foreground">{FALLBACK_WELCOME}</h2>
+                        <h2 className="text-3xl font-semibold tracking-[-0.03em] text-foreground">Start a new conversation.</h2>
                         <p className="mx-auto max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-                          Start anywhere — your wake-up time, how your week feels, what you prefer, or something you want me to remember.
+                          Your chat opens clean now. Type or speak a real request below, and Flow Guru will respond from the live conversation state.
                         </p>
                       </div>
                     </div>
-                    <div className="grid w-full max-w-3xl gap-3 sm:grid-cols-3">
-                      {SUGGESTED_PROMPTS.map(prompt => (
-                        <button
-                          key={prompt}
-                          type="button"
-                          onClick={() => handleSend(prompt)}
-                          disabled={sendMutation.isPending}
-                          className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04))] px-4 py-4 text-left text-sm leading-6 text-muted-foreground transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {prompt}
-                        </button>
-                      ))}
+                    <div className="rounded-[24px] border border-dashed border-white/10 bg-black/10 px-5 py-4 text-sm leading-7 text-muted-foreground">
+                      Nothing is prefilled here. The first live request you send will define this thread.
                     </div>
                   </div>
                 ) : (
@@ -802,15 +834,18 @@ export default function Home() {
 
               <div className="border-t border-white/10 px-4 py-4 sm:px-6 sm:py-5">
                 <div className="rounded-[30px] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.04))] p-3 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-white/8 px-2 pb-3">
-                    {COMPOSER_PROMISES.map(item => (
-                      <span
-                        key={item}
-                        className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-muted-foreground"
-                      >
-                        {item}
-                      </span>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2 border-b border-white/8 px-2 pb-3 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                      {currentThreadId ? `Thread ${currentThreadId}` : "Waiting for first request"}
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                      {speechEnabled ? "Speech on" : "Speech off"}
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                      {providerConnections.some(connection => connection.provider === "google-calendar" && connection.status === "connected")
+                        ? "Calendar linked"
+                        : "Calendar optional"}
+                    </span>
                   </div>
                   <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end">
                     <div className="min-w-0 flex-1 rounded-[24px] border border-white/8 bg-black/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
@@ -847,7 +882,7 @@ export default function Home() {
                         type="button"
                         size="icon"
                         onClick={toggleListening}
-                        disabled={sendMutation.isPending || !recognitionSupported}
+                        disabled={sendMutation.isPending || startFreshMutation.isPending || !recognitionSupported}
                         className={cn(
                           "size-13 rounded-full shadow-[0_18px_40px_rgba(0,0,0,0.25)] transition duration-200",
                           isListening
@@ -863,7 +898,7 @@ export default function Home() {
                         size="icon"
                         variant="ghost"
                         onClick={() => handleSend()}
-                        disabled={!draft.trim() || sendMutation.isPending}
+                        disabled={!draft.trim() || sendMutation.isPending || startFreshMutation.isPending}
                         className="size-13 rounded-full border border-white/12 bg-white/[0.08] text-foreground shadow-[0_18px_40px_rgba(0,0,0,0.22)] hover:bg-white/[0.14]"
                         aria-label="Send message"
                       >

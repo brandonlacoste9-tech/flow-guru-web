@@ -16,6 +16,7 @@ import {
   createConversationThread,
   createUserMemoryFacts,
   findLatestConversationThread,
+  getConversationThreadById,
   getUserMemoryProfile,
   listConversationMessages,
   listProviderConnections,
@@ -27,6 +28,7 @@ import {
 const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
   timeZone: z.string().trim().min(1).max(100).optional(),
+  threadId: z.number().int().positive().optional(),
 });
 
 const MEMORY_FACT_CATEGORIES = [
@@ -108,7 +110,14 @@ function buildMemoryContext(params: {
   ].join("\n");
 }
 
-async function getOrCreateThreadId(userId: number) {
+async function getOrCreateThreadId(userId: number, requestedThreadId?: number) {
+  if (requestedThreadId) {
+    const requestedThread = await getConversationThreadById(requestedThreadId);
+    if (requestedThread && requestedThread.userId === userId) {
+      return requestedThread.id;
+    }
+  }
+
   const existingThread = await findLatestConversationThread(userId);
   if (existingThread && existingThread.userId === userId) {
     return existingThread.id;
@@ -331,6 +340,25 @@ export const appRouter = router({
         providerConnections,
       };
     }),
+    startFresh: protectedProcedure.mutation(async ({ ctx }) => {
+      const threadId = await createConversationThread({
+        userId: ctx.user.id,
+        title: "Flow Guru Chat",
+      });
+
+      if (!threadId) {
+        throw new Error("Failed to create conversation thread");
+      }
+
+      const thread = await getConversationThreadById(threadId);
+      const providerConnections = await listProviderConnections(ctx.user.id);
+
+      return {
+        thread,
+        messages: [],
+        providerConnections,
+      };
+    }),
     history: protectedProcedure.query(async ({ ctx }) => {
       const thread = await findLatestConversationThread(ctx.user.id);
       if (!thread || thread.userId !== ctx.user.id) {
@@ -347,7 +375,7 @@ export const appRouter = router({
       };
     }),
     send: protectedProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
-      const threadId = await getOrCreateThreadId(ctx.user.id);
+      const threadId = await getOrCreateThreadId(ctx.user.id, input.threadId);
 
       await createConversationMessage({
         threadId,

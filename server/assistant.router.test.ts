@@ -6,6 +6,7 @@ const dbMocks = vi.hoisted(() => ({
   createConversationThread: vi.fn(),
   createUserMemoryFacts: vi.fn(),
   findLatestConversationThread: vi.fn(),
+  getConversationThreadById: vi.fn(),
   getUserMemoryProfile: vi.fn(),
   listConversationMessages: vi.fn(),
   listProviderConnections: vi.fn(),
@@ -382,6 +383,51 @@ describe("assistant router", () => {
     });
   });
 
+  it("starts a fresh authenticated chat without loading prior messages", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const thread = {
+      id: 25,
+      userId: ctx.user!.id,
+      title: "Flow Guru Chat",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastMessageAt: new Date(),
+    };
+
+    dbMocks.createConversationThread.mockResolvedValue(thread.id);
+    dbMocks.getConversationThreadById.mockResolvedValue(thread);
+    dbMocks.listProviderConnections.mockResolvedValue([
+      {
+        id: 1,
+        userId: ctx.user!.id,
+        provider: "google-calendar",
+        status: "connected",
+        externalAccountId: "acct_1",
+        externalAccountLabel: "flow@example.com",
+        accessToken: null,
+        refreshToken: null,
+        tokenExpiresAt: null,
+        scopes: null,
+        metadataJson: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const result = await caller.assistant.startFresh();
+
+    expect(dbMocks.createConversationThread).toHaveBeenCalledWith({
+      userId: ctx.user!.id,
+      title: "Flow Guru Chat",
+    });
+    expect(dbMocks.getConversationThreadById).toHaveBeenCalledWith(thread.id);
+    expect(result.thread).toEqual(thread);
+    expect(result.messages).toEqual([]);
+    expect(result.providerConnections).toHaveLength(1);
+  });
+
   it("scopes bootstrap reads to the authenticated user account", async () => {
     const ctx = createAuthContext({
       id: 42,
@@ -501,6 +547,101 @@ describe("assistant router", () => {
       userId: 55,
       role: "user",
       content: "Keep this in my account only.",
+    });
+  });
+
+  it("uses an explicitly selected authenticated thread when sending a message", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    dbMocks.getConversationThreadById.mockResolvedValue({
+      id: 44,
+      userId: ctx.user!.id,
+      title: "Flow Guru Chat",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastMessageAt: new Date(),
+    });
+    dbMocks.getUserMemoryProfile.mockResolvedValue(undefined);
+    dbMocks.listUserMemoryFacts.mockResolvedValue([]);
+    dbMocks.createConversationMessage.mockResolvedValueOnce(70).mockResolvedValueOnce(71);
+    dbMocks.listConversationMessages.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    llmMocks.invokeLLM
+      .mockResolvedValueOnce({
+        id: "plan-threaded",
+        created: Date.now(),
+        model: "test-model",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                action: "none",
+                rationale: "This is a normal conversation turn without a provider action.",
+                route: null,
+                weather: null,
+                news: null,
+                calendar: null,
+                music: null,
+              }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        id: "chat-threaded",
+        created: Date.now(),
+        model: "test-model",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: "Picked up in the active thread.",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        id: "extract-threaded",
+        created: Date.now(),
+        model: "test-model",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                profile_updates: {
+                  wakeUpTime: null,
+                  dailyRoutine: null,
+                  preferencesSummary: null,
+                  recurringEventsSummary: null,
+                },
+                facts: [],
+              }),
+            },
+          },
+        ],
+      });
+
+    const result = await caller.assistant.send({
+      message: "Continue from this clean thread.",
+      threadId: 44,
+    });
+
+    expect(dbMocks.getConversationThreadById).toHaveBeenCalledWith(44);
+    expect(dbMocks.findLatestConversationThread).not.toHaveBeenCalled();
+    expect(result.threadId).toBe(44);
+    expect(dbMocks.createConversationMessage).toHaveBeenNthCalledWith(1, {
+      threadId: 44,
+      userId: ctx.user!.id,
+      role: "user",
+      content: "Continue from this clean thread.",
     });
   });
 
