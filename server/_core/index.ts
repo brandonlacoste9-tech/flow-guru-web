@@ -33,11 +33,12 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 export async function createMainApp() {
   const app = express();
   
-  // 1. TRPC API - HIGHEST PRIORITY
+  // 1. TRPC API - HIGHEST PRIORITY (Regex catch-all for any TRPC call)
   const trpcMiddleware = createExpressMiddleware({
     router: appRouter,
     createContext,
   });
+  app.use(/.*trpc.*/, trpcMiddleware);
   app.use("/api/trpc", trpcMiddleware);
   app.use("/trpc", trpcMiddleware);
 
@@ -70,9 +71,9 @@ export async function createMainApp() {
 }
 
 // For Vercel - export a handler
-const appPromise = createMainApp().then(res => res.app);
+// Vercel Serverless Entry
 export default async function handler(req: any, res: any) {
-  const app = await appPromise;
+  const { app } = await createMainApp();
   return app(req, res);
 }
 
