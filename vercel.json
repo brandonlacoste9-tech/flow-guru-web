@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "name": "flow-guru-web",
   "builds": [
     {
       "src": "api/index.ts",
@@ -13,21 +14,26 @@
       }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/trpc/(.*)",
-      "dest": "api/index.ts"
+      "source": "/api/trpc/:path*",
+      "destination": "/api"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "api/index.ts"
+      "source": "/api/:path*",
+      "destination": "/api"
     },
     {
-      "handle": "filesystem"
-    },
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
     }
   ]
 }

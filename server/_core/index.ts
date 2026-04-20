@@ -1,4 +1,4 @@
-import "dotenv/config";
+// Removed dotenv for Vercel stability
 console.log('>>> FLOW GURU SERVER STARTING...');
 import express from "express";
 import { createServer } from "http";
