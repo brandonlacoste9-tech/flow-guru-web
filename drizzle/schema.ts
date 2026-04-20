@@ -1,4 +1,4 @@
-import { index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -88,6 +88,31 @@ export const conversationMessages = mysqlTable(
   }),
 );
 
+export const providerConnections = mysqlTable(
+  "providerConnections",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    provider: mysqlEnum("provider", ["google-calendar", "spotify"]).notNull(),
+    status: mysqlEnum("status", ["not_connected", "pending", "connected", "error"]).default("pending").notNull(),
+    externalAccountId: varchar("externalAccountId", { length: 255 }),
+    externalAccountLabel: varchar("externalAccountLabel", { length: 255 }),
+    accessToken: text("accessToken"),
+    refreshToken: text("refreshToken"),
+    scope: text("scope"),
+    tokenType: varchar("tokenType", { length: 64 }),
+    expiresAtUnixMs: bigint("expiresAtUnixMs", { mode: "number" }),
+    lastError: text("lastError"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    userProviderUniqueIdx: uniqueIndex("providerConnections_user_provider_unique_idx").on(table.userId, table.provider),
+    userProviderIdx: index("providerConnections_user_provider_idx").on(table.userId, table.provider),
+    statusIdx: index("providerConnections_status_idx").on(table.status),
+  }),
+);
+
 export type UserMemoryProfile = typeof userMemoryProfiles.$inferSelect;
 export type InsertUserMemoryProfile = typeof userMemoryProfiles.$inferInsert;
 
@@ -99,3 +124,6 @@ export type InsertConversationThread = typeof conversationThreads.$inferInsert;
 
 export type ConversationMessage = typeof conversationMessages.$inferSelect;
 export type InsertConversationMessage = typeof conversationMessages.$inferInsert;
+
+export type ProviderConnection = typeof providerConnections.$inferSelect;
+export type InsertProviderConnection = typeof providerConnections.$inferInsert;

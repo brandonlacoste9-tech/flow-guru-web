@@ -8,6 +8,7 @@ const dbMocks = vi.hoisted(() => ({
   findLatestConversationThread: vi.fn(),
   getUserMemoryProfile: vi.fn(),
   listConversationMessages: vi.fn(),
+  listProviderConnections: vi.fn(),
   listUserMemoryFacts: vi.fn(),
   touchConversationThread: vi.fn(),
   upsertUserMemoryProfile: vi.fn(),
@@ -53,6 +54,7 @@ function createAuthContext(overrides?: Partial<AuthenticatedUser>): TrpcContext 
 describe("assistant router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbMocks.listProviderConnections.mockResolvedValue([]);
   });
 
   it("loads bootstrap memory and history for the authenticated user", async () => {
@@ -112,6 +114,7 @@ describe("assistant router", () => {
     expect(result.memoryFacts).toEqual(memoryFacts);
     expect(result.thread).toEqual(thread);
     expect(result.messages).toEqual(messages);
+    expect(result.providerConnections).toEqual([]);
   });
 
   it("stores a user message, generates a reply, and persists extracted memory", async () => {

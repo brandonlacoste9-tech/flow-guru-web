@@ -1,0 +1,1 @@
+ALTER TABLE `providerConnections` ADD CONSTRAINT `providerConnections_user_provider_unique_idx` UNIQUE(`userId`,`provider`);

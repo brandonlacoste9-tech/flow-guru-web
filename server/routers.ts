@@ -18,6 +18,7 @@ import {
   findLatestConversationThread,
   getUserMemoryProfile,
   listConversationMessages,
+  listProviderConnections,
   listUserMemoryFacts,
   touchConversationThread,
   upsertUserMemoryProfile,
@@ -25,6 +26,7 @@ import {
 
 const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
+  timeZone: z.string().trim().min(1).max(100).optional(),
 });
 
 const MEMORY_FACT_CATEGORIES = [
@@ -319,12 +321,14 @@ export const appRouter = router({
       const thread = await findLatestConversationThread(ctx.user.id);
       const safeThread = thread && thread.userId === ctx.user.id ? thread : null;
       const messages = safeThread ? await listConversationMessages(safeThread.id, ctx.user.id) : [];
+      const providerConnections = await listProviderConnections(ctx.user.id);
 
       return {
         profile,
         memoryFacts,
         thread: safeThread,
         messages,
+        providerConnections,
       };
     }),
     history: protectedProcedure.query(async ({ ctx }) => {
@@ -383,7 +387,11 @@ export const appRouter = router({
           message: input.message,
         });
         actionResult = await executeAssistantAction(plannedAction, {
+          userId: ctx.user.id,
+          userName: ctx.user.name,
+          message: input.message,
           memoryContext,
+          timeZone: input.timeZone ?? null,
         });
       } catch (error) {
         console.warn("[Flow Guru] Action planning or execution failed. Continuing with standard chat.", error);

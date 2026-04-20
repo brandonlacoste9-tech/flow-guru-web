@@ -39,10 +39,36 @@
 - [ ] Validate each major integration in sequence and report progress after Google Calendar, Spotify, and the route/weather/news bundle
 - [x] Reorder the integration rollout so route, weather, and news actions ship before credential-dependent Google Calendar and Spotify actions
 - [x] Build a provider-agnostic assistant tool-orchestration layer that can choose and execute actions automatically from natural language
-- [ ] Prepare deferred Google Calendar and Spotify account-linking routes, token models, and UI states so they can be activated once secrets are added
+- [x] Prepare deferred Google Calendar and Spotify account-linking routes, token models, and UI states so they can be activated once secrets are added
 - [x] Render assistant action results in the chat UI with polished route, weather, and news result cards plus loading and error states
 - [x] Browser-validate natural-language route, weather, and news requests end to end before marking the immediate integrations complete
 - [x] Strengthen news personalization by deriving issue selection more explicitly from stored memory and profile context
 - [ ] Add broader backend and frontend tests for tool-routing and action-result rendering, including failure and empty-result cases
 - [ ] Add structured in-chat error and empty-result cards for route, weather, and news actions so failures are visible without relying only on generic assistant text or toasts
 - [ ] Use explicit stored memory and profile context to bias news issue selection beyond planner heuristics, and add tests proving memory-aware news personalization affects execution
+- [ ] Implement the real Google Calendar OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
+- [ ] Implement Google Calendar event reading from natural-language requests inside the assistant chat flow
+- [ ] Implement Google Calendar event creation and booking confirmations from natural-language requests inside the assistant chat flow
+- [ ] Add tests for Google Calendar linking, token persistence, event lookup, and booking behavior
+- [ ] Browser-validate Google Calendar linking and natural-language event actions end to end, then report the milestone
+- [ ] Implement the real Spotify OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
+- [ ] Implement Spotify playback for playlists and specific music from natural-language requests inside the assistant chat flow
+- [ ] Add tests for Spotify linking, token persistence, device and playback behavior, and assistant routing
+- [ ] Browser-validate Spotify linking and natural-language playback actions end to end, then report the milestone
+- [ ] Fix the Google Calendar OAuth redirect URL builder so proxy-aware HTTPS callback URLs are generated correctly in hosted preview and deployment environments
+- [ ] Replace Google Calendar dependency with an in-app calendar system for Flow Guru
+- [ ] Add database schema and migration for user-owned in-app calendar events
+- [ ] Add server-side calendar CRUD helpers and tRPC procedures for in-app events
+- [ ] Route natural-language booking requests to the in-app calendar when creating events
+- [ ] Update the UI to show and manage in-app calendar events
+- [ ] Add automated tests for in-app calendar event creation and retrieval
+- [ ] Re-validate natural-language scheduling end-to-end with the in-app calendar
+- [x] Add the user's Gmail as an approved Google OAuth test user in Google Cloud Console
+- [x] Fix duplicate google-calendar provider connection rows so each user has a single canonical record
+- [x] Ensure Google Calendar OAuth requests and stored tokens include full Calendar read/write scopes
+- [x] Reconnect Google Calendar and confirm end-to-end event creation works after the repairs
+- [ ] Migrate Flow Guru from the current MySQL-style database setup to Neon Postgres
+- [ ] Decide whether to preserve existing conversation and memory data during the Neon migration
+- [ ] Convert the Drizzle schema and database client from MySQL to Neon/Postgres compatibility
+- [ ] Move or recreate existing tables and app data in Neon
+- [ ] Update in-app calendar persistence to run on Neon

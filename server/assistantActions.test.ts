@@ -8,6 +8,15 @@ const mapMocks = vi.hoisted(() => ({
   makeRequest: vi.fn(),
 }));
 
+const dbMocks = vi.hoisted(() => ({
+  getProviderConnection: vi.fn(),
+}));
+
+const googleCalendarMocks = vi.hoisted(() => ({
+  listGoogleCalendarEvents: vi.fn(),
+  createGoogleCalendarEvent: vi.fn(),
+}));
+
 vi.mock("./_core/llm", () => ({
   invokeLLM: llmMocks.invokeLLM,
 }));
@@ -16,10 +25,23 @@ vi.mock("./_core/map", () => ({
   makeRequest: mapMocks.makeRequest,
 }));
 
+vi.mock("./db", () => ({
+  getProviderConnection: dbMocks.getProviderConnection,
+}));
+
+vi.mock("./_core/googleCalendar", () => ({
+  listGoogleCalendarEvents: googleCalendarMocks.listGoogleCalendarEvents,
+  createGoogleCalendarEvent: googleCalendarMocks.createGoogleCalendarEvent,
+}));
+
 describe("assistantActions", () => {
   beforeEach(() => {
     llmMocks.invokeLLM.mockReset();
     mapMocks.makeRequest.mockReset();
+    dbMocks.getProviderConnection.mockReset();
+    googleCalendarMocks.listGoogleCalendarEvents.mockReset();
+    googleCalendarMocks.createGoogleCalendarEvent.mockReset();
+    dbMocks.getProviderConnection.mockResolvedValue(null);
     vi.restoreAllMocks();
   });
 
@@ -200,22 +222,182 @@ describe("assistantActions", () => {
     });
   });
 
+  it("lists live Google Calendar events when the user is connected", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    dbMocks.getProviderConnection.mockResolvedValueOnce({
+      provider: "google-calendar",
+      status: "connected",
+      accessToken: "token",
+    });
+    llmMocks.invokeLLM.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              title: null,
+              startIso: null,
+              endIso: null,
+              timeMinIso: "2026-04-21T00:00:00-04:00",
+              timeMaxIso: "2026-04-22T00:00:00-04:00",
+              searchQuery: "physiotherapy",
+            }),
+          },
+        },
+      ],
+    });
+    googleCalendarMocks.listGoogleCalendarEvents.mockResolvedValueOnce({
+      items: [
+        {
+          id: "event-1",
+          summary: "Physiotherapy with Rick",
+          start: { dateTime: "2026-04-21T09:30:00-04:00" },
+          end: { dateTime: "2026-04-21T10:30:00-04:00" },
+          htmlLink: "https://calendar.google.com/event?eid=1",
+          status: "confirmed",
+        },
+      ],
+    });
+
+    const result = await executeAssistantAction(
+      {
+        action: "calendar.list_events",
+        rationale: "The user wants to check their schedule.",
+        route: null,
+        weather: null,
+        news: null,
+        calendar: {
+          title: "physiotherapy",
+          startDescription: "tomorrow",
+          endDescription: null,
+        },
+        music: null,
+      },
+      {
+        userId: 42,
+        userName: "Avery",
+        message: "What do I have with Rick tomorrow morning?",
+        timeZone: "America/New_York",
+        memoryContext: "Recurring events: physiotherapy on weekday mornings.",
+      },
+    );
+
+    expect(googleCalendarMocks.listGoogleCalendarEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        query: "physiotherapy",
+      }),
+    );
+    expect(result).toMatchObject({
+      action: "calendar.list_events",
+      status: "executed",
+      provider: "google-calendar",
+      title: "Upcoming Google Calendar events",
+    });
+    expect(result?.data).toMatchObject({
+      events: [
+        {
+          id: "event-1",
+          title: "Physiotherapy with Rick",
+        },
+      ],
+    });
+  });
+
+  it("creates a live Google Calendar booking when the user is connected", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    dbMocks.getProviderConnection.mockResolvedValueOnce({
+      provider: "google-calendar",
+      status: "connected",
+      accessToken: "token",
+    });
+    llmMocks.invokeLLM.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              title: "Physiotherapy with Rick",
+              startIso: "2026-04-21T09:30:00-04:00",
+              endIso: "2026-04-21T10:30:00-04:00",
+              timeMinIso: null,
+              timeMaxIso: null,
+              searchQuery: null,
+            }),
+          },
+        },
+      ],
+    });
+    googleCalendarMocks.createGoogleCalendarEvent.mockResolvedValueOnce({
+      id: "event-2",
+      summary: "Physiotherapy with Rick",
+      htmlLink: "https://calendar.google.com/event?eid=2",
+      status: "confirmed",
+      start: { dateTime: "2026-04-21T09:30:00-04:00" },
+      end: { dateTime: "2026-04-21T10:30:00-04:00" },
+    });
+
+    const result = await executeAssistantAction(
+      {
+        action: "calendar.create_event",
+        rationale: "The user wants to create an event.",
+        route: null,
+        weather: null,
+        news: null,
+        calendar: {
+          title: "Physiotherapy with Rick",
+          startDescription: "tomorrow at 9:30 AM",
+          endDescription: null,
+        },
+        music: null,
+      },
+      {
+        userId: 42,
+        userName: "Avery",
+        message: "Book physiotherapy with Rick at 9:30 tomorrow.",
+        timeZone: "America/New_York",
+        memoryContext: "Recurring events: physiotherapy on weekday mornings.",
+      },
+    );
+
+    expect(googleCalendarMocks.createGoogleCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        title: "Physiotherapy with Rick",
+        startIso: "2026-04-21T09:30:00-04:00",
+      }),
+    );
+    expect(result).toMatchObject({
+      action: "calendar.create_event",
+      status: "executed",
+      provider: "google-calendar",
+      title: "Booked: Physiotherapy with Rick",
+    });
+  });
+
   it("returns a connection-required result for deferred calendar and music actions", async () => {
     const { executeAssistantAction } = await import("./assistantActions");
 
-    const calendarResult = await executeAssistantAction({
-      action: "calendar.create_event",
-      rationale: "The user wants to create an event.",
-      route: null,
-      weather: null,
-      news: null,
-      calendar: {
-        title: "Lunch with Steve",
-        startDescription: "tomorrow at 12",
-        endDescription: null,
+    const calendarResult = await executeAssistantAction(
+      {
+        action: "calendar.create_event",
+        rationale: "The user wants to create an event.",
+        route: null,
+        weather: null,
+        news: null,
+        calendar: {
+          title: "Lunch with Steve",
+          startDescription: "tomorrow at 12",
+          endDescription: null,
+        },
+        music: null,
       },
-      music: null,
-    });
+      {
+        userId: 7,
+        userName: "Chris",
+        message: "Book lunch with Steve tomorrow at noon.",
+      },
+    );
 
     const musicResult = await executeAssistantAction({
       action: "music.play",

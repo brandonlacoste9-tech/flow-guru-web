@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { getProviderConnection } from "./db";
+import {
+  createGoogleCalendarEvent,
+  listGoogleCalendarEvents,
+} from "./_core/googleCalendar";
 import { invokeLLM } from "./_core/llm";
 import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map";
 
@@ -55,6 +60,15 @@ const plannerSchema = z.object({
       targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
     })
     .nullable(),
+});
+
+const calendarResolutionSchema = z.object({
+  title: z.string().nullable(),
+  startIso: z.string().nullable(),
+  endIso: z.string().nullable(),
+  timeMinIso: z.string().nullable(),
+  timeMaxIso: z.string().nullable(),
+  searchQuery: z.string().nullable(),
 });
 
 export type AssistantActionPlan = z.infer<typeof plannerSchema>;
@@ -239,7 +253,10 @@ export async function planAssistantAction(params: {
               properties: {
                 origin: { type: ["string", "null"] },
                 destination: { type: ["string", "null"] },
-                mode: { type: ["string", "null"], enum: [...toJsonSchemaEnum(["driving", "walking", "bicycling", "transit"] as const), null] },
+                mode: {
+                  type: ["string", "null"],
+                  enum: [...toJsonSchemaEnum(["driving", "walking", "bicycling", "transit"] as const), null],
+                },
               },
               required: ["origin", "destination", "mode"],
               additionalProperties: false,
@@ -248,7 +265,10 @@ export async function planAssistantAction(params: {
               type: ["object", "null"],
               properties: {
                 location: { type: ["string", "null"] },
-                timeframe: { type: ["string", "null"], enum: [...toJsonSchemaEnum(["current", "today", "tomorrow", "next_days"] as const), null] },
+                timeframe: {
+                  type: ["string", "null"],
+                  enum: [...toJsonSchemaEnum(["current", "today", "tomorrow", "next_days"] as const), null],
+                },
               },
               required: ["location", "timeframe"],
               additionalProperties: false,
@@ -309,6 +329,71 @@ async function geocodeAddress(address: string) {
   }
 
   return result.results[0];
+}
+
+async function resolveCalendarDetails(params: {
+  plan: AssistantActionPlan;
+  message: string;
+  userName?: string | null;
+  memoryContext?: string | null;
+  timeZone?: string | null;
+}) {
+  const response = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: [
+          "You convert a calendar intent into concrete scheduling values.",
+          "Use ISO 8601 datetimes with timezone offsets.",
+          `Current time is ${new Date().toISOString()}.`,
+          `Prefer timezone ${params.timeZone || "UTC"}.`,
+          "For calendar.create_event, keep the provided title when possible, resolve startIso and endIso, and default the duration to 60 minutes when an end is not clearly stated.",
+          "For calendar.list_events, resolve timeMinIso and timeMaxIso. If the user asked a general schedule question without a time window, default to now through the next 7 days.",
+          "If the timing is too unclear to act safely, leave the unresolved fields null.",
+        ].join(" "),
+      },
+      {
+        role: "user",
+        content: [
+          `Action: ${params.plan.action}`,
+          `User name: ${params.userName ?? "Unknown"}`,
+          `Saved memory: ${params.memoryContext ?? "None"}`,
+          `Original message: ${params.message}`,
+          `Calendar title: ${params.plan.calendar?.title ?? ""}`,
+          `Calendar start description: ${params.plan.calendar?.startDescription ?? ""}`,
+          `Calendar end description: ${params.plan.calendar?.endDescription ?? ""}`,
+        ].join("\n"),
+      },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "calendar_resolution",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            title: { type: ["string", "null"] },
+            startIso: { type: ["string", "null"] },
+            endIso: { type: ["string", "null"] },
+            timeMinIso: { type: ["string", "null"] },
+            timeMaxIso: { type: ["string", "null"] },
+            searchQuery: { type: ["string", "null"] },
+          },
+          required: ["title", "startIso", "endIso", "timeMinIso", "timeMaxIso", "searchQuery"],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+
+  const raw = extractTextContent(response.choices[0]?.message.content ?? "");
+  const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
+  if (!parsed.success) {
+    throw new Error(`Calendar resolution did not match schema: ${parsed.error.message}`);
+  }
+
+  return parsed.data;
 }
 
 async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
@@ -389,14 +474,8 @@ async function executeWeatherAction(plan: AssistantActionPlan): Promise<Assistan
   const url = new URL("https://api.open-meteo.com/v1/forecast");
   url.searchParams.set("latitude", String(lat));
   url.searchParams.set("longitude", String(lng));
-  url.searchParams.set(
-    "current",
-    "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
-  );
-  url.searchParams.set(
-    "daily",
-    "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-  );
+  url.searchParams.set("current", "temperature_2m,apparent_temperature,weather_code,wind_speed_10m");
+  url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max");
   url.searchParams.set("timezone", "auto");
   url.searchParams.set("forecast_days", timeframe === "next_days" ? "4" : "3");
 
@@ -469,6 +548,11 @@ async function executeNewsAction(plan: AssistantActionPlan, options?: { memoryCo
       title: "No news found",
       summary: "I couldn’t find a useful set of headlines just now.",
       provider: "actually-relevant",
+      data: {
+        issueSlug: resolvedIssueSlug,
+        interestLabel,
+        stories: [],
+      },
     };
   }
 
@@ -504,9 +588,155 @@ function connectionRequiredResult(action: AssistantActionPlan["action"], provide
   };
 }
 
+async function executeCalendarListAction(
+  plan: AssistantActionPlan,
+  options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
+): Promise<AssistantActionResult> {
+  const connection = await getProviderConnection(options.userId, "google-calendar");
+  if (!connection || connection.status !== "connected") {
+    return connectionRequiredResult(
+      plan.action,
+      "google-calendar",
+      "Google Calendar needs to be connected before I can check your schedule.",
+    );
+  }
+
+  const resolved = await resolveCalendarDetails({
+    plan,
+    message: options.message,
+    userName: options.userName,
+    memoryContext: options.memoryContext,
+    timeZone: options.timeZone,
+  });
+
+  const events = await listGoogleCalendarEvents({
+    userId: options.userId,
+    timeMinIso: resolved.timeMinIso ?? new Date().toISOString(),
+    timeMaxIso:
+      resolved.timeMaxIso ?? new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+    maxResults: 5,
+    query: resolved.searchQuery ?? normalizeText(plan.calendar?.title),
+  });
+
+  const items = (events.items ?? []).map(event => ({
+    id: event.id ?? null,
+    title: event.summary ?? "Untitled event",
+    description: event.description ?? null,
+    start: event.start?.dateTime ?? event.start?.date ?? null,
+    end: event.end?.dateTime ?? event.end?.date ?? null,
+    location: event.location ?? null,
+    link: event.htmlLink ?? null,
+    attendees: event.attendees?.map(attendee => attendee.displayName ?? attendee.email ?? "Guest") ?? [],
+    status: event.status ?? null,
+  }));
+
+  if (!items.length) {
+    return {
+      action: plan.action,
+      status: "executed",
+      title: "Schedule is clear",
+      summary: "I didn’t find any matching Google Calendar events in that window.",
+      provider: "google-calendar",
+      data: {
+        timeMinIso: resolved.timeMinIso ?? null,
+        timeMaxIso: resolved.timeMaxIso ?? null,
+        events: [],
+      },
+    };
+  }
+
+  return {
+    action: plan.action,
+    status: "executed",
+    title: "Upcoming Google Calendar events",
+    summary: `I found ${items.length} event${items.length === 1 ? "" : "s"} on your calendar.`,
+    provider: "google-calendar",
+    data: {
+      timeMinIso: resolved.timeMinIso ?? null,
+      timeMaxIso: resolved.timeMaxIso ?? null,
+      events: items,
+    },
+  };
+}
+
+async function executeCalendarCreateAction(
+  plan: AssistantActionPlan,
+  options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
+): Promise<AssistantActionResult> {
+  const connection = await getProviderConnection(options.userId, "google-calendar");
+  if (!connection || connection.status !== "connected") {
+    return connectionRequiredResult(
+      plan.action,
+      "google-calendar",
+      "Google Calendar needs to be connected before I can book that for you.",
+    );
+  }
+
+  if (!normalizeText(plan.calendar?.title) || !normalizeText(plan.calendar?.startDescription)) {
+    return {
+      action: plan.action,
+      status: "needs_input",
+      title: "Calendar details needed",
+      summary: "I can book that as soon as I know the event title and when it should start.",
+      provider: "google-calendar",
+    };
+  }
+
+  const resolved = await resolveCalendarDetails({
+    plan,
+    message: options.message,
+    userName: options.userName,
+    memoryContext: options.memoryContext,
+    timeZone: options.timeZone,
+  });
+
+  const eventTitle = normalizeText(resolved.title) ?? normalizeText(plan.calendar?.title);
+  if (!eventTitle || !resolved.startIso) {
+    return {
+      action: plan.action,
+      status: "needs_input",
+      title: "Timing still needed",
+      summary: "I’m close, but I still need a clearer time for that booking before I add it to Google Calendar.",
+      provider: "google-calendar",
+    };
+  }
+
+  const endIso =
+    resolved.endIso ?? new Date(new Date(resolved.startIso).getTime() + 1000 * 60 * 60).toISOString();
+
+  const created = await createGoogleCalendarEvent({
+    userId: options.userId,
+    title: eventTitle,
+    startIso: resolved.startIso,
+    endIso,
+  });
+
+  return {
+    action: plan.action,
+    status: "executed",
+    title: `Booked: ${created.summary ?? eventTitle}`,
+    summary: `It’s on your Google Calendar for ${new Date(resolved.startIso).toLocaleString()}.`,
+    provider: "google-calendar",
+    data: {
+      id: created.id ?? null,
+      title: created.summary ?? eventTitle,
+      start: created.start?.dateTime ?? resolved.startIso,
+      end: created.end?.dateTime ?? endIso,
+      link: created.htmlLink ?? null,
+      status: created.status ?? null,
+    },
+  };
+}
+
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
-  options?: { memoryContext?: string | null },
+  options?: {
+    userId?: number;
+    userName?: string | null;
+    message?: string;
+    memoryContext?: string | null;
+    timeZone?: string | null;
+  },
 ): Promise<AssistantActionResult | null> {
   try {
     switch (plan.action) {
@@ -518,18 +748,41 @@ export async function executeAssistantAction(
         return await executeWeatherAction(plan);
       case "news.get":
         return await executeNewsAction(plan, options);
-      case "calendar.create_event":
       case "calendar.list_events":
-        return connectionRequiredResult(
-          plan.action,
-          "google-calendar",
-          "Google Calendar is staged next. The assistant can recognize calendar requests already, and it will be ready to connect once you add the provider credentials.",
-        );
+        if (!options?.userId || !options.message) {
+          return connectionRequiredResult(
+            plan.action,
+            "google-calendar",
+            "Google Calendar is not ready yet because the assistant is missing the current user context.",
+          );
+        }
+        return await executeCalendarListAction(plan, {
+          userId: options.userId,
+          userName: options.userName,
+          message: options.message,
+          memoryContext: options.memoryContext,
+          timeZone: options.timeZone,
+        });
+      case "calendar.create_event":
+        if (!options?.userId || !options.message) {
+          return connectionRequiredResult(
+            plan.action,
+            "google-calendar",
+            "Google Calendar is not ready yet because the assistant is missing the current user context.",
+          );
+        }
+        return await executeCalendarCreateAction(plan, {
+          userId: options.userId,
+          userName: options.userName,
+          message: options.message,
+          memoryContext: options.memoryContext,
+          timeZone: options.timeZone,
+        });
       case "music.play":
         return connectionRequiredResult(
           plan.action,
           "spotify",
-          "Spotify playback is staged next. The assistant can recognize music requests already, and it will be ready to connect once you add the provider credentials.",
+          "Spotify playback is staged next. The assistant can recognize music requests already, and it will be ready to connect once the final Spotify flow is enabled.",
         );
       default:
         return null;
@@ -541,8 +794,17 @@ export async function executeAssistantAction(
       status: "failed",
       title: "Action unavailable",
       summary: "I understood the live request, but that data source did not return a usable result just now.",
-      provider:
-        plan.action.startsWith("route") ? "google-maps" : plan.action.startsWith("weather") ? "open-meteo" : plan.action.startsWith("news") ? "actually-relevant" : undefined,
+      provider: plan.action.startsWith("route")
+        ? "google-maps"
+        : plan.action.startsWith("weather")
+          ? "open-meteo"
+          : plan.action.startsWith("news")
+            ? "actually-relevant"
+            : plan.action.startsWith("calendar")
+              ? "google-calendar"
+              : plan.action.startsWith("music")
+                ? "spotify"
+                : undefined,
     };
   }
 }

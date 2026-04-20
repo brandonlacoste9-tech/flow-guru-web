@@ -70,6 +70,12 @@ type AssistantActionResult = {
   data?: Record<string, unknown>;
 };
 
+type ProviderConnection = {
+  provider: "google-calendar" | "spotify";
+  status: "not_connected" | "pending" | "connected" | "error";
+  externalAccountLabel?: string | null;
+};
+
 const SUGGESTED_PROMPTS = [
   "What should my morning look like tomorrow?",
   "Remember that I prefer calm evening routines.",
@@ -91,6 +97,50 @@ function getActionIcon(action: string) {
   if (action.startsWith("calendar")) return CalendarClock;
   if (action.startsWith("music")) return Music4;
   return Sparkles;
+}
+
+function formatProviderLabel(provider: ProviderConnection["provider"]) {
+  return provider === "google-calendar" ? "Google Calendar" : "Spotify";
+}
+
+function getProviderConnectUrl(provider: ProviderConnection["provider"]) {
+  return `/api/integrations/${provider}/start`;
+}
+
+function ProviderStatusPill({
+  connection,
+  onConnect,
+}: {
+  connection: ProviderConnection;
+  onConnect?: (provider: ProviderConnection["provider"]) => void;
+}) {
+  const statusLabel =
+    connection.status === "connected"
+      ? connection.externalAccountLabel
+        ? `${formatProviderLabel(connection.provider)} · ${connection.externalAccountLabel}`
+        : `${formatProviderLabel(connection.provider)} connected`
+      : connection.status === "pending"
+        ? `${formatProviderLabel(connection.provider)} staged`
+        : connection.status === "error"
+          ? `${formatProviderLabel(connection.provider)} needs attention`
+          : `${formatProviderLabel(connection.provider)} not connected`;
+
+  const canConnect = connection.status !== "connected" && Boolean(onConnect);
+
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+      <span>{statusLabel}</span>
+      {canConnect ? (
+        <button
+          type="button"
+          onClick={() => onConnect?.(connection.provider)}
+          className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-medium tracking-[0.18em] text-primary transition hover:bg-primary/20"
+        >
+          Connect
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function ActionResultCard({ result }: { result: AssistantActionResult }) {
@@ -266,6 +316,39 @@ export default function Home() {
   const heardSpeechRef = useRef(false);
 
   const displayedMessages = useMemo(() => getDisplayedMessages(messages), [messages]);
+  const providerConnections = ((bootstrapQuery.data?.providerConnections as ProviderConnection[] | undefined) ?? []).filter(Boolean);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isAuthenticated) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const integration = params.get("integration");
+    const status = params.get("status");
+    if (!integration || !status) {
+      return;
+    }
+
+    if (integration === "google-calendar" && status === "connected") {
+      const account = params.get("account");
+      toast.success(account ? `Google Calendar connected: ${account}` : "Google Calendar connected.");
+      bootstrapQuery.refetch();
+    } else if (integration === "google-calendar" && status === "error") {
+      toast.error(params.get("message") || "Google Calendar connection failed.");
+      bootstrapQuery.refetch();
+    }
+
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }, [bootstrapQuery, isAuthenticated]);
+
+  const handleConnectProvider = (provider: ProviderConnection["provider"]) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.location.href = getProviderConnectUrl(provider);
+  };
 
   const speakText = (text: string) => {
     if (!speechEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -425,7 +508,10 @@ export default function Home() {
 
     setDraft("");
     setInterimTranscript("");
-    sendMutation.mutate({ message: value });
+    sendMutation.mutate({
+      message: value,
+      timeZone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined,
+    });
   };
 
   const toggleListening = () => {
@@ -555,6 +641,19 @@ export default function Home() {
           </header>
 
           <div className="flex flex-1 flex-col overflow-hidden rounded-[32px] border border-white/10 bg-white/6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+            {providerConnections.length > 0 ? (
+              <div className="border-b border-white/10 px-4 py-3 sm:px-6">
+                <div className="flex flex-wrap gap-2">
+                  {providerConnections.map(connection => (
+                    <ProviderStatusPill
+                      key={connection.provider}
+                      connection={connection}
+                      onConnect={handleConnectProvider}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div ref={messageViewportRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
 
               {bootstrapQuery.isLoading ? (

@@ -5,9 +5,11 @@ import {
   conversationThreads,
   InsertConversationMessage,
   InsertConversationThread,
+  InsertProviderConnection,
   InsertUser,
   InsertUserMemoryFact,
   InsertUserMemoryProfile,
+  providerConnections,
   userMemoryFacts,
   userMemoryProfiles,
   users,
@@ -221,4 +223,67 @@ export async function createConversationMessage(input: InsertConversationMessage
 
   const result = await db.insert(conversationMessages).values(input).$returningId();
   return result[0]?.id;
+}
+
+export async function listProviderConnections(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot list provider connections: database not available");
+    return [];
+  }
+
+  const rows = await db
+    .select()
+    .from(providerConnections)
+    .where(eq(providerConnections.userId, userId))
+    .orderBy(asc(providerConnections.provider), desc(providerConnections.updatedAt), desc(providerConnections.id));
+
+  const latestByProvider = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (!latestByProvider.has(row.provider)) {
+      latestByProvider.set(row.provider, row);
+    }
+  }
+
+  return Array.from(latestByProvider.values()).sort((left, right) => left.provider.localeCompare(right.provider));
+}
+
+export async function getProviderConnection(userId: number, provider: "google-calendar" | "spotify") {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get provider connection: database not available");
+    return undefined;
+  }
+
+  const result = await db
+    .select()
+    .from(providerConnections)
+    .where(and(eq(providerConnections.userId, userId), eq(providerConnections.provider, provider)))
+    .orderBy(desc(providerConnections.updatedAt), desc(providerConnections.id))
+    .limit(1);
+
+  return result[0];
+}
+
+export async function upsertProviderConnection(input: InsertProviderConnection) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot upsert provider connection: database not available");
+    return;
+  }
+
+  await db.insert(providerConnections).values(input).onDuplicateKeyUpdate({
+    set: {
+      status: input.status ?? "pending",
+      externalAccountId: input.externalAccountId ?? null,
+      externalAccountLabel: input.externalAccountLabel ?? null,
+      accessToken: input.accessToken ?? null,
+      refreshToken: input.refreshToken ?? null,
+      scope: input.scope ?? null,
+      tokenType: input.tokenType ?? null,
+      expiresAtUnixMs: input.expiresAtUnixMs ?? null,
+      lastError: input.lastError ?? null,
+      updatedAt: new Date(),
+    },
+  });
 }
