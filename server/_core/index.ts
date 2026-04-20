@@ -40,6 +40,9 @@ export async function createMainApp() {
   registerOAuthRoutes(app);
   registerProviderConnectionRoutes(app);
   
+  // Health check for Vercel
+  app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
+
   // tRPC API
   app.use(
     "/api/trpc",
