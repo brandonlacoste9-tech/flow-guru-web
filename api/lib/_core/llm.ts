@@ -274,23 +274,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   // --- Creative Mock Fallback ---
-  if (!hasDeepSeek && !hasMoonshot && !hasForge) {
-    console.warn("[Flow Guru] Operating in Simulation Mode (No API keys found)");
-    return {
-      id: "mock-" + Date.now(),
-      created: Math.floor(Date.now() / 1000),
-      model: "mock-guru-1.0",
-      choices: [{
-        index: 0,
-        message: {
-          role: "assistant",
-          content: "I'm awake! I'm currently running in **Simulation Mode** because my DeepSeek API key hasn't been added to Vercel yet. Once you add it, I'll be able to use my full intelligence to help you with your routines!",
-        },
-        finish_reason: "stop",
-      }],
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    };
-  }
+  // Simulation Mode Removed as requested. proceeding to real API calls.
 
   const {
     messages,
