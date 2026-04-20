@@ -1,26 +1,39 @@
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import express from "express";
-import { appRouter } from "../server/routers";
-import { createContext } from "../server/_core/context";
 
 const app = express();
 app.use(express.json());
 
-// 1. Diagnosis Logger (Helps us see the real path in Vercel logs)
-app.use((req, res, next) => {
-  console.log(`[TRPC HIT] Path: ${req.url}`);
-  next();
+// 1. SAFE-START (Explicit extensions for Vercel ESM stability)
+app.use("/api/trpc", async (req, res, next) => {
+  try {
+    const { createExpressMiddleware } = await import("@trpc/server/adapters/express");
+    const { appRouter } = await import("./lib/routers.js");
+    const { createContext } = await import("./lib/_core/context.js");
+
+    const trpcHandler = createExpressMiddleware({
+      router: appRouter,
+      createContext,
+    });
+    
+    return trpcHandler(req, res, next);
+  } catch (error: any) {
+    console.error("[CRITICAL BOOT ERROR]", error);
+    return res.status(500).json({ 
+        json: { 
+            error: { 
+                json: { 
+                  message: `BACKEND_STARTUP_FAILURE: ${error.message}`, 
+                  code: -32603, 
+                  data: { stack: error.stack } 
+                } 
+            } 
+        } 
+    });
+  }
 });
 
-// 2. The Universal Listener
-const trpcMiddleware = createExpressMiddleware({
-  router: appRouter,
-  createContext,
+app.use("/", (req, res) => {
+  res.json({ status: "alive", mode: "esm-hardened", time: new Date().toISOString() });
 });
-
-// We mount it at the root AND the long path to be 100% safe
-app.use("/api/trpc", trpcMiddleware);
-app.use("/trpc", trpcMiddleware);
-app.use("/", trpcMiddleware);
 
 export default app;
