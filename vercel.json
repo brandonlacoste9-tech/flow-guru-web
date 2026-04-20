@@ -5,6 +5,8 @@
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist/public" } }
   ],
   "rewrites": [
+    { "source": "/api/trpc/:path*", "destination": "/api/trpc.ts" },
+    { "source": "/api/health", "destination": "/api/health.ts" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
