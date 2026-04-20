@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     status: "live_diagnostic",
     timestamp: new Date().toISOString(),
     env_db: !!process.env.DATABASE_URL,
-    env_deepseek: !!process.env.DEEPSEEK_API_KEY,
+    env_deepseek: !!(process.env.DEEPSEEK_API_KEY || process.env.DeepSeek_API_KEY || process.env.DEEP_SEEK_API_KEY),
   };
 
   try {
