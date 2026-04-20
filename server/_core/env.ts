@@ -11,6 +11,7 @@ export const ENV = {
   forgeApiKey: clean(process.env.BUILT_IN_FORGE_API_KEY),
   deepSeekApiKey: clean(process.env.DEEPSEEK_API_KEY || process.env.DeepSeek_API_KEY || process.env.DEEP_SEEK_API_KEY),
   moonshotApiKey: clean(process.env.MOONSHOT_API_KEY),
+  elevenLabsApiKey: clean(process.env.ELEVENLABS_API_KEY),
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   spotifyClientId: process.env.SPOTIFY_CLIENT_ID ?? "",
