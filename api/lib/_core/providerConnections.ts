@@ -1,13 +1,13 @@
 import type { Express, Request, Response } from "express";
-import { ENV } from "./env";
-import { sdk } from "./sdk";
-import { getProviderConnection, upsertProviderConnection } from "../db";
+import { ENV } from "./env.js";
+import { sdk } from "./sdk.js";
+import { getProviderConnection, upsertProviderConnection } from "../db.js";
 import {
   buildGoogleOAuthState,
   connectGoogleCalendar,
   getGoogleCalendarCallbackUrl,
   parseGoogleOAuthState,
-} from "./googleCalendar";
+} from "./googleCalendar.js";
 
 type SupportedProvider = "google-calendar" | "spotify";
 

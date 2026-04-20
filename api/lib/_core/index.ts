@@ -4,11 +4,11 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
-import { registerProviderConnectionRoutes } from "./providerConnections";
-import { registerStorageProxy } from "./storageProxy";
-import { appRouter } from "../routers";
-import { createContext } from "./context";
+import { registerOAuthRoutes } from "./oauth.js";
+import { registerProviderConnectionRoutes } from "./providerConnections.js";
+import { registerStorageProxy } from "./storageProxy.js";
+import { appRouter } from "../routers.js";
+import { createContext } from "./context.js";
 // Removed static import of vite/dev-tools to prevent Vercel 500 errors
 import fs from "fs";
 import path from "path";
@@ -63,7 +63,7 @@ export async function createMainApp() {
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
-    const { setupVite } = await import("./vite");
+    const { setupVite } = await import("./vite.js");
     const server = createServer(app);
     await setupVite(app, server);
     return { app, server };
