@@ -4,17 +4,22 @@ import postgres from "postgres";
 let _db: any = null;
 
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (!_db) {
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) {
+      console.warn("[Database] No DATABASE_URL found. Running without persistence.");
+      return null;
+    }
+    
     try {
-      // Connect on demand, don't block server startup
-      const client = postgres(process.env.DATABASE_URL, { 
+      const client = postgres(dbUrl, { 
         ssl: 'require',
-        connect_timeout: 5,
-        max_lifetime: 60
+        connect_timeout: 3, // Fast fail
+        max: 1 
       });
       _db = drizzle(client);
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
+      console.error("[Database] Connection failed:", error);
       _db = null;
     }
   }

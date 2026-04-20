@@ -36,6 +36,13 @@ export async function createMainApp() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  
+  // Simple Request Logger for debugging Vercel
+  app.use((req, res, next) => {
+    console.log(`[Flow Guru Server] ${req.method} ${req.url}`);
+    next();
+  });
+
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   registerProviderConnectionRoutes(app);
@@ -43,14 +50,13 @@ export async function createMainApp() {
   // Health check for Vercel
   app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
 
-  // tRPC API
-  app.use(
-    "/api/trpc",
-    createExpressMiddleware({
-      router: appRouter,
-      createContext,
-    })
-  );
+  // tRPC API - Mount at both possibilities for Vercel compliance
+  const trpcMiddleware = createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  });
+  app.use("/api/trpc", trpcMiddleware);
+  app.use("/trpc", trpcMiddleware);
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
