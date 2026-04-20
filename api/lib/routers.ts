@@ -113,13 +113,13 @@ function buildMemoryContext(params: {
 
 async function getOrCreateThreadId(userId: number, requestedThreadId?: number) {
   if (requestedThreadId) {
-    const requestedThread = (await getConversationThreadById(requestedThreadId)) as any;
+    const requestedThread = await getConversationThreadById(requestedThreadId);
     if (requestedThread && requestedThread.userId === userId) {
       return requestedThread.id;
     }
   }
 
-  const existingThread = (await findLatestConversationThread(userId)) as any;
+  const existingThread = await findLatestConversationThread(userId);
   if (existingThread && existingThread.userId === userId) {
     return existingThread.id;
   }
@@ -142,7 +142,7 @@ async function extractAndPersistMemory(params: {
   userMessage: string;
   assistantReply: string;
 }) {
-  const existingProfile = (await getUserMemoryProfile(params.userId)) as any;
+  const existingProfile = await getUserMemoryProfile(params.userId);
   const existingFacts = await listUserMemoryFacts(params.userId);
 
   const extractionResponse = await invokeLLM({
@@ -279,7 +279,7 @@ async function extractAndPersistMemory(params: {
   ].some(Boolean);
 
   if (hasProfileContent) {
-    await upsertUserMemoryProfile(mergedProfile);
+    await upsertUserMemoryProfile(params.userId, mergedProfile);
   }
 
   const seenFacts = new Set(
@@ -304,7 +304,7 @@ async function extractAndPersistMemory(params: {
       return true;
     });
 
-  await createUserMemoryFacts(newFacts);
+  await createUserMemoryFacts(params.userId, newFacts);
 
   return {
     profileUpdated: hasProfileContent,
@@ -331,7 +331,7 @@ export const appRouter = router({
       const memoryFacts = await listUserMemoryFacts(userId);
       const thread = await findLatestConversationThread(userId);
       const safeThread = thread && thread.userId === userId ? thread : null;
-      const messages = safeThread ? await listConversationMessages(safeThread.id, userId) : [];
+      const messages = safeThread ? await listConversationMessages(safeThread.id) : [];
       const providerConnections = await listProviderConnections(userId);
 
       return {
@@ -372,7 +372,7 @@ export const appRouter = router({
         } as const;
       }
 
-      const messages = await listConversationMessages(thread.id, userId);
+      const messages = await listConversationMessages(thread.id);
       return {
         thread,
         messages,
@@ -391,7 +391,7 @@ export const appRouter = router({
 
       const profile = await getUserMemoryProfile(userId);
       const memoryFacts = await listUserMemoryFacts(userId);
-      const history = await listConversationMessages(threadId, userId);
+      const history = await listConversationMessages(threadId);
       const memoryContext = buildMemoryContext({
         userName: ctx.user?.name || "Brandon",
         profile,
@@ -500,7 +500,7 @@ export const appRouter = router({
         console.warn("[Flow Guru] Memory extraction failed, but the message send completed.", error);
       }
 
-      const messages = await listConversationMessages(threadId, userId);
+      const messages = await listConversationMessages(threadId);
 
       return {
         threadId,

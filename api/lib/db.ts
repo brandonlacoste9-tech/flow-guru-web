@@ -39,7 +39,7 @@ async function ensureTables(db: any) {
     } catch (err) {
         console.log("[DB] Tables missing. Attempting self-healing migration...");
         try {
-            await db.execute(postgres.unsafe(`
+            const sql = `
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
                     "openId" VARCHAR(64) NOT NULL UNIQUE,
@@ -83,7 +83,8 @@ async function ensureTables(db: any) {
                     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
                     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
                 );
-            `));
+            `;
+            await db.execute((postgres as any).unsafe(sql));
             console.log("[DB] Self-healing successful! Tables created.");
         } catch (mErr) {
             console.error("[DB] Self-healing FAILED:", mErr);
