@@ -7,7 +7,94 @@ let _db: any = null;
 /** Raw postgres.js client — required for self-heal DDL (`unsafe`), not the `postgres` factory. */
 let _pg: ReturnType<typeof postgres> | null = null;
 
+/** Ensures idempotent DDL runs once per serverless instance (not only when fg_users SELECT fails). */
+let schemaReadyPromise: Promise<void> | null = null;
+
 const ANONYMOUS_OPEN_ID = "__flow_guru_anonymous__";
+
+/**
+ * Minimal Flow Guru DDL for empty / partial Neon databases.
+ * IF NOT EXISTS keeps real Drizzle migrations safe; fills missing fg_threads etc.
+ */
+const FLOW_GURU_DDL = `
+CREATE TABLE IF NOT EXISTS fg_users (
+    id SERIAL PRIMARY KEY,
+    "openId" VARCHAR(64) NOT NULL UNIQUE,
+    name TEXT,
+    email VARCHAR(320),
+    "loginMethod" VARCHAR(64),
+    role TEXT DEFAULT 'user' NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "lastSignedIn" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_threads (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL,
+    title VARCHAR(255) DEFAULT 'Flow Guru Chat' NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "lastMessageAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_messages (
+    id SERIAL PRIMARY KEY,
+    "threadId" INTEGER NOT NULL,
+    "userId" INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_profiles (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL UNIQUE,
+    "wakeUpTime" VARCHAR(64),
+    "dailyRoutine" TEXT,
+    "preferencesSummary" TEXT,
+    "recurringEventsSummary" TEXT,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_facts (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL,
+    category TEXT NOT NULL DEFAULT 'general',
+    "factKey" VARCHAR(128),
+    "factValue" TEXT NOT NULL,
+    confidence INTEGER DEFAULT 100 NOT NULL,
+    "sourceMessageId" INTEGER,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_connections (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    status TEXT DEFAULT 'pending' NOT NULL,
+    "externalAccountId" VARCHAR(255),
+    "externalAccountLabel" VARCHAR(255),
+    "accessToken" TEXT,
+    "refreshToken" TEXT,
+    scope TEXT,
+    "tokenType" VARCHAR(64),
+    "expiresAtUnixMs" BIGINT,
+    "lastError" TEXT,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+`;
+
+async function ensureSchemaOnce(): Promise<void> {
+  if (!_pg) return;
+  if (!schemaReadyPromise) {
+    schemaReadyPromise = (async () => {
+      await _pg!.unsafe(FLOW_GURU_DDL);
+    })().catch(err => {
+      schemaReadyPromise = null;
+      throw err;
+    });
+  }
+  await schemaReadyPromise;
+}
 
 export async function getDb() {
   if (_db) return _db;
@@ -23,12 +110,18 @@ export async function getDb() {
       ssl: "require",
       connect_timeout: 10,
       max: 1,
+      // Neon pooler (transaction mode) + postgres.js: prepared statements break; disable them.
+      prepare: false,
     });
     _pg = client;
+    await ensureSchemaOnce();
     _db = drizzle(client, { schema });
     return _db;
   } catch (error) {
     console.error("[Database] Connection failed:", error);
+    _pg = null;
+    _db = null;
+    schemaReadyPromise = null;
     return null;
   }
 }
@@ -66,93 +159,9 @@ export async function resolveAssistantUserId(user: schema.User | null): Promise<
   return anon.id;
 }
 
-/**
- * AUTO-MIGRATE / SELF-HEAL
- * This function handles missing tables by creating them on demand.
- */
-async function ensureTables(db: any) {
-    try {
-        // We try a simple check. If it fails, we assume tables are missing.
-        await db.select().from(schema.users).limit(1);
-    } catch (err) {
-        console.log("[DB] Tables missing. Attempting self-healing migration...");
-        try {
-            const sql = `
-                CREATE TABLE IF NOT EXISTS fg_users (
-                    id SERIAL PRIMARY KEY,
-                    "openId" VARCHAR(64) NOT NULL UNIQUE,
-                    name TEXT,
-                    email VARCHAR(320),
-                    "loginMethod" VARCHAR(64),
-                    role TEXT DEFAULT 'user' NOT NULL,
-                    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-                    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-                    "lastSignedIn" TIMESTAMP DEFAULT NOW() NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS fg_threads (
-                    id SERIAL PRIMARY KEY,
-                    "userId" INTEGER NOT NULL,
-                    title VARCHAR(255) DEFAULT 'Flow Guru Chat' NOT NULL,
-                    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-                    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-                    "lastMessageAt" TIMESTAMP DEFAULT NOW() NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS fg_messages (
-                    id SERIAL PRIMARY KEY,
-                    "threadId" INTEGER NOT NULL,
-                    "userId" INTEGER NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS fg_profiles (
-                    id SERIAL PRIMARY KEY,
-                    "userId" INTEGER NOT NULL UNIQUE,
-                    "wakeUpTime" VARCHAR(64),
-                    "dailyRoutine" TEXT,
-                    "preferencesSummary" TEXT,
-                    "recurringEventsSummary" TEXT,
-                    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-                    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS fg_facts (
-                    id SERIAL PRIMARY KEY,
-                    "userId" INTEGER NOT NULL,
-                    category TEXT NOT NULL DEFAULT 'general',
-                    "factKey" VARCHAR(128),
-                    "factValue" TEXT NOT NULL,
-                    confidence INTEGER DEFAULT 100 NOT NULL,
-                    "sourceMessageId" INTEGER,
-                    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-                    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS fg_connections (
-                    id SERIAL PRIMARY KEY,
-                    "userId" INTEGER NOT NULL,
-                    provider TEXT NOT NULL,
-                    status TEXT DEFAULT 'pending' NOT NULL,
-                    "externalAccountId" VARCHAR(255),
-                    "externalAccountLabel" VARCHAR(255),
-                    "accessToken" TEXT,
-                    "refreshToken" TEXT,
-                    scope TEXT,
-                    "tokenType" VARCHAR(64),
-                    "expiresAtUnixMs" BIGINT,
-                    "lastError" TEXT,
-                    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-                    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
-                );
-            `;
-            if (!_pg) {
-              console.error("[DB] Self-healing skipped: postgres client not initialized.");
-            } else {
-              await _pg.unsafe(sql);
-              console.log("[DB] Self-healing successful! Prefixed tables created.");
-            }
-        } catch (mErr) {
-            console.error("[DB] Self-healing FAILED:", mErr);
-        }
-    }
+/** Run idempotent DDL once per cold start; safe if tables already exist from Drizzle migrations. */
+async function ensureTables(_dbUnused?: any) {
+  await ensureSchemaOnce();
 }
 
 export async function getUserByOpenId(openId: string): Promise<schema.User | null> {
@@ -207,7 +216,7 @@ export async function createConversationThread(data: any): Promise<number | null
     const results = await db.insert(schema.conversationThreads).values(data).returning({ id: schema.conversationThreads.id });
     return results[0]?.id || null;
   } catch (err: any) {
-    console.error("[DB] createConversationThread FAILED:", err.message);
+    console.error("[DB] createConversationThread FAILED:", err?.message ?? err, err?.detail ?? err);
     return null;
   }
 }
