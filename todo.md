@@ -93,3 +93,6 @@
 - [x] Add or update tests for Google Calendar event creation and fallback behavior
 - [x] Validate Google Calendar event creation end to end in the running app
 - [x] Verify Google Calendar read responses render once in chat without a duplicate action card after the direct-reply patch
+- [x] Refresh the Flow Guru visual design with a more polished chat-first layout, typography, spacing, and surface treatment
+- [x] Improve the chat composer, message bubbles, and action-card styling so the interface feels cleaner and more intentional
+- [x] Browser-validate the refreshed visual design in the running app and iterate on any obvious layout or readability issues
