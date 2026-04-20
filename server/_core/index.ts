@@ -33,30 +33,30 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 export async function createMainApp() {
   const app = express();
   
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  
-  // Simple Request Logger for debugging Vercel
-  app.use((req, res, next) => {
-    console.log(`[Flow Guru Server] ${req.method} ${req.url}`);
-    next();
-  });
-
-  registerStorageProxy(app);
-  registerOAuthRoutes(app);
-  registerProviderConnectionRoutes(app);
-  
-  // Health check for Vercel
-  app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
-
-  // tRPC API - Mount at both possibilities for Vercel compliance
+  // 1. TRPC API - HIGHEST PRIORITY
   const trpcMiddleware = createExpressMiddleware({
     router: appRouter,
     createContext,
   });
   app.use("/api/trpc", trpcMiddleware);
   app.use("/trpc", trpcMiddleware);
+
+  // 2. Body parsers
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  
+  // 3. Health & Logging
+  app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
+  app.use((req, res, next) => {
+    if (req.url.includes("/api/trpc")) {
+        console.log(`[Flow Guru API] ${req.method} ${req.url}`);
+    }
+    next();
+  });
+
+  registerStorageProxy(app);
+  registerOAuthRoutes(app);
+  registerProviderConnectionRoutes(app);
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
