@@ -107,3 +107,5 @@
 - [x] Validate the updated voice interaction flow with focused tests and a quick browser check
 - [x] Add dedicated tests for Google Calendar OAuth callback state handling and token refresh behavior so the remaining calendar milestone is backed by focused coverage
 - [x] Repair the remaining action-result card conditional rendering so the chat UI loads cleanly and the final polish checkpoint can be saved
+- [x] Add focused UI test coverage for route, weather, and news action-result cards, including their new empty or non-executed states
+- [x] Fix the remaining action-result rendering test failure by making the TSX test use the correct React JSX runtime imports so the new coverage can pass and be checkpointed

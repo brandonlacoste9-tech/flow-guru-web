@@ -21,9 +21,9 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { toast } from "sonner";
-import { useEffect, useMemo, useRef, useState } from "react";
 
 type BrowserSpeechRecognition = {
   lang: string;
@@ -61,7 +61,7 @@ type UiMessage = {
   createdAt: Date | string | number;
 };
 
-type AssistantActionResult = {
+export type AssistantActionResult = {
   action: string;
   status: "executed" | "needs_input" | "needs_connection" | "failed";
   title: string;
@@ -148,7 +148,7 @@ function ProviderStatusPill({
   );
 }
 
-function ActionResultCard({ result }: { result: AssistantActionResult }) {
+export function ActionResultCard({ result }: { result: AssistantActionResult }) {
   const Icon = getActionIcon(result.action);
   const routeData = result.data as
     | {
