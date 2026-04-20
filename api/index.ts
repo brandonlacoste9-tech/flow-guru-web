@@ -8,10 +8,32 @@ const app = express();
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// 2. Health Check
-app.get("/api/health", (req, res) => res.json({ status: "alive", mode: "trpc-compliant" }));
+// 2. DIAGNOSTIC HEALTH CHECK (PLAIN TEXT)
+app.get("/api/health", async (req, res) => {
+  const report: any = {
+    status: "checking",
+    time: new Date().toISOString(),
+    env: process.env.NODE_ENV,
+    db_connected: !!process.env.DATABASE_URL,
+  };
 
-// 3. Dynamic TRPC (The Brain in a Safe Room)
+  try {
+    report.step = "importing_brain";
+    const { appRouter } = await import("../server/routers");
+    report.brain_loaded = !!appRouter;
+    
+    res.json({ success: true, report });
+  } catch (error: any) {
+    res.status(500).json({ 
+      success: false, 
+      report, 
+      error_message: error.message,
+      error_stack: error.stack 
+    });
+  }
+});
+
+// 3. Dynamic TRPC
 app.use("/api", async (req, res, next) => {
   if (!req.url.includes('trpc') && !req.url.startsWith('/api')) {
     return next();
@@ -29,23 +51,12 @@ app.use("/api", async (req, res, next) => {
     
     return trpcHandler(req, res, next);
   } catch (error: any) {
-    console.error("[SafeStart Error]", error);
-    
-    // Send a TRPC-compatible "SuperJSON" error envelope
     return res.status(500).json({ 
-      json: {
-        error: {
-          json: {
-            message: `BOOTSTRAP_ERROR: ${error.message}`,
-            code: -32603,
-            data: { 
-              code: "INTERNAL_SERVER_ERROR", 
-              httpStatus: 500,
-              stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-            }
-          }
-        }
-      }
+        json: { 
+            error: { 
+                json: { message: error.message, code: -32603, data: { status: 500 } } 
+            } 
+        } 
     });
   }
 });
