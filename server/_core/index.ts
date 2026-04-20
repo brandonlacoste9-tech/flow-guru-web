@@ -9,7 +9,9 @@ import { registerProviderConnectionRoutes } from "./providerConnections";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+// Removed static import of vite/dev-tools to prevent Vercel 500 errors
+import fs from "fs";
+import path from "path";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -61,12 +63,36 @@ export async function createMainApp() {
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
+    const { setupVite } = await import("./vite");
     const server = createServer(app);
     await setupVite(app, server);
     return { app, server };
   } else {
-    serveStatic(app);
+    // ---- PRODUCTION STATIC SERVING (INLINED FOR VERCEL STABILITY) ----
+    const distPath = path.resolve(process.cwd(), "dist", "public");
     
+    // Serve static files with aggressive caching
+    app.use(express.static(distPath, {
+      maxAge: '1y',
+      immutable: true,
+      index: false
+    }));
+    
+    // Fallback to index.html for SPA routing
+    app.get("*", (req, res, next) => {
+      // Don't catch API routes here
+      if (req.url.startsWith('/api/') || req.url.includes('trpc')) {
+        return next();
+      }
+      
+      const indexPath = path.resolve(distPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send("Front-end build not found. Please run 'npm run build' first.");
+      }
+    });
+
     // 5. Global Error Handler (Must be last)
     app.use((err: any, req: any, res: any, next: any) => {
       console.error("[Fatal Error]", err);
