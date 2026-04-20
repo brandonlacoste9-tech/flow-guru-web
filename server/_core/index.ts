@@ -66,6 +66,16 @@ export async function createMainApp() {
     return { app, server };
   } else {
     serveStatic(app);
+    
+    // 5. Global Error Handler (Must be last)
+    app.use((err: any, req: any, res: any, next: any) => {
+      console.error("[Fatal Error]", err);
+      res.status(500).json({
+        message: "A server error occurred. Please check your environment variables.",
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+      });
+    });
+
     return { app, server: createServer(app) };
   }
 }
