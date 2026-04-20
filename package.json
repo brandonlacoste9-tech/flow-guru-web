@@ -4,8 +4,7 @@
   "type": "module",
   "license": "MIT",
   "engines": {
-    "node": ">=20",
-    "pnpm": ">=10.0.0"
+    "node": ">=20"
   },
   "scripts": {
     "dev": "tsx watch server/_core/index.ts",
