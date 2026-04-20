@@ -209,16 +209,11 @@ export async function findLatestConversationThread(userId: number): Promise<sche
 }
 
 export async function createConversationThread(data: any): Promise<number | null> {
-  try {
     const db = await getDb();
-    if (!db) return null;
+    if (!db) throw new Error("Database connection unavailable");
     await ensureTables(db);
     const results = await db.insert(schema.conversationThreads).values(data).returning({ id: schema.conversationThreads.id });
     return results[0]?.id || null;
-  } catch (err: any) {
-    console.error("[DB] createConversationThread FAILED:", err?.message ?? err, err?.detail ?? err);
-    return null;
-  }
 }
 
 export async function listConversationMessages(threadId: number): Promise<schema.ConversationMessage[]> {
@@ -235,15 +230,11 @@ export async function listConversationMessages(threadId: number): Promise<schema
 }
 
 export async function createConversationMessage(data: any): Promise<number | null> {
-  try {
     const db = await getDb();
-    if (!db) return null;
+    if (!db) throw new Error("Database connection unavailable");
     await ensureTables(db);
     const results = await db.insert(schema.conversationMessages).values(data).returning({ id: schema.conversationMessages.id });
     return results[0]?.id || null;
-  } catch (err) {
-    return null;
-  }
 }
 
 export async function getProviderConnection(userId: number, provider: any): Promise<schema.ProviderConnection | null> {
@@ -334,7 +325,6 @@ export async function listUserMemoryFacts(userId: number): Promise<schema.UserMe
 
 export async function createUserMemoryFacts(userId: number, facts: any[]): Promise<void> {
     try {
-      if (!facts.length) return;
       const db = await getDb();
       if (!db) return;
       await ensureTables(db);
