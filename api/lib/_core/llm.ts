@@ -347,6 +347,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error("[Flow Guru] LLM API failure:", response.status, errorText);
     // Fallback if the real API fails
     return {
       id: "error-fallback-" + Date.now(),
@@ -356,7 +357,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         index: 0,
         message: {
           role: "assistant",
-          content: "I hit a snag connecting to my brain! It might be a temporary API issue. I'll be back fully in a moment.",
+          content: `I hit a snag connecting to my brain (HTTP ${response.status})! This usually means the API key is invalid or I'm having trouble reaching the provider. Details: ${errorText.slice(0, 100)}...`,
         },
         finish_reason: "error",
       }],
