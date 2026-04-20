@@ -189,6 +189,23 @@ function ActionResultCard({ result }: { result: AssistantActionResult }) {
         }>;
       }
     | undefined;
+  const newsStories = newsData?.stories ?? [];
+  const routeHasDetails = Boolean(
+    routeData?.distanceText ||
+      routeData?.durationText ||
+      routeData?.durationInTrafficText ||
+      (Array.isArray(routeData?.steps) && routeData.steps.length > 0),
+  );
+  const weatherHasDetails = Boolean(weatherData?.current || weatherData?.focusForecast);
+  const statusAccentClass =
+    result.status === "executed"
+      ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+      : result.status === "needs_input"
+        ? "border-amber-300/25 bg-amber-500/10 text-amber-100"
+        : result.status === "needs_connection"
+          ? "border-sky-300/25 bg-sky-500/10 text-sky-100"
+          : "border-rose-300/25 bg-rose-500/10 text-rose-100";
+  const statusLabel = result.status.replace(/_/g, " ");
 
   return (
     <div className="rounded-[26px] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.04))] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.26)] backdrop-blur-md">
@@ -198,43 +215,65 @@ function ActionResultCard({ result }: { result: AssistantActionResult }) {
         </div>
         <div className="min-w-0 flex-1 space-y-3">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Action result</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Action result</p>
+              <span className={cn("rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.18em]", statusAccentClass)}>
+                {statusLabel}
+              </span>
+            </div>
             <p className="mt-2 text-sm font-medium text-foreground">{result.title}</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">{result.summary}</p>
           </div>
 
+          {result.status !== "executed" && (
+            <div className={cn("rounded-[20px] border px-3 py-3 text-sm leading-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]", statusAccentClass)}>
+              Flow Guru surfaced this result without fully executing the action. Review the message above for the missing detail or connection step, then try again here in chat.
+            </div>
+          )}
+
           {result.action === "route.get" && routeData && (
             <div className="space-y-3">
-              <div className="grid gap-2 sm:grid-cols-3">
-                <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Distance</p>
-                  <p className="mt-1 text-sm text-foreground">{routeData.distanceText ?? "—"}</p>
-                </div>
-                <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Typical time</p>
-                  <p className="mt-1 text-sm text-foreground">{routeData.durationText ?? "—"}</p>
-                </div>
-                <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Traffic now</p>
-                  <p className="mt-1 text-sm text-foreground">{routeData.durationInTrafficText ?? routeData.durationText ?? "—"}</p>
-                </div>
-              </div>
-              {Array.isArray(routeData.steps) && routeData.steps.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">First steps</p>
-                  <div className="space-y-2">
-                    {routeData.steps.slice(0, 3).map(step => (
-                      <div key={step} className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-2.5 text-sm leading-6 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                        {step}
-                      </div>
-                    ))}
+              {routeHasDetails ? (
+                <>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Distance</p>
+                      <p className="mt-1 text-sm text-foreground">{routeData.distanceText ?? "—"}</p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Typical time</p>
+                      <p className="mt-1 text-sm text-foreground">{routeData.durationText ?? "—"}</p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Traffic now</p>
+                      <p className="mt-1 text-sm text-foreground">{routeData.durationInTrafficText ?? routeData.durationText ?? "—"}</p>
+                    </div>
                   </div>
+                  {Array.isArray(routeData.steps) && routeData.steps.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">First steps</p>
+                      <div className="space-y-2">
+                        {routeData.steps.slice(0, 3).map(step => (
+                          <div key={step} className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-2.5 text-sm leading-6 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                            {step}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-3 text-sm leading-6 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  {routeData.origin || routeData.destination
+                    ? `Route details for ${routeData.origin ?? "your origin"} to ${routeData.destination ?? "your destination"} are not available yet.`
+                    : "Route details are not available for this result yet."}
                 </div>
               )}
             </div>
           )}
 
           {result.action === "weather.get" && weatherData && (
+            weatherHasDetails ? (
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/8 bg-white/6 px-3 py-3">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Current</p>
@@ -264,11 +303,16 @@ function ActionResultCard({ result }: { result: AssistantActionResult }) {
                 </p>
               </div>
             </div>
+            ) : (
+              <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-3 text-sm leading-6 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                Weather details are not available for this result yet. Ask again with a location or timeframe for a fuller forecast card.
+              </div>
+            )
           )}
 
-          {result.action === "news.get" && newsData?.stories && newsData.stories.length > 0 && (
+          {result.action === "news.get" && (newsStories.length > 0 ? (
             <div className="space-y-2">
-              {newsData.stories.slice(0, 3).map(story => (
+              {newsStories.slice(0, 3).map(story => (
                 <div key={story.id} className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -291,7 +335,11 @@ function ActionResultCard({ result }: { result: AssistantActionResult }) {
                 </div>
               ))}
             </div>
-          )}
+          ) : (
+            <div className="rounded-[20px] border border-white/10 bg-black/18 px-3 py-3 text-sm leading-6 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+              No story cards were available for this news result yet. Try narrowing the topic or asking for a fresh brief.
+            </div>
+          ))}
         </div>
       </div>
     </div>

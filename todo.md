@@ -46,16 +46,16 @@
 - [ ] Add broader backend and frontend tests for tool-routing and action-result rendering, including failure and empty-result cases
 - [ ] Add structured in-chat error and empty-result cards for route, weather, and news actions so failures are visible without relying only on generic assistant text or toasts
 - [ ] Use explicit stored memory and profile context to bias news issue selection beyond planner heuristics, and add tests proving memory-aware news personalization affects execution
-- [ ] Implement the real Google Calendar OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
+- [x] Implement the real Google Calendar OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
 - [x] Implement Google Calendar event reading from natural-language requests inside the assistant chat flow
 - [x] Implement Google Calendar event creation and booking confirmations from natural-language requests inside the assistant chat flow
-- [ ] Add tests for Google Calendar linking, token persistence, event lookup, and booking behavior
+- [x] Add tests for Google Calendar linking, token persistence, event lookup, and booking behavior
 - [ ] Browser-validate Google Calendar linking and natural-language event actions end to end, then report the milestone
 - [ ] Implement the real Spotify OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
 - [ ] Implement Spotify playback for playlists and specific music from natural-language requests inside the assistant chat flow
 - [ ] Add tests for Spotify linking, token persistence, device and playback behavior, and assistant routing
 - [ ] Browser-validate Spotify linking and natural-language playback actions end to end, then report the milestone
-- [ ] Fix the Google Calendar OAuth redirect URL builder so proxy-aware HTTPS callback URLs are generated correctly in hosted preview and deployment environments
+- [x] Fix the Google Calendar OAuth redirect URL builder so proxy-aware HTTPS callback URLs are generated correctly in hosted preview and deployment environments
 - [ ] Replace Google Calendar dependency with an in-app calendar system for Flow Guru
 - [ ] Add database schema and migration for user-owned in-app calendar events
 - [ ] Add server-side calendar CRUD helpers and tRPC procedures for in-app events
@@ -105,3 +105,5 @@
 - [x] Clarify live microphone state in the composer so listening, idle, and blocked states are visually distinct
 - [x] Suppress non-actionable speech playback interruption errors and keep voice reply feedback calm and predictable
 - [x] Validate the updated voice interaction flow with focused tests and a quick browser check
+- [x] Add dedicated tests for Google Calendar OAuth callback state handling and token refresh behavior so the remaining calendar milestone is backed by focused coverage
+- [x] Repair the remaining action-result card conditional rendering so the chat UI loads cleanly and the final polish checkpoint can be saved
