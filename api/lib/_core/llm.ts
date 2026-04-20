@@ -268,7 +268,7 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  const hasDeepSeek = process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY.trim().length > 0;
+  const hasDeepSeek = ENV.deepSeekApiKey && ENV.deepSeekApiKey.trim().length > 0;
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   // --- Creative Mock Fallback ---
@@ -338,7 +338,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${process.env.DEEPSEEK_API_KEY || ENV.forgeApiKey}`,
+      authorization: `Bearer ${ENV.deepSeekApiKey || ENV.forgeApiKey}`,
     },
     body: JSON.stringify(payload),
   });
