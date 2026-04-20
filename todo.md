@@ -72,3 +72,4 @@
 - [ ] Convert the Drizzle schema and database client from MySQL to Neon/Postgres compatibility
 - [ ] Move or recreate existing tables and app data in Neon
 - [ ] Update in-app calendar persistence to run on Neon
+- [x] Urgently reconfirm the three Google Calendar repairs and deliver the verified result immediately
