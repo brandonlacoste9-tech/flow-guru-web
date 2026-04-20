@@ -692,6 +692,13 @@ export default function Home() {
                 <div className="space-y-6">
                   {displayedMessages.map((message, index) => {
                     const isAssistant = message.role === "assistant";
+                    const actionResult = actionResultsByMessageId[message.id];
+                    const shouldHideDuplicatedActionCard =
+                      isAssistant &&
+                      actionResult?.action === "calendar.create_event" &&
+                      actionResult.status === "executed" &&
+                      message.content.includes(actionResult.title) &&
+                      message.content.includes(actionResult.summary);
                     return (
                       <div
                         key={`${message.id}-${index}`}
@@ -717,8 +724,8 @@ export default function Home() {
                               <p className="whitespace-pre-wrap">{message.content}</p>
                             )}
                           </div>
-                          {isAssistant && actionResultsByMessageId[message.id] ? (
-                            <ActionResultCard result={actionResultsByMessageId[message.id]!} />
+                          {isAssistant && actionResult && !shouldHideDuplicatedActionCard ? (
+                            <ActionResultCard result={actionResult} />
                           ) : null}
                           <p className={cn("px-1 text-xs text-muted-foreground", isAssistant ? "text-left" : "text-right")}>
                             {formatRelativeTime(message.createdAt)}

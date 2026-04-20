@@ -41,6 +41,9 @@ type GoogleCalendarInsertResponse = {
   end?: { dateTime?: string; date?: string; timeZone?: string };
 };
 
+const GOOGLE_CALENDAR_READ_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+
 function base64UrlEncode(value: string) {
   return Buffer.from(value).toString("base64url");
 }
@@ -225,6 +228,19 @@ export async function connectGoogleCalendar(params: {
   };
 }
 
+function hasGoogleScope(scopeValue: string | null | undefined, requiredScope: string) {
+  return (scopeValue ?? "")
+    .split(/\s+/)
+    .map(scope => scope.trim())
+    .includes(requiredScope);
+}
+
+function assertGoogleCalendarScope(scopeValue: string | null | undefined, requiredScope: string, actionLabel: string) {
+  if (!hasGoogleScope(scopeValue, requiredScope)) {
+    throw new Error(`Google Calendar needs to be reconnected with the required permissions before I can ${actionLabel}.`);
+  }
+}
+
 export async function getGoogleCalendarAccessToken(userId: number) {
   const connection = await getProviderConnection(userId, "google-calendar");
   if (!connection || connection.status !== "connected" || !connection.accessToken) {
@@ -283,6 +299,8 @@ export async function listGoogleCalendarEvents(params: {
   maxResults?: number;
   query?: string | null;
 }) {
+  const connection = await getProviderConnection(params.userId, "google-calendar");
+  assertGoogleCalendarScope(connection?.scope, GOOGLE_CALENDAR_READ_SCOPE, "read your Google Calendar");
   const accessToken = await getGoogleCalendarAccessToken(params.userId);
   const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
   url.searchParams.set("singleEvents", "true");
@@ -304,8 +322,11 @@ export async function createGoogleCalendarEvent(params: {
   title: string;
   startIso: string;
   endIso: string;
+  timeZone?: string | null;
   description?: string | null;
 }) {
+  const connection = await getProviderConnection(params.userId, "google-calendar");
+  assertGoogleCalendarScope(connection?.scope, GOOGLE_CALENDAR_WRITE_SCOPE, "add events to your Google Calendar");
   const accessToken = await getGoogleCalendarAccessToken(params.userId);
 
   return googleCalendarRequest<GoogleCalendarInsertResponse>(
@@ -318,9 +339,11 @@ export async function createGoogleCalendarEvent(params: {
         description: params.description ?? undefined,
         start: {
           dateTime: params.startIso,
+          timeZone: params.timeZone ?? undefined,
         },
         end: {
           dateTime: params.endIso,
+          timeZone: params.timeZone ?? undefined,
         },
       }),
     },

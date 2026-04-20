@@ -659,6 +659,15 @@ async function executeCalendarListAction(
   };
 }
 
+function formatCalendarEventDateTime(isoValue: string, timeZone?: string | null) {
+  const date = new Date(isoValue);
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "full",
+    timeStyle: "short",
+    timeZone: timeZone || undefined,
+  }).format(date);
+}
+
 async function executeCalendarCreateAction(
   plan: AssistantActionPlan,
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
@@ -709,19 +718,24 @@ async function executeCalendarCreateAction(
     title: eventTitle,
     startIso: resolved.startIso,
     endIso,
+    timeZone: options.timeZone ?? null,
   });
+
+  const confirmedStart = created.start?.dateTime ?? resolved.startIso;
+  const confirmedEnd = created.end?.dateTime ?? endIso;
+  const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
 
   return {
     action: plan.action,
     status: "executed",
     title: `Booked: ${created.summary ?? eventTitle}`,
-    summary: `It’s on your Google Calendar for ${new Date(resolved.startIso).toLocaleString()}.`,
+    summary: `It’s on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
     provider: "google-calendar",
     data: {
       id: created.id ?? null,
       title: created.summary ?? eventTitle,
-      start: created.start?.dateTime ?? resolved.startIso,
-      end: created.end?.dateTime ?? endIso,
+      start: confirmedStart,
+      end: confirmedEnd,
       link: created.htmlLink ?? null,
       status: created.status ?? null,
     },

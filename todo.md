@@ -73,3 +73,22 @@
 - [ ] Move or recreate existing tables and app data in Neon
 - [ ] Update in-app calendar persistence to run on Neon
 - [x] Urgently reconfirm the three Google Calendar repairs and deliver the verified result immediately
+- [ ] Cancel all in-app calendar implementation work and keep Google Calendar as the only calendar provider
+- [ ] Preserve the working Google Calendar read/create integration while finishing Spotify
+- [ ] Inspect the current Spotify OAuth flow, provider token storage, and playback action wiring
+- [ ] Complete Spotify OAuth connection for the user's existing Spotify account
+- [ ] Implement natural-language Spotify playback for requests like "play my workout music"
+- [ ] Add or update tests for Spotify token persistence, playback routing, and fallback behavior
+- [ ] Validate Spotify playback end to end in the running app
+- [ ] Finish the full Spotify OAuth connection flow for the user's existing Spotify account
+- [ ] Implement automatic Spotify connect-or-play behavior for natural-language requests like "play my workout music"
+- [ ] Add Spotify playback logic to find a relevant playlist or track and start playback on the user's active device
+- [ ] Add or update Spotify integration tests covering OAuth, token persistence, routing, and playback fallbacks
+- [ ] Validate Spotify playback end to end in the running app and confirm the result
+- [x] Make Google Calendar the active top priority and defer Spotify work for now
+- [x] Inspect the current Google Calendar event-creation flow for remaining end-to-end failures
+- [x] Ensure natural-language requests like "book physiotherapy with Rick at 9:30" create Google Calendar events automatically
+- [x] Ensure natural-language requests like "add meeting with Steve at 12" create Google Calendar events automatically
+- [x] Improve the assistant's Google Calendar success confirmation so it returns a clean user-facing result
+- [x] Add or update tests for Google Calendar event creation and fallback behavior
+- [x] Validate Google Calendar event creation end to end in the running app

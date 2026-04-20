@@ -17,7 +17,7 @@ const connection = await mysql.createConnection({
 });
 
 const [rows] = await connection.query(`
-  SELECT id, userId, provider, status, externalAccountLabel, lastError, createdAt, updatedAt
+  SELECT id, userId, provider, status, externalAccountLabel, scope, tokenType, expiresAtUnixMs, lastError, createdAt, updatedAt
   FROM providerConnections
   ORDER BY userId, provider, updatedAt DESC, id DESC
 `);

@@ -404,37 +404,41 @@ export const appRouter = router({
       }
 
       let assistantReply = buildActionFallbackReply(actionResult);
+      const shouldUseDirectActionReply =
+        actionResult?.action === "calendar.create_event" && actionResult.status === "executed";
 
-      try {
-        const llmResponse = await invokeLLM({
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
-            ...(actionResult
-              ? [
-                  {
-                    role: "system" as const,
-                    content: [
-                      "External action result for the current turn:",
-                      formatActionResultContext(actionResult),
-                      "Use the result directly. If the action needs a missing connection or missing details, explain that plainly and briefly.",
-                    ].join("\n\n"),
-                  },
-                ]
-              : []),
-            ...history.slice(-20).map(message => ({
-              role: message.role,
-              content: message.content,
-            })),
-          ],
-        });
+      if (!shouldUseDirectActionReply) {
+        try {
+          const llmResponse = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              ...(actionResult
+                ? [
+                    {
+                      role: "system" as const,
+                      content: [
+                        "External action result for the current turn:",
+                        formatActionResultContext(actionResult),
+                        "Use the result directly. If the action needs a missing connection or missing details, explain that plainly and briefly.",
+                      ].join("\n\n"),
+                    },
+                  ]
+                : []),
+              ...history.slice(-20).map(message => ({
+                role: message.role,
+                content: message.content,
+              })),
+            ],
+          });
 
-        assistantReply =
-          extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
-      } catch (error) {
-        console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
+          assistantReply =
+            extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+        } catch (error) {
+          console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
+        }
       }
 
       await createConversationMessage({

@@ -333,8 +333,8 @@ describe("assistantActions", () => {
       summary: "Physiotherapy with Rick",
       htmlLink: "https://calendar.google.com/event?eid=2",
       status: "confirmed",
-      start: { dateTime: "2026-04-21T09:30:00-04:00" },
-      end: { dateTime: "2026-04-21T10:30:00-04:00" },
+      start: { dateTime: "2026-04-21T09:30:00-04:00", timeZone: "America/New_York" },
+      end: { dateTime: "2026-04-21T10:30:00-04:00", timeZone: "America/New_York" },
     });
 
     const result = await executeAssistantAction(
@@ -365,6 +365,7 @@ describe("assistantActions", () => {
         userId: 42,
         title: "Physiotherapy with Rick",
         startIso: "2026-04-21T09:30:00-04:00",
+        timeZone: "America/New_York",
       }),
     );
     expect(result).toMatchObject({
@@ -372,6 +373,7 @@ describe("assistantActions", () => {
       status: "executed",
       provider: "google-calendar",
       title: "Booked: Physiotherapy with Rick",
+      summary: "It’s on your Google Calendar for Tuesday, April 21, 2026 at 9:30 AM.",
     });
   });
 
