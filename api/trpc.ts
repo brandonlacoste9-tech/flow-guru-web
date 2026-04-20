@@ -6,14 +6,16 @@ import { createContext } from "./lib/_core/context.js";
 const app = express();
 app.use(express.json());
 
+import type { Request, Response, NextFunction } from "express";
+
 // 1. HARD-WIRED (Static imports ensure Vercel bundles everything perfectly)
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   try {
     const trpcHandler = createExpressMiddleware({
       router: appRouter,
       createContext,
     });
-    return trpcHandler(req, res, next);
+    return (trpcHandler as any)(req, res, next);
   } catch (error: any) {
     console.error("[CRITICAL BOOT ERROR]", error);
     return res.status(500).json({ 
