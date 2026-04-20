@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Flow Guru",
+    "slug": "flow-guru-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "computer.manus.flowguru",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Flow Guru uses speech recognition and the microphone to let you talk to your assistant.",
+        "NSMicrophoneUsageDescription": "Flow Guru uses the microphone to listen to your commands.",
+        "NSLocationWhenInUseUsageDescription": "Flow Guru uses your location to provide accurate weather and traffic information."
+      }
+    },
+    "android": {
+      "package": "computer.manus.flowguru",
+      "permissions": [
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysPermission": "Allow Flow Guru to use your location for background assistant updates."
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}

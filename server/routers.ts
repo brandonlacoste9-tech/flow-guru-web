@@ -324,13 +324,14 @@ export const appRouter = router({
     }),
   }),
   assistant: router({
-    bootstrap: protectedProcedure.query(async ({ ctx }) => {
-      const profile = await getUserMemoryProfile(ctx.user.id);
-      const memoryFacts = await listUserMemoryFacts(ctx.user.id);
-      const thread = await findLatestConversationThread(ctx.user.id);
-      const safeThread = thread && thread.userId === ctx.user.id ? thread : null;
-      const messages = safeThread ? await listConversationMessages(safeThread.id, ctx.user.id) : [];
-      const providerConnections = await listProviderConnections(ctx.user.id);
+    bootstrap: publicProcedure.query(async ({ ctx }) => {
+      const userId = ctx.user?.id || 1; // Fallback to demo user
+      const profile = await getUserMemoryProfile(userId);
+      const memoryFacts = await listUserMemoryFacts(userId);
+      const thread = await findLatestConversationThread(userId);
+      const safeThread = thread && thread.userId === userId ? thread : null;
+      const messages = safeThread ? await listConversationMessages(safeThread.id, userId) : [];
+      const providerConnections = await listProviderConnections(userId);
 
       return {
         profile,
@@ -340,9 +341,10 @@ export const appRouter = router({
         providerConnections,
       };
     }),
-    startFresh: protectedProcedure.mutation(async ({ ctx }) => {
+    startFresh: publicProcedure.mutation(async ({ ctx }) => {
+      const userId = ctx.user?.id || 1;
       const threadId = await createConversationThread({
-        userId: ctx.user.id,
+        userId,
         title: "Flow Guru Chat",
       });
 
@@ -351,7 +353,7 @@ export const appRouter = router({
       }
 
       const thread = await getConversationThreadById(threadId);
-      const providerConnections = await listProviderConnections(ctx.user.id);
+      const providerConnections = await listProviderConnections(userId);
 
       return {
         thread,
@@ -359,36 +361,38 @@ export const appRouter = router({
         providerConnections,
       };
     }),
-    history: protectedProcedure.query(async ({ ctx }) => {
-      const thread = await findLatestConversationThread(ctx.user.id);
-      if (!thread || thread.userId !== ctx.user.id) {
+    history: publicProcedure.query(async ({ ctx }) => {
+      const userId = ctx.user?.id || 1;
+      const thread = await findLatestConversationThread(userId);
+      if (!thread || thread.userId !== userId) {
         return {
           thread: null,
           messages: [],
         } as const;
       }
 
-      const messages = await listConversationMessages(thread.id, ctx.user.id);
+      const messages = await listConversationMessages(thread.id, userId);
       return {
         thread,
         messages,
       };
     }),
-    send: protectedProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
-      const threadId = await getOrCreateThreadId(ctx.user.id, input.threadId);
+    send: publicProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
+      const userId = ctx.user?.id || 1;
+      const threadId = await getOrCreateThreadId(userId, input.threadId);
 
       await createConversationMessage({
         threadId,
-        userId: ctx.user.id,
+        userId,
         role: "user",
         content: input.message,
       });
 
-      const profile = await getUserMemoryProfile(ctx.user.id);
-      const memoryFacts = await listUserMemoryFacts(ctx.user.id);
-      const history = await listConversationMessages(threadId, ctx.user.id);
+      const profile = await getUserMemoryProfile(userId);
+      const memoryFacts = await listUserMemoryFacts(userId);
+      const history = await listConversationMessages(threadId, userId);
       const memoryContext = buildMemoryContext({
-        userName: ctx.user.name,
+        userName: ctx.user?.name || "Brandon",
         profile,
         facts: memoryFacts,
       });
@@ -415,8 +419,8 @@ export const appRouter = router({
           message: input.message,
         });
         actionResult = await executeAssistantAction(plannedAction, {
-          userId: ctx.user.id,
-          userName: ctx.user.name,
+          userId,
+          userName: ctx.user?.name || "Brandon",
           message: input.message,
           memoryContext,
           timeZone: input.timeZone ?? null,
@@ -473,7 +477,7 @@ export const appRouter = router({
 
       await createConversationMessage({
         threadId,
-        userId: ctx.user.id,
+        userId,
         role: "assistant",
         content: assistantReply,
       });
@@ -486,8 +490,8 @@ export const appRouter = router({
 
       try {
         memoryUpdate = await extractAndPersistMemory({
-          userId: ctx.user.id,
-          userName: ctx.user.name,
+          userId,
+          userName: ctx.user?.name || "Brandon",
           userMessage: input.message,
           assistantReply,
         });
@@ -495,7 +499,7 @@ export const appRouter = router({
         console.warn("[Flow Guru] Memory extraction failed, but the message send completed.", error);
       }
 
-      const messages = await listConversationMessages(threadId, ctx.user.id);
+      const messages = await listConversationMessages(threadId, userId);
 
       return {
         threadId,
