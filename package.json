@@ -106,9 +106,6 @@
     "vite-plugin-manus-runtime": "^0.0.57",
     "vitest": "^2.1.4"
   },
-  "engines": {
-    "node": ">=20"
-  },
   "packageManager": "pnpm@10.4.1",
   "pnpm": {
     "patchedDependencies": {

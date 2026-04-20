@@ -22,65 +22,66 @@ export async function getDb() {
 }
 
 // Re-implementing the missing exports with Postgres logic
-export async function getUserByOpenId(openId: string) {
+// Proper return type signatures to prevent 'never' inference
+export async function getUserByOpenId(openId: string): Promise<any | null> {
     const db = await getDb();
     if (!db) return null;
     return null;
 }
 
-export async function upsertUser(user: any) {
+export async function upsertUser(user: any): Promise<void> {
     const db = await getDb();
     if (!db) return;
 }
 
-export async function getProviderConnection(userId: number, provider: string) {
+export async function getProviderConnection(userId: number, provider: string): Promise<any | null> {
     const db = await getDb();
     if (!db) return null;
     return null;
 }
 
-export async function upsertProviderConnection(data: any) {
+export async function upsertProviderConnection(data: any): Promise<void> {
     const db = await getDb();
     if (!db) return;
 }
 
-export async function getUserMemoryProfile(userId: number) {
+export async function getUserMemoryProfile(userId: number): Promise<any | null> {
     return null;
 }
 
-export async function listUserMemoryFacts(userId: number) {
+export async function listUserMemoryFacts(userId: number): Promise<any[]> {
     return [];
 }
 
-export async function findLatestConversationThread(userId: number) {
+export async function findLatestConversationThread(userId: number): Promise<any | null> {
     return null;
 }
 
-export async function listConversationMessages(threadId: number, userId: number) {
+export async function listConversationMessages(threadId: number, userId: number): Promise<any[]> {
     return [];
 }
 
-export async function createConversationThread(data: any) {
+export async function createConversationThread(data: any): Promise<number | null> {
     return 1;
 }
 
-export async function createConversationMessage(data: any) {
+export async function createConversationMessage(data: any): Promise<number | null> {
     return 1;
 }
 
-export async function listProviderConnections(userId: number) {
+export async function listProviderConnections(userId: number): Promise<any[]> {
     return [];
 }
 
-export async function touchConversationThread(threadId: number) {
+export async function touchConversationThread(threadId: number): Promise<void> {
 }
 
-export async function upsertUserMemoryProfile(data: any) {
+export async function upsertUserMemoryProfile(data: any): Promise<void> {
 }
 
-export async function createUserMemoryFacts(facts: any[]) {
+export async function createUserMemoryFacts(facts: any[]): Promise<void> {
 }
 
-export async function getConversationThreadById(threadId: number) {
+export async function getConversationThreadById(threadId: number): Promise<any | null> {
     return null;
 }

@@ -85,6 +85,7 @@ function buildMemoryContext(params: {
         preferencesSummary: string | null;
         recurringEventsSummary: string | null;
       }
+    | null
     | undefined;
   facts: Array<{
     category: string;
@@ -112,13 +113,13 @@ function buildMemoryContext(params: {
 
 async function getOrCreateThreadId(userId: number, requestedThreadId?: number) {
   if (requestedThreadId) {
-    const requestedThread = await getConversationThreadById(requestedThreadId);
+    const requestedThread = (await getConversationThreadById(requestedThreadId)) as any;
     if (requestedThread && requestedThread.userId === userId) {
       return requestedThread.id;
     }
   }
 
-  const existingThread = await findLatestConversationThread(userId);
+  const existingThread = (await findLatestConversationThread(userId)) as any;
   if (existingThread && existingThread.userId === userId) {
     return existingThread.id;
   }
@@ -141,7 +142,7 @@ async function extractAndPersistMemory(params: {
   userMessage: string;
   assistantReply: string;
 }) {
-  const existingProfile = await getUserMemoryProfile(params.userId);
+  const existingProfile = (await getUserMemoryProfile(params.userId)) as any;
   const existingFacts = await listUserMemoryFacts(params.userId);
 
   const extractionResponse = await invokeLLM({
@@ -414,7 +415,7 @@ export const appRouter = router({
 
       try {
         const plannedAction = await planAssistantAction({
-          userName: ctx.user.name,
+          userName: ctx.user?.name || "Brandon",
           memoryContext,
           message: input.message,
         });
@@ -461,9 +462,9 @@ export const appRouter = router({
                     },
                   ]
                 : []),
-              ...history.slice(-20).map(message => ({
-                role: message.role,
-                content: message.content,
+              ...history.map((m: any) => ({
+                role: m.role as "user" | "assistant",
+                content: m.content as string,
               })),
             ],
           });

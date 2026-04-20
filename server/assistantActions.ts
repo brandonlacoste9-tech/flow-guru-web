@@ -593,7 +593,7 @@ async function executeCalendarListAction(
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
   const connection = await getProviderConnection(options.userId, "google-calendar");
-  if (!connection || connection.status !== "connected") {
+  if (!connection || (connection as any).status !== "connected") {
     return connectionRequiredResult(
       plan.action,
       "google-calendar",
@@ -673,7 +673,7 @@ async function executeCalendarCreateAction(
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
   const connection = await getProviderConnection(options.userId, "google-calendar");
-  if (!connection || connection.status !== "connected") {
+  if (!connection || (connection as any).status !== "connected") {
     return connectionRequiredResult(
       plan.action,
       "google-calendar",

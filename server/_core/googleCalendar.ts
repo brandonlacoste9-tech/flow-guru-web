@@ -242,7 +242,7 @@ function assertGoogleCalendarScope(scopeValue: string | null | undefined, requir
 }
 
 export async function getGoogleCalendarAccessToken(userId: number) {
-  const connection = await getProviderConnection(userId, "google-calendar");
+  const connection = (await getProviderConnection(userId, "google-calendar")) as any;
   if (!connection || connection.status !== "connected" || !connection.accessToken) {
     throw new Error("Google Calendar is not connected for this user.");
   }
