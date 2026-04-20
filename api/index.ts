@@ -4,23 +4,20 @@ import fs from "fs";
 
 const app = express();
 
-// 1. Initial Body Parsers (Low risk)
+// 1. Body Parsers
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// 2. Health & Debug (ZERO IMPORTS)
-app.get("/api/health", (req, res) => res.json({ status: "alive", mode: "safe-start" }));
+// 2. Health Check
+app.get("/api/health", (req, res) => res.json({ status: "alive", mode: "trpc-compliant" }));
 
 // 3. Dynamic TRPC (The Brain in a Safe Room)
 app.use("/api", async (req, res, next) => {
-  // Only handle TRPC or API requests
   if (!req.url.includes('trpc') && !req.url.startsWith('/api')) {
     return next();
   }
 
   try {
-    // We import these INSIDE the handler so that a crash here 
-    // is caught by the try/catch instead of breaking Vercel.
     const { createExpressMiddleware } = await import("@trpc/server/adapters/express");
     const { appRouter } = await import("../server/routers");
     const { createContext } = await import("../server/_core/context");
@@ -33,10 +30,22 @@ app.use("/api", async (req, res, next) => {
     return trpcHandler(req, res, next);
   } catch (error: any) {
     console.error("[SafeStart Error]", error);
+    
+    // Send a TRPC-compatible "SuperJSON" error envelope
     return res.status(500).json({ 
-      error: "AI_BOOT_STRAP_FAILED", 
-      message: error.message,
-      stack: error.stack 
+      json: {
+        error: {
+          json: {
+            message: `BOOTSTRAP_ERROR: ${error.message}`,
+            code: -32603,
+            data: { 
+              code: "INTERNAL_SERVER_ERROR", 
+              httpStatus: 500,
+              stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            }
+          }
+        }
+      }
     });
   }
 });
