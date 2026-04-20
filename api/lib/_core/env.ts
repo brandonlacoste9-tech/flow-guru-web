@@ -8,6 +8,7 @@ export const ENV = {
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   deepSeekApiKey: process.env.DEEPSEEK_API_KEY ?? process.env.DeepSeek_API_KEY ?? process.env.DEEP_SEEK_API_KEY ?? "",
+  moonshotApiKey: process.env.MOONSHOT_API_KEY ?? "",
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   spotifyClientId: process.env.SPOTIFY_CLIENT_ID ?? "",

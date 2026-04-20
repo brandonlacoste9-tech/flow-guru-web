@@ -210,7 +210,8 @@ const normalizeToolChoice = (
 };
 
 const resolveApiUrl = () => {
-  if (process.env.DEEPSEEK_API_KEY) return "https://api.deepseek.com/v1/chat/completions";
+  if (ENV.deepSeekApiKey) return "https://api.deepseek.com/v1/chat/completions";
+  if (ENV.moonshotApiKey) return "https://api.moonshot.cn/v1/chat/completions";
   return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
@@ -269,10 +270,11 @@ const normalizeResponseFormat = ({
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const hasDeepSeek = ENV.deepSeekApiKey && ENV.deepSeekApiKey.trim().length > 0;
+  const hasMoonshot = ENV.moonshotApiKey && ENV.moonshotApiKey.trim().length > 0;
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   // --- Creative Mock Fallback ---
-  if (!hasDeepSeek && !hasForge) {
+  if (!hasDeepSeek && !hasMoonshot && !hasForge) {
     console.warn("[Flow Guru] Operating in Simulation Mode (No API keys found)");
     return {
       id: "mock-" + Date.now(),
@@ -302,7 +304,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: hasDeepSeek ? "deepseek-chat" : "gemini-1.5-flash",
+    model: hasDeepSeek ? "deepseek-chat" : hasMoonshot ? "moonshot-v1-8k" : "gemini-1.5-flash",
     messages: messages.map(normalizeMessage),
   };
 
@@ -338,7 +340,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.deepSeekApiKey || ENV.forgeApiKey}`,
+      authorization: `Bearer ${ENV.deepSeekApiKey || ENV.moonshotApiKey || ENV.forgeApiKey}`,
     },
     body: JSON.stringify(payload),
   });
