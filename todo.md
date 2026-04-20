@@ -102,3 +102,6 @@
 - [x] Remove remaining seeded welcome copy and hardcoded suggestion chips from the authenticated empty state so the chat opens without demo-style content
 - [x] Add Vitest coverage for the assistant fresh-chat flow and for sending messages into an explicitly selected active thread
 - [x] Browser-verify that authenticated Flow Guru opens without seeded conversation content after the final cleanup pass
+- [x] Clarify live microphone state in the composer so listening, idle, and blocked states are visually distinct
+- [x] Suppress non-actionable speech playback interruption errors and keep voice reply feedback calm and predictable
+- [x] Validate the updated voice interaction flow with focused tests and a quick browser check

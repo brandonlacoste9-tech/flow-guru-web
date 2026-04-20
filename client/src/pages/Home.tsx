@@ -314,6 +314,8 @@ export default function Home() {
   const [speechEnabled, setSpeechEnabled] = useState(true);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [recognitionSupported, setRecognitionSupported] = useState(false);
+  const [voiceCaptureMessage, setVoiceCaptureMessage] = useState<string | null>(null);
+  const [isSpeakingReply, setIsSpeakingReply] = useState(false);
 
   const messageViewportRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -360,16 +362,20 @@ export default function Home() {
 
   const speakText = (text: string) => {
     if (!speechEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setIsSpeakingReply(false);
       return;
     }
 
     const speechText = sanitizeSpeechText(text);
     if (!speechText) {
+      setIsSpeakingReply(false);
       return;
     }
 
     try {
-      window.speechSynthesis.cancel();
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
       const utterance = new SpeechSynthesisUtterance(speechText);
       const availableVoices = window.speechSynthesis.getVoices();
       utterance.rate = 1;
@@ -380,7 +386,14 @@ export default function Home() {
         availableVoices.find(voice => voice.lang.startsWith(utterance.lang.split("-")[0] ?? "")) ??
         availableVoices[0] ??
         null;
+      utterance.onstart = () => {
+        setIsSpeakingReply(true);
+      };
+      utterance.onend = () => {
+        setIsSpeakingReply(false);
+      };
       utterance.onerror = event => {
+        setIsSpeakingReply(false);
         if (event.error === "interrupted" || event.error === "canceled") {
           return;
         }
@@ -388,6 +401,7 @@ export default function Home() {
       };
       window.speechSynthesis.speak(utterance);
     } catch {
+      setIsSpeakingReply(false);
       toast.error("Speech playback is not available right now.");
     }
   };
@@ -520,7 +534,16 @@ export default function Home() {
       listeningActiveRef.current = false;
       setIsListening(false);
       setInterimTranscript("");
-      toast.error(event.error === "not-allowed" ? "Microphone access was blocked." : "Voice input stopped unexpectedly.");
+      const message =
+        event.error === "not-allowed"
+          ? "Microphone access is blocked. Allow microphone access in your browser to use voice input."
+          : event.error === "no-speech"
+            ? "I did not catch any speech. Try again when you are ready."
+            : "Voice input stopped unexpectedly. You can type instead or try the mic again.";
+      setVoiceCaptureMessage(message);
+      if (event.error === "not-allowed") {
+        toast.error(message);
+      }
     };
 
     recognition.onend = () => {
@@ -529,7 +552,11 @@ export default function Home() {
       setIsListening(false);
       setInterimTranscript("");
       if (endedWithoutSpeech) {
-        toast.error("Voice input ended before any speech was captured.");
+        setVoiceCaptureMessage("Listening stopped before any speech was captured.");
+        return;
+      }
+      if (heardSpeechRef.current) {
+        setVoiceCaptureMessage("Voice captured. Review or send when you are ready.");
       }
     };
 
@@ -559,7 +586,9 @@ export default function Home() {
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      toast.error("Voice input is not available in this browser.");
+      const message = "Voice input is not available in this browser.";
+      setVoiceCaptureMessage(message);
+      toast.error(message);
       return;
     }
 
@@ -567,12 +596,15 @@ export default function Home() {
       listeningActiveRef.current = false;
       recognitionRef.current.stop();
       setIsListening(false);
+      setInterimTranscript("");
+      setVoiceCaptureMessage("Listening paused.");
       return;
     }
 
     listeningBaseTextRef.current = draft.trim();
     heardSpeechRef.current = false;
     listeningActiveRef.current = true;
+    setVoiceCaptureMessage("Listening now. Start speaking when you are ready.");
     setInterimTranscript("Listening...");
 
     try {
@@ -582,7 +614,9 @@ export default function Home() {
       listeningActiveRef.current = false;
       setIsListening(false);
       setInterimTranscript("");
-      toast.error("Voice input could not start. Please check microphone permissions and try again.");
+      const message = "Voice input could not start. Please check microphone permissions and try again.";
+      setVoiceCaptureMessage(message);
+      toast.error(message);
     }
   };
 
@@ -867,12 +901,18 @@ export default function Home() {
                         <p>
                           {recognitionSupported
                             ? isListening
-                              ? interimTranscript || "Listening..."
-                              : "Mic-ready voice input"
+                              ? interimTranscript || "Listening for your voice..."
+                              : voiceCaptureMessage || "Mic ready when you want to talk."
                             : "Voice input depends on browser support"}
                         </p>
                         <p>
-                          {speechSupported ? (speechEnabled ? "Voice replies on" : "Voice replies off") : "Voice replies unavailable"}
+                          {speechSupported
+                            ? isSpeakingReply
+                              ? "Voice reply speaking now"
+                              : speechEnabled
+                                ? "Voice replies on"
+                                : "Voice replies off"
+                            : "Voice replies unavailable"}
                         </p>
                       </div>
                     </div>
@@ -884,10 +924,12 @@ export default function Home() {
                         onClick={toggleListening}
                         disabled={sendMutation.isPending || startFreshMutation.isPending || !recognitionSupported}
                         className={cn(
-                          "size-13 rounded-full shadow-[0_18px_40px_rgba(0,0,0,0.25)] transition duration-200",
+                          "size-13 rounded-full border transition duration-200",
                           isListening
-                            ? "bg-red-500 text-white shadow-red-500/30 hover:bg-red-400"
-                            : "bg-primary text-primary-foreground shadow-primary/30 hover:bg-primary/90",
+                            ? "border-red-300/40 bg-red-500 text-white shadow-[0_18px_40px_rgba(239,68,68,0.35)] hover:bg-red-400"
+                            : voiceCaptureMessage && recognitionSupported
+                              ? "border-amber-300/30 bg-amber-500/90 text-amber-950 shadow-[0_18px_40px_rgba(245,158,11,0.25)] hover:bg-amber-400"
+                              : "border-primary/20 bg-primary text-primary-foreground shadow-[0_18px_40px_rgba(132,96,255,0.28)] hover:bg-primary/90",
                         )}
                         aria-label={isListening ? "Stop voice input" : "Start voice input"}
                       >
@@ -943,7 +985,7 @@ export default function Home() {
                       {recognitionSupported
                         ? isListening
                           ? interimTranscript || "Listening for your next instruction."
-                          : "Ready when you want to talk."
+                          : voiceCaptureMessage || "Ready when you want to talk."
                         : "This browser session does not support voice capture."}
                     </p>
                   </div>
@@ -951,9 +993,11 @@ export default function Home() {
                     <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Voice replies</p>
                     <p className="mt-2 text-sm text-foreground">
                       {speechSupported
-                        ? speechEnabled
-                          ? "Spoken responses are enabled."
-                          : "Spoken responses are currently muted."
+                        ? isSpeakingReply
+                          ? "A spoken reply is playing now."
+                          : speechEnabled
+                            ? "Spoken responses are enabled."
+                            : "Spoken responses are currently muted."
                         : "Speech playback is unavailable in this browser session."}
                     </p>
                   </div>
