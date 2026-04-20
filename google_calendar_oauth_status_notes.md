@@ -19,3 +19,7 @@ A fresh database inspection also confirms that the provider-connection persisten
 The stored Google scope string now includes both `https://www.googleapis.com/auth/calendar.readonly` and `https://www.googleapis.com/auth/calendar.events`, which means the token has the Calendar read and write permissions that were missing during the earlier `403 insufficient permissions` failure.
 
 The current Flow Guru chat transcript now shows a successful booking confirmation for the physiotherapy appointment, indicating that the repaired OAuth configuration, deduplicated provider connection state, and expanded scopes are working together end to end.
+
+A fresh post-fix booking validation now confirms the timezone and confirmation cleanup on the write path. The request `Book physiotherapy with Rick on April 22 at 9:30 AM.` returned a single clean booking confirmation and displayed the correct local time of `Wednesday, April 22, 2026 at 9:30 AM`.
+
+A follow-up read test also confirms that the Google Calendar read path is executing, but it still has a remaining UX issue. The request `What's on my calendar tomorrow?` produced a Google Calendar action result showing that events were found, yet the assistant text above it still included awkward generative copy (`I can check that for you, david. What is today's date?`) instead of a clean direct summary of the fetched calendar result.

@@ -695,7 +695,8 @@ export default function Home() {
                     const actionResult = actionResultsByMessageId[message.id];
                     const shouldHideDuplicatedActionCard =
                       isAssistant &&
-                      actionResult?.action === "calendar.create_event" &&
+                      (actionResult?.action === "calendar.create_event" ||
+                        actionResult?.action === "calendar.list_events") &&
                       actionResult.status === "executed" &&
                       message.content.includes(actionResult.title) &&
                       message.content.includes(actionResult.summary);

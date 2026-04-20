@@ -405,7 +405,9 @@ export const appRouter = router({
 
       let assistantReply = buildActionFallbackReply(actionResult);
       const shouldUseDirectActionReply =
-        actionResult?.action === "calendar.create_event" && actionResult.status === "executed";
+        actionResult?.status === "executed" &&
+        (actionResult.action === "calendar.create_event" ||
+          actionResult.action === "calendar.list_events");
 
       if (!shouldUseDirectActionReply) {
         try {

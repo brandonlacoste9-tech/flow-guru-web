@@ -47,8 +47,8 @@
 - [ ] Add structured in-chat error and empty-result cards for route, weather, and news actions so failures are visible without relying only on generic assistant text or toasts
 - [ ] Use explicit stored memory and profile context to bias news issue selection beyond planner heuristics, and add tests proving memory-aware news personalization affects execution
 - [ ] Implement the real Google Calendar OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
-- [ ] Implement Google Calendar event reading from natural-language requests inside the assistant chat flow
-- [ ] Implement Google Calendar event creation and booking confirmations from natural-language requests inside the assistant chat flow
+- [x] Implement Google Calendar event reading from natural-language requests inside the assistant chat flow
+- [x] Implement Google Calendar event creation and booking confirmations from natural-language requests inside the assistant chat flow
 - [ ] Add tests for Google Calendar linking, token persistence, event lookup, and booking behavior
 - [ ] Browser-validate Google Calendar linking and natural-language event actions end to end, then report the milestone
 - [ ] Implement the real Spotify OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
@@ -92,3 +92,4 @@
 - [x] Improve the assistant's Google Calendar success confirmation so it returns a clean user-facing result
 - [x] Add or update tests for Google Calendar event creation and fallback behavior
 - [x] Validate Google Calendar event creation end to end in the running app
+- [x] Verify Google Calendar read responses render once in chat without a duplicate action card after the direct-reply patch
