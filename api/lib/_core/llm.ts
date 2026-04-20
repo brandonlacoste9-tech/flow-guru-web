@@ -287,66 +287,95 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  const payload: Record<string, unknown> = {
-    model: hasDeepSeek ? "deepseek-chat" : hasMoonshot ? "moonshot-v1-8k" : "gemini-1.5-flash",
-    messages: messages.map(normalizeMessage),
-  };
+  // Define providers in order of priority
+  const providers = [];
+  if (hasDeepSeek) providers.push({ name: "deepseek", model: "deepseek-chat", key: ENV.deepSeekApiKey, url: "https://api.deepseek.com/v1/chat/completions" });
+  if (hasMoonshot) providers.push({ name: "moonshot", model: "moonshot-v1-8k", key: ENV.moonshotApiKey, url: "https://api.moonshot.cn/v1/chat/completions" });
+  if (hasForge) providers.push({ name: "forge", model: "gemini-1.5-flash", key: ENV.forgeApiKey, url: ENV.forgeApiUrl });
 
-  if (tools && tools.length > 0) {
-    payload.tools = tools;
-  }
+  let lastError: any = null;
 
-  const normalizedToolChoice = normalizeToolChoice(
-    toolChoice || tool_choice,
-    tools
-  );
-  if (normalizedToolChoice) {
-    payload.tool_choice = normalizedToolChoice;
-  }
+  for (const provider of providers) {
+    try {
+      const payload: Record<string, unknown> = {
+        model: provider.model,
+        messages: messages.map(normalizeMessage),
+      };
 
-  // Optimize for DeepSeek if present
-  if (hasDeepSeek) {
-    payload.max_tokens = 4096;
-  }
+      if (tools && tools.length > 0) {
+        payload.tools = tools;
+      }
 
-  const normalizedResponseFormat = normalizeResponseFormat({
-    responseFormat,
-    response_format,
-    outputSchema,
-    output_schema,
-  });
+      const normalizedToolChoice = normalizeToolChoice(toolChoice || tool_choice, tools);
+      if (normalizedToolChoice) {
+        payload.tool_choice = normalizedToolChoice;
+      }
 
-  if (normalizedResponseFormat) {
-    payload.response_format = normalizedResponseFormat;
-  }
+      const normalizedResponseFormat = normalizeResponseFormat({
+        responseFormat,
+        response_format,
+        outputSchema,
+        output_schema,
+      });
 
-  const response = await fetch(resolveApiUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${ENV.deepSeekApiKey || ENV.moonshotApiKey || ENV.forgeApiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+      if (normalizedResponseFormat) {
+        payload.response_format = normalizedResponseFormat;
+      }
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("[Flow Guru] LLM API failure:", response.status, errorText);
-    // Fallback if the real API fails
-    return {
-      id: "error-fallback-" + Date.now(),
-      created: Math.floor(Date.now() / 1000),
-      model: "error-fallback",
-      choices: [{
-        index: 0,
-        message: {
-          role: "assistant",
-          content: `I hit a snag connecting to my brain (HTTP ${response.status})! This usually means the API key is invalid or I'm having trouble reaching the provider. Details: ${errorText.slice(0, 100)}...`,
+      const response = await fetch(provider.url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${provider.key}`,
         },
-        finish_reason: "error",
-      }],
-    };
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        return (await response.json()) as InvokeResult;
+      }
+
+      const errorText = await response.text();
+      console.warn(`[Flow Guru] Provider ${provider.name} failed (${response.status}):`, errorText);
+      
+      // If it's an auth error and we have more providers, continue to next
+      if (response.status === 401 && providers.indexOf(provider) < providers.length - 1) {
+        console.log(`[Flow Guru] Auth failed for ${provider.name}, trying next provider...`);
+        continue;
+      }
+
+      // If not auth error or no more providers, return the error
+      return {
+        id: "error-fallback-" + Date.now(),
+        created: Math.floor(Date.now() / 1000),
+        model: "error-fallback",
+        choices: [{
+          index: 0,
+          message: {
+            role: "assistant",
+            content: `I hit a snag connecting to my brain using ${provider.name} (HTTP ${response.status})! Details: ${errorText.slice(0, 100)}...`,
+          },
+          finish_reason: "error",
+        }],
+      };
+    } catch (err) {
+      console.error(`[Flow Guru] Critical error with provider ${provider.name}:`, err);
+      lastError = err;
+    }
   }
 
-  return (await response.json()) as InvokeResult;
+  // If we get here, all providers failed
+  return {
+    id: "error-fallback-" + Date.now(),
+    created: Math.floor(Date.now() / 1000),
+    model: "error-fallback",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `I couldn't reach any of my thinking services. Please check your internet connection or API keys.`,
+      },
+      finish_reason: "error",
+    }],
+  };
 }
