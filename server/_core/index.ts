@@ -83,8 +83,17 @@ export async function createMainApp() {
 // For Vercel - export a handler
 // Vercel Serverless Entry
 export default async function handler(req: any, res: any) {
-  const { app } = await createMainApp();
-  return app(req, res);
+  try {
+    const { app } = await createMainApp();
+    return app(req, res);
+  } catch (error: any) {
+    console.error("[Vercel Handler Crash]", error);
+    res.status(500).json({
+      error: "FATAL_BOOTSTRAP_ERROR",
+      message: error.message,
+      stack: error.stack
+    });
+  }
 }
 
 // Local development server
