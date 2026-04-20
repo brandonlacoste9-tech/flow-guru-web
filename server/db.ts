@@ -1,11 +1,21 @@
-import { eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import {
+  conversationMessages,
+  conversationThreads,
+  InsertConversationMessage,
+  InsertConversationThread,
+  InsertUser,
+  InsertUserMemoryFact,
+  InsertUserMemoryProfile,
+  userMemoryFacts,
+  userMemoryProfiles,
+  users,
+} from "../drizzle/schema";
+import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -56,8 +66,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -89,4 +99,126 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function getUserMemoryProfile(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get memory profile: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(userMemoryProfiles).where(eq(userMemoryProfiles.userId, userId)).limit(1);
+  return result[0];
+}
+
+export async function upsertUserMemoryProfile(input: InsertUserMemoryProfile) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot upsert memory profile: database not available");
+    return;
+  }
+
+  await db.insert(userMemoryProfiles).values(input).onDuplicateKeyUpdate({
+    set: {
+      wakeUpTime: input.wakeUpTime ?? null,
+      dailyRoutine: input.dailyRoutine ?? null,
+      preferencesSummary: input.preferencesSummary ?? null,
+      recurringEventsSummary: input.recurringEventsSummary ?? null,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+export async function listUserMemoryFacts(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot list memory facts: database not available");
+    return [];
+  }
+
+  return db
+    .select()
+    .from(userMemoryFacts)
+    .where(eq(userMemoryFacts.userId, userId))
+    .orderBy(desc(userMemoryFacts.updatedAt), desc(userMemoryFacts.id));
+}
+
+export async function createUserMemoryFacts(facts: InsertUserMemoryFact[]) {
+  if (facts.length === 0) {
+    return;
+  }
+
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create memory facts: database not available");
+    return;
+  }
+
+  await db.insert(userMemoryFacts).values(facts);
+}
+
+export async function findLatestConversationThread(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot load conversation thread: database not available");
+    return undefined;
+  }
+
+  const result = await db
+    .select()
+    .from(conversationThreads)
+    .where(eq(conversationThreads.userId, userId))
+    .orderBy(desc(conversationThreads.lastMessageAt), desc(conversationThreads.id))
+    .limit(1);
+
+  return result[0];
+}
+
+export async function createConversationThread(input: InsertConversationThread) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.insert(conversationThreads).values(input).$returningId();
+  return result[0]?.id;
+}
+
+export async function touchConversationThread(threadId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update thread timestamp: database not available");
+    return;
+  }
+
+  await db
+    .update(conversationThreads)
+    .set({
+      updatedAt: new Date(),
+      lastMessageAt: new Date(),
+    })
+    .where(eq(conversationThreads.id, threadId));
+}
+
+export async function listConversationMessages(threadId: number, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot list messages: database not available");
+    return [];
+  }
+
+  return db
+    .select()
+    .from(conversationMessages)
+    .where(and(eq(conversationMessages.threadId, threadId), eq(conversationMessages.userId, userId)))
+    .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id));
+}
+
+export async function createConversationMessage(input: InsertConversationMessage) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.insert(conversationMessages).values(input).$returningId();
+  return result[0]?.id;
+}

@@ -1,0 +1,48 @@
+# Project TODO
+
+- [x] Define the minimal chat-only product structure for authenticated users with no dashboard or sidebar
+- [x] Extend the database schema for per-user memory profiles, recurring memory facts, and conversation history
+- [x] Generate and apply the database migration for the new memory and conversation tables
+- [x] Add database helpers for reading and writing user memory and chat history
+- [x] Implement protected chat procedures backed by the LLM with memory-aware system prompting
+- [x] Implement automatic memory extraction and persistence after each conversation turn
+- [x] Persist conversation history per authenticated user and reload it across sessions
+- [x] Build the minimal dark-mode single-column chat interface
+- [x] Add browser voice input using the native Web Speech API and a primary mic control
+- [x] Add browser text-to-speech playback using the native SpeechSynthesis API
+- [x] Ensure authentication ties memory and history to each Manus OAuth user account
+- [x] Write or update Vitest coverage for backend memory and chat behavior
+- [ ] Validate the full app flow in the browser and prepare the first step-by-step progress update
+- [x] Add production-grade error handling and fallbacks in assistant chat flow for LLM failures, extractor failures, and JSON parse errors without breaking message sends
+- [x] Harden automatic memory extraction with safe schema validation, non-blocking persistence, and a clearer deduplication strategy for existing memory
+- [x] Add tests for failure scenarios in chat and memory persistence while verifying authenticated user scoping
+- [x] Add a Vitest case proving one authenticated user cannot read or write another user's memory or history data
+- [x] Add backend tests for persistence failure cases in the assistant send flow and confirm the behavior is intentional
+- [x] Add a stricter cross-user isolation Vitest test proving assistant routes only return and write data for the authenticated user's account
+- [x] Add frontend-focused Vitest coverage for chat display and voice helper behavior
+- [x] Replace the pre-auth landing treatment with a stricter chat-only authentication view
+- [x] Browser-test and tighten the interface to a strictly minimal single-column chat experience
+- [x] Harden Web Speech API voice input for synchronous start failures and permission edge cases
+- [x] Harden SpeechSynthesis playback handling for browser and voice-availability edge cases
+- [ ] Re-verify and update todo.md only after the frontend behavior is validated in-browser
+- [ ] Investigate and improve the microphone flow so it clearly enters listening mode or shows a clearer supported-browser or permission message in the running app
+- [ ] Refine SpeechSynthesis behavior to gracefully suppress interruption failures after assistant replies and re-test the browser experience
+- [x] Design the assistant tool-calling architecture for natural-language API actions inside the existing chat flow
+- [ ] Add provider account-linking support and secure token storage for Google Calendar and Spotify
+- [ ] Implement Google Calendar read and create actions triggered automatically from natural language
+- [ ] Implement Spotify playback actions for playlists and specific music triggered automatically from natural language
+- [x] Implement route and traffic actions using Google Maps or Waze triggered automatically from natural language
+- [x] Implement live weather actions triggered automatically from natural language
+- [x] Implement personalized news actions based on user interests and memory
+- [x] Update the assistant orchestration prompt and tool execution logic so APIs are called automatically without manual user commands
+- [ ] Write backend and frontend tests for the new integration flows and tool-routing behavior
+- [ ] Validate each major integration in sequence and report progress after Google Calendar, Spotify, and the route/weather/news bundle
+- [x] Reorder the integration rollout so route, weather, and news actions ship before credential-dependent Google Calendar and Spotify actions
+- [x] Build a provider-agnostic assistant tool-orchestration layer that can choose and execute actions automatically from natural language
+- [ ] Prepare deferred Google Calendar and Spotify account-linking routes, token models, and UI states so they can be activated once secrets are added
+- [x] Render assistant action results in the chat UI with polished route, weather, and news result cards plus loading and error states
+- [x] Browser-validate natural-language route, weather, and news requests end to end before marking the immediate integrations complete
+- [x] Strengthen news personalization by deriving issue selection more explicitly from stored memory and profile context
+- [ ] Add broader backend and frontend tests for tool-routing and action-result rendering, including failure and empty-result cases
+- [ ] Add structured in-chat error and empty-result cards for route, weather, and news actions so failures are visible without relying only on generic assistant text or toasts
+- [ ] Use explicit stored memory and profile context to bias news issue selection beyond planner heuristics, and add tests proving memory-aware news personalization affects execution
