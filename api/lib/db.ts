@@ -40,7 +40,7 @@ async function ensureTables(db: any) {
         console.log("[DB] Tables missing. Attempting self-healing migration...");
         try {
             const sql = `
-                CREATE TABLE IF NOT EXISTS users (
+                CREATE TABLE IF NOT EXISTS fg_users (
                     id SERIAL PRIMARY KEY,
                     "openId" VARCHAR(64) NOT NULL UNIQUE,
                     name TEXT,
@@ -51,7 +51,7 @@ async function ensureTables(db: any) {
                     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL,
                     "lastSignedIn" TIMESTAMP DEFAULT NOW() NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS "conversationThreads" (
+                CREATE TABLE IF NOT EXISTS fg_threads (
                     id SERIAL PRIMARY KEY,
                     "userId" INTEGER NOT NULL,
                     title VARCHAR(255) DEFAULT 'Flow Guru Chat' NOT NULL,
@@ -59,7 +59,7 @@ async function ensureTables(db: any) {
                     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL,
                     "lastMessageAt" TIMESTAMP DEFAULT NOW() NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS "conversationMessages" (
+                CREATE TABLE IF NOT EXISTS fg_messages (
                     id SERIAL PRIMARY KEY,
                     "threadId" INTEGER NOT NULL,
                     "userId" INTEGER NOT NULL,
@@ -67,7 +67,28 @@ async function ensureTables(db: any) {
                     content TEXT NOT NULL,
                     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS "providerConnections" (
+                CREATE TABLE IF NOT EXISTS fg_profiles (
+                    id SERIAL PRIMARY KEY,
+                    "userId" INTEGER NOT NULL UNIQUE,
+                    "wakeUpTime" VARCHAR(64),
+                    "dailyRoutine" TEXT,
+                    "preferencesSummary" TEXT,
+                    "recurringEventsSummary" TEXT,
+                    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+                    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS fg_facts (
+                    id SERIAL PRIMARY KEY,
+                    "userId" INTEGER NOT NULL,
+                    category TEXT NOT NULL DEFAULT 'general',
+                    "factKey" VARCHAR(128),
+                    "factValue" TEXT NOT NULL,
+                    confidence INTEGER DEFAULT 100 NOT NULL,
+                    "sourceMessageId" INTEGER,
+                    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+                    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS fg_connections (
                     id SERIAL PRIMARY KEY,
                     "userId" INTEGER NOT NULL,
                     provider TEXT NOT NULL,
@@ -85,7 +106,7 @@ async function ensureTables(db: any) {
                 );
             `;
             await db.execute((postgres as any).unsafe(sql));
-            console.log("[DB] Self-healing successful! Tables created.");
+            console.log("[DB] Self-healing successful! Prefixed tables created.");
         } catch (mErr) {
             console.error("[DB] Self-healing FAILED:", mErr);
         }

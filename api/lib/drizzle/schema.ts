@@ -1,12 +1,13 @@
-import { pgTable, serial, text, varchar, timestamp, pgEnum, integer, index, uniqueIndex, bigint } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, varchar, timestamp, pgEnum, integer, index, bigint } from "drizzle-orm/pg-core";
 
-export const roleEnum = pgEnum("role", ["user", "admin"]);
-export const memoryCategoryEnum = pgEnum("memory_category", ["wake_up_time", "daily_routine", "preference", "recurring_event", "general"]);
-export const roleMessageEnum = pgEnum("message_role", ["system", "user", "assistant"]);
-export const providerTypeEnum = pgEnum("provider_type", ["google-calendar", "spotify"]);
-export const connectionStatusEnum = pgEnum("connection_status", ["not_connected", "pending", "connected", "error"]);
+// Enums with unique names to avoid collisions in shared DB
+export const roleEnum = pgEnum("fg_role", ["user", "admin"]);
+export const memoryCategoryEnum = pgEnum("fg_memory_category", ["wake_up_time", "daily_routine", "preference", "recurring_event", "general"]);
+export const roleMessageEnum = pgEnum("fg_message_role", ["system", "user", "assistant"]);
+export const providerTypeEnum = pgEnum("fg_provider_type", ["google-calendar", "spotify"]);
+export const connectionStatusEnum = pgEnum("fg_connection_status", ["not_connected", "pending", "connected", "error"]);
 
-export const users = pgTable("users", {
+export const users = pgTable("fg_users", {
   id: serial("id").primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
@@ -18,7 +19,7 @@ export const users = pgTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
-export const userMemoryProfiles = pgTable("userMemoryProfiles", {
+export const userMemoryProfiles = pgTable("fg_profiles", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull().unique(),
   wakeUpTime: varchar("wakeUpTime", { length: 64 }),
@@ -30,7 +31,7 @@ export const userMemoryProfiles = pgTable("userMemoryProfiles", {
 });
 
 export const userMemoryFacts = pgTable(
-  "userMemoryFacts",
+  "fg_facts",
   {
     id: serial("id").primaryKey(),
     userId: integer("userId").notNull(),
@@ -43,12 +44,12 @@ export const userMemoryFacts = pgTable(
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },
   table => ({
-    userIdx: index("userMemoryFacts_user_idx").on(table.userId),
+    userIdx: index("fg_facts_user_idx").on(table.userId),
   })
 );
 
 export const conversationThreads = pgTable(
-  "conversationThreads",
+  "fg_threads",
   {
     id: serial("id").primaryKey(),
     userId: integer("userId").notNull(),
@@ -60,7 +61,7 @@ export const conversationThreads = pgTable(
 );
 
 export const conversationMessages = pgTable(
-  "conversationMessages",
+  "fg_messages",
   {
     id: serial("id").primaryKey(),
     threadId: integer("threadId").notNull(),
@@ -72,7 +73,7 @@ export const conversationMessages = pgTable(
 );
 
 export const providerConnections = pgTable(
-  "providerConnections",
+  "fg_connections",
   {
     id: serial("id").primaryKey(),
     userId: integer("userId").notNull(),
