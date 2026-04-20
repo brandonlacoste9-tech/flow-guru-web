@@ -1,4 +1,5 @@
-import type { Express, Request, Response } from "express";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { Express } from "express";
 import { ENV } from "./env.js";
 import { sdk } from "./sdk.js";
 import { getProviderConnection, upsertProviderConnection } from "../db.js";
@@ -42,23 +43,25 @@ function getProviderConfig(provider: SupportedProvider) {
   };
 }
 
-async function requireUser(req: Request, res: Response) {
+async function requireUser(req: VercelRequest, res: VercelResponse) {
   try {
     const user = await sdk.authenticateRequest(req);
     if (!user) {
-      res.status(401).json({ error: "Authentication required." });
+      res.status(401).json({ error: "Authentication required." } as any);
       return null;
     }
     return user;
   } catch {
-    res.status(401).json({ error: "Authentication required." });
+    res.status(401).json({ error: "Authentication required." } as any);
     return null;
   }
 }
 
 export function registerProviderConnectionRoutes(app: Express) {
-  app.get("/api/integrations/:provider/status", async (req, res) => {
-    const providerParam = req.params.provider;
+  app.get("/api/integrations/:provider/status", async (req: any, res: any) => {
+    const vReq = req as VercelRequest;
+    const vRes = res as VercelResponse;
+    const providerParam = (vReq.query.provider as string) || (vReq as any).params?.provider;
     if (!isSupportedProvider(providerParam)) {
       res.status(404).json({ error: "Unknown provider." });
       return;
@@ -86,14 +89,16 @@ export function registerProviderConnectionRoutes(app: Express) {
     });
   });
 
-  app.get("/api/integrations/:provider/start", async (req, res) => {
-    const providerParam = req.params.provider;
+  app.get("/api/integrations/:provider/start", async (req: any, res: any) => {
+    const vReq = req as VercelRequest;
+    const vRes = res as VercelResponse;
+    const providerParam = (vReq.query.provider as string) || (vReq as any).params?.provider;
     if (!isSupportedProvider(providerParam)) {
-      res.status(404).json({ error: "Unknown provider." });
+      vRes.status(404).json({ error: "Unknown provider." } as any);
       return;
     }
 
-    const user = await requireUser(req, res);
+    const user = await requireUser(vReq, vRes);
     if (!user) return;
 
     const config = getProviderConfig(providerParam);
@@ -105,13 +110,13 @@ export function registerProviderConnectionRoutes(app: Express) {
         status: "error",
         lastError: `${config.label} credentials have not been added yet.`,
       });
-      res.status(503).json({
+      vRes.status(503).json({
         provider: providerParam,
         configured: false,
         status: "error",
         message: `${config.label} credentials have not been added yet. Add the provider secrets to activate account linking.`,
         scopes: config.scopes,
-      });
+      } as any);
       return;
     }
 
@@ -123,7 +128,7 @@ export function registerProviderConnectionRoutes(app: Express) {
         lastError: null,
       });
 
-      const redirectUri = getGoogleCalendarCallbackUrl(req);
+      const redirectUri = getGoogleCalendarCallbackUrl(vReq as any);
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       authUrl.searchParams.set("client_id", ENV.googleClientId);
       authUrl.searchParams.set("redirect_uri", redirectUri);
@@ -133,7 +138,7 @@ export function registerProviderConnectionRoutes(app: Express) {
       authUrl.searchParams.set("prompt", "consent");
       authUrl.searchParams.set("state", buildGoogleOAuthState(user.id));
 
-      res.redirect(302, authUrl.toString());
+      vRes.redirect(authUrl.toString());
       return;
     }
 
@@ -153,21 +158,23 @@ export function registerProviderConnectionRoutes(app: Express) {
     });
   });
 
-  app.get("/api/integrations/:provider/callback", async (req, res) => {
-    const providerParam = req.params.provider;
+  app.get("/api/integrations/:provider/callback", async (req: any, res: any) => {
+    const vReq = req as VercelRequest;
+    const vRes = res as VercelResponse;
+    const providerParam = (vReq.query.provider as string) || (vReq as any).params?.provider;
     if (!isSupportedProvider(providerParam)) {
-      res.status(404).json({ error: "Unknown provider." });
+      vRes.status(404).json({ error: "Unknown provider." } as any);
       return;
     }
 
-    const user = await requireUser(req, res);
+    const user = await requireUser(vReq, vRes);
     if (!user) return;
 
     if (providerParam === "google-calendar") {
-      const code = typeof req.query.code === "string" ? req.query.code : null;
-      const state = typeof req.query.state === "string" ? req.query.state : null;
+      const code = typeof vReq.query.code === "string" ? vReq.query.code : null;
+      const state = typeof vReq.query.state === "string" ? vReq.query.state : null;
       if (!code || !state) {
-        res.status(400).json({ error: "Google callback requires code and state." });
+        vRes.status(400).json({ error: "Google callback requires code and state." } as any);
         return;
       }
 
@@ -180,10 +187,10 @@ export function registerProviderConnectionRoutes(app: Express) {
         const result = await connectGoogleCalendar({
           userId: user.id,
           code,
-          redirectUri: getGoogleCalendarCallbackUrl(req),
+          redirectUri: getGoogleCalendarCallbackUrl(vReq as any),
         });
 
-        res.redirect(302, `/?integration=google-calendar&status=connected&account=${encodeURIComponent(result.accountLabel)}`);
+        vRes.redirect(`/?integration=google-calendar&status=connected&account=${encodeURIComponent(result.accountLabel)}`);
         return;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Google Calendar connection failed.";
@@ -193,7 +200,7 @@ export function registerProviderConnectionRoutes(app: Express) {
           status: "error",
           lastError: message,
         });
-        res.redirect(302, `/?integration=google-calendar&status=error&message=${encodeURIComponent(message)}`);
+        vRes.redirect(`/?integration=google-calendar&status=error&message=${encodeURIComponent(message)}`);
         return;
       }
     }
@@ -205,11 +212,11 @@ export function registerProviderConnectionRoutes(app: Express) {
       lastError: "Provider callback received before the secure OAuth exchange was activated.",
     });
 
-    res.status(501).json({
+    vRes.status(501).json({
       provider: providerParam,
       status: "error",
       message:
         "The callback route is staged, but the secure token exchange is not active yet. Add provider credentials to complete the integration.",
-    });
+    } as any);
   });
 }

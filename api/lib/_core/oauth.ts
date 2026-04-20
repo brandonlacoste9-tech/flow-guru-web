@@ -1,21 +1,24 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const.js";
-import type { Express, Request, Response } from "express";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { Express } from "express";
 import * as db from "../db.js";
 import { getSessionCookieOptions } from "./cookies.js";
 import { sdk } from "./sdk.js";
 
-function getQueryParam(req: Request, key: string): string | undefined {
+function getQueryParam(req: VercelRequest, key: string): string | undefined {
   const value = req.query[key];
-  return typeof value === "string" ? value : undefined;
+  return typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
 }
 
 export function registerOAuthRoutes(app: Express) {
-  app.get("/api/oauth/callback", async (req: Request, res: Response) => {
-    const code = getQueryParam(req, "code");
-    const state = getQueryParam(req, "state");
+  app.get("/api/oauth/callback", async (req: any, res: any) => {
+    const vReq = req as VercelRequest;
+    const vRes = res as VercelResponse;
+    const code = getQueryParam(vReq, "code");
+    const state = getQueryParam(vReq, "state");
 
     if (!code || !state) {
-      res.status(400).json({ error: "code and state are required" });
+      vRes.status(400).json({ error: "code and state are required" } as any);
       return;
     }
 
@@ -24,7 +27,7 @@ export function registerOAuthRoutes(app: Express) {
       const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
 
       if (!userInfo.openId) {
-        res.status(400).json({ error: "openId missing from user info" });
+        vRes.status(400).json({ error: "openId missing from user info" } as any);
         return;
       }
 
@@ -41,13 +44,13 @@ export function registerOAuthRoutes(app: Express) {
         expiresInMs: ONE_YEAR_MS,
       });
 
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      const cookieOptions = getSessionCookieOptions(vReq);
+      (vRes as any).cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.redirect(302, "/");
+      vRes.redirect("/");
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
-      res.status(500).json({ error: "OAuth callback failed" });
+      vRes.status(500).json({ error: "OAuth callback failed" } as any);
     }
   });
 }

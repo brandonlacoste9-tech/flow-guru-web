@@ -1,4 +1,4 @@
-import type express from "express";
+import type { VercelRequest } from "@vercel/node";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -8,8 +8,10 @@ function isIpAddress(host: string) {
   return host.includes(":");
 }
 
-function isSecureRequest(req: express.Request) {
-  if (req.protocol === "https") return true;
+function isSecureRequest(req: VercelRequest) {
+  // Use casting if properties are missing on base VercelRequest
+  const protocol = (req as any).protocol;
+  if (protocol === "https") return true;
 
   const forwardedProto = req.headers["x-forwarded-proto"];
   if (!forwardedProto) return false;
@@ -18,11 +20,11 @@ function isSecureRequest(req: express.Request) {
     ? forwardedProto
     : forwardedProto.split(",");
 
-  return protoList.some(proto => (proto as string).trim().toLowerCase() === "https");
+  return protoList.some((proto: string) => proto.trim().toLowerCase() === "https");
 }
 
 export function getSessionCookieOptions(
-  req: express.Request
+  req: VercelRequest
 ): any {
   // const hostname = req.hostname;
   // const shouldSetDomain =
