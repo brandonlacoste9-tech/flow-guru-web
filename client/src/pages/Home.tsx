@@ -72,6 +72,7 @@ export default function Home() {
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
       setMessages(result.messages as Message[]);
+      if (result.threadId) setCurrentThreadId(result.threadId);
       if (speechEnabled && result.reply) speakText(result.reply);
     },
     onError: (err) => {
@@ -108,11 +109,20 @@ export default function Home() {
 
   const handleSend = (text: string) => {
     if (!text.trim() || sendMutation.isPending) return;
+    
+    // If starting from dashboard, trigger a new backend thread
+    const startsFresh = view === 'dashboard';
+
     setInputValue('');
     setView('chat');
+
+    if (startsFresh) {
+      setMessages([]);
+    }
+
     sendMutation.mutate({
       message: text,
-      threadId: currentThreadId,
+      threadId: startsFresh ? undefined : currentThreadId,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
     });
   };
