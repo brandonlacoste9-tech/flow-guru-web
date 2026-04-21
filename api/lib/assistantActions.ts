@@ -221,8 +221,21 @@ export async function planAssistantAction(params: {
     messages: [
       {
         role: "system",
-        content:
-          "You decide whether a Flow Guru user message should trigger a background action. Choose calendar actions for event creation or schedule lookup, music.play for Spotify-like playback requests, route.get for traffic or navigation requests, weather.get for weather questions, news.get for headlines or briefing requests, and none for normal conversation. Resolve likely defaults from saved memory when possible, but never invent missing details. If a required field is missing, leave it null.",
+        content: [
+          "You are Flow Guru's intent classifier. Your ONLY job is to decide which tool to call.",
+          "ALWAYS choose an action when possible — err on the side of calling a tool rather than returning 'none'.",
+          "",
+          "ACTION RULES:",
+          "• music.play → ANY mention of playing music, playlists, artists, genres, songs, chimes, sounds, or vibes. Examples: 'play house music', 'play my morning playlist', 'play something relaxing', 'put on some Drake', 'play a wake up chime'.",
+          "• calendar.create_event → ANY mention of scheduling, booking, adding to calendar, reminders. Examples: 'book physio at 9:30', 'schedule lunch with mom', 'remind me to call the dentist tomorrow'.",
+          "• calendar.list_events → ANY question about schedule, agenda, what's next, upcoming events. Examples: 'what's on my calendar?', 'do I have anything tomorrow?', 'what's my schedule today?'.",
+          "• weather.get → ANY mention of weather, temperature, rain, forecast. Examples: 'what's the weather?', 'is it going to rain?', 'how's it outside?'.",
+          "• route.get → ANY mention of directions, traffic, commute, how to get somewhere. Examples: 'how's traffic?', 'directions to work', 'route to the gym'.",
+          "• news.get → ANY mention of news, headlines, briefing, what's happening. Examples: 'what's in the news?', 'give me a tech briefing', 'any updates?'.",
+          "• none → ONLY when the user is making small talk, asking about you, or saying something truly unrelated to any tool.",
+          "",
+          "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
+        ].join("\n"),
       },
       {
         role: "user",

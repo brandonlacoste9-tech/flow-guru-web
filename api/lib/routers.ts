@@ -445,24 +445,67 @@ export const appRouter = router({
       let assistantReply = buildActionFallbackReply(actionResult);
 
       try {
+        const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
+
+        if (actionResult && actionResult.action !== "none") {
+          const resultJson = formatActionResultContext(actionResult);
+          if (actionResult.status === "executed") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — YOU MUST ACKNOWLEDGE THIS IN YOUR REPLY:",
+                resultJson,
+                "",
+                "INSTRUCTION: The tool ran successfully. Your reply MUST confirm what happened using the data above.",
+                "For music: say what's playing (e.g., 'Playing Drake on Spotify now 🔥').",
+                "For weather: share the actual temperature and conditions.",
+                "For calendar: confirm what was booked or list the events.",
+                "For routes: share the estimated travel time.",
+                "For news: briefly mention the top headline.",
+                "Keep it short (1-2 sentences), warm, and enthusiastic. DO NOT ignore the tool result.",
+              ].join("\n"),
+            });
+          } else if (actionResult.status === "needs_connection") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — CONNECTION NEEDED:",
+                resultJson,
+                "",
+                "The user wants to do something that requires connecting an account first.",
+                "Warmly explain they need to connect the service and offer to help set it up.",
+              ].join("\n"),
+            });
+          } else if (actionResult.status === "needs_input") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — MORE INFO NEEDED:",
+                resultJson,
+                "",
+                "The tool needs more information. Ask the user for the missing detail in a natural way.",
+              ].join("\n"),
+            });
+          } else {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — FAILED:",
+                resultJson,
+                "",
+                "The tool didn't work. Briefly acknowledge the issue and offer an alternative.",
+              ].join("\n"),
+            });
+          }
+        }
+
         const llmResponse = await invokeLLM({
           messages: [
             {
               role: "system",
               content: systemPrompt,
             },
-            ...(actionResult
-              ? [
-                  {
-                    role: "system" as const,
-                    content: [
-                      "External action result for the current turn:",
-                      formatActionResultContext(actionResult),
-                      "Incorporate this result into your warm, personal reply. Be conversational, not robotic.",
-                    ].join("\n\n"),
-                  },
-                ]
-              : []),
+            ...actionSystemMessages,
             ...history.map((m: any) => ({
               role: m.role as "user" | "assistant",
               content: m.content as string,

@@ -400,14 +400,16 @@ export const appRouter = router({
       });
 
       const systemPrompt = [
-        "You are Flow Guru, a calm and capable personal AI assistant.",
-        "Speak with quiet confidence, warmth, and concise clarity.",
-        "Use the saved memory below to personalize your responses so the assistant feels familiar with the user.",
-        "When an external action result is provided, rely on it faithfully and do not pretend an action succeeded if it did not.",
-        "Never claim to know facts that are not present in memory, the current conversation, or an action result.",
-        "Do not mention that you are reading a memory store unless the user explicitly asks.",
-        "When useful, gently reference routines, preferences, or recurring events from memory.",
-        "Keep the tone minimal, grounded, and supportive.",
+        `You are Flow Guru, ${ctx.user?.name || "Brandon"}'s savvy, warm, and highly personal AI assistant.`,
+        "Your personality is 'concise warmth' with high energy for music and routines. You feel like a person who has known the user for years.",
+        "VOICE & SPEECH: You have a high-quality human voice powered by ElevenLabs. You can generate speech and even change your voice identity if the user asks.",
+        "MUSIC: You have real Spotify powers. When you play music, be enthusiastic (e.g., 'Playing your morning playlist now 🔥').",
+        "CRITICAL RULES:",
+        "1. NEVER list your features or explain what you can do. Just be helpful.",
+        "2. Keep replies short (1-3 sentences max).",
+        "3. Use the 'Saved Memory' below to deeply personalize every reply. If you know their routine or preferences, weave them in naturally.",
+        "4. Always suggest ONE useful next step based on the context or their habits.",
+        "5. No corporate speak. No bulleted lists of capabilities.",
         "Saved memory:",
         memoryContext,
       ].join("\n\n");
@@ -438,43 +440,80 @@ export const appRouter = router({
       }
 
       let assistantReply = buildActionFallbackReply(actionResult);
-      const shouldUseDirectActionReply =
-        actionResult?.status === "executed" &&
-        (actionResult.action === "calendar.create_event" ||
-          actionResult.action === "calendar.list_events");
 
-      if (!shouldUseDirectActionReply) {
-        try {
-          const llmResponse = await invokeLLM({
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt,
-              },
-              ...(actionResult
-                ? [
-                    {
-                      role: "system" as const,
-                      content: [
-                        "External action result for the current turn:",
-                        formatActionResultContext(actionResult),
-                        "Use the result directly. If the action needs a missing connection or missing details, explain that plainly and briefly.",
-                      ].join("\n\n"),
-                    },
-                  ]
-                : []),
-              ...history.map((m: any) => ({
-                role: m.role as "user" | "assistant",
-                content: m.content as string,
-              })),
-            ],
-          });
+      try {
+        const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
 
-          assistantReply =
-            extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
-        } catch (error) {
-          console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
+        if (actionResult && actionResult.action !== "none") {
+          const resultJson = formatActionResultContext(actionResult);
+          if (actionResult.status === "executed") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — YOU MUST ACKNOWLEDGE THIS IN YOUR REPLY:",
+                resultJson,
+                "",
+                "INSTRUCTION: The tool ran successfully. Your reply MUST confirm what happened using the data above.",
+                "For music: say what's playing (e.g., 'Playing Drake on Spotify now 🔥').",
+                "For weather: share the actual temperature and conditions.",
+                "For calendar: confirm what was booked or list the events.",
+                "For routes: share the estimated travel time.",
+                "For news: briefly mention the top headline.",
+                "Keep it short (1-2 sentences), warm, and enthusiastic. DO NOT ignore the tool result.",
+              ].join("\n"),
+            });
+          } else if (actionResult.status === "needs_connection") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — CONNECTION NEEDED:",
+                resultJson,
+                "",
+                "The user wants to do something that requires connecting an account first.",
+                "Warmly explain they need to connect the service and offer to help set it up.",
+              ].join("\n"),
+            });
+          } else if (actionResult.status === "needs_input") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — MORE INFO NEEDED:",
+                resultJson,
+                "",
+                "The tool needs more information. Ask the user for the missing detail in a natural way.",
+              ].join("\n"),
+            });
+          } else {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — FAILED:",
+                resultJson,
+                "",
+                "The tool didn't work. Briefly acknowledge the issue and offer an alternative.",
+              ].join("\n"),
+            });
+          }
         }
+
+        const llmResponse = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt,
+            },
+            ...actionSystemMessages,
+            ...history.map((m: any) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content as string,
+            })),
+          ],
+        });
+
+        assistantReply =
+          extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+      } catch (error) {
+        console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
       }
 
       await createConversationMessage({
