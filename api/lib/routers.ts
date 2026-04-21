@@ -338,12 +338,101 @@ export const appRouter = router({
       const messages = safeThread ? await listConversationMessages(safeThread.id) : [];
       const providerConnections = await listProviderConnections(userId);
 
+      // Find user's assistant name
+      const assistantNameFact = memoryFacts.find(
+        f => f.factKey === "assistant_name" && f.category === "preference"
+      );
+      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+
+      // Find user's location from memory
+      const locationFact = memoryFacts.find(
+        f => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
+      );
+      const userLocation = locationFact?.factValue || null;
+
+      // Fetch weather + calendar in parallel (non-blocking)
+      type WeatherSnapshot = { tempC: number; feelsLikeC: number; label: string; locationName: string };
+      type CalendarItem = { title: string; start: string | null; allDay: boolean };
+      let weather: WeatherSnapshot | null = null;
+      let todayEvents: CalendarItem[] = [];
+
+      const weatherPromise = (async (): Promise<WeatherSnapshot | null> => {
+        if (!userLocation) return null;
+        try {
+          const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(userLocation)}&count=1`;
+          const geoResp = await fetch(geoUrl);
+          if (!geoResp.ok) return null;
+          const geoData = await geoResp.json();
+          const geo = geoData.results?.[0];
+          if (!geo) return null;
+
+          const wxUrl = new URL("https://api.open-meteo.com/v1/forecast");
+          wxUrl.searchParams.set("latitude", String(geo.latitude));
+          wxUrl.searchParams.set("longitude", String(geo.longitude));
+          wxUrl.searchParams.set("current", "temperature_2m,apparent_temperature,weather_code");
+          wxUrl.searchParams.set("timezone", "auto");
+          const wxResp = await fetch(wxUrl.toString());
+          if (!wxResp.ok) return null;
+          const wxData = await wxResp.json();
+          const c = wxData.current;
+          if (!c || c.temperature_2m == null) return null;
+
+          const code = c.weather_code ?? 99;
+          let label = "unsettled weather";
+          if (code <= 1) label = "clear skies";
+          else if (code <= 3) label = "partly cloudy";
+          else if (code <= 48) label = "foggy";
+          else if (code <= 57) label = "drizzle";
+          else if (code <= 65) label = "rainy";
+          else if (code <= 77) label = "snowy";
+          else if (code <= 86) label = "snow showers";
+          else if (code <= 99) label = "thunderstorms";
+
+          return {
+            tempC: Math.round(c.temperature_2m),
+            feelsLikeC: Math.round(c.apparent_temperature ?? c.temperature_2m),
+            label,
+            locationName: geo.name || userLocation,
+          };
+        } catch { return null; }
+      })();
+
+      const calendarPromise = (async (): Promise<CalendarItem[]> => {
+        try {
+          const { listGoogleCalendarEvents } = await import("./_core/googleCalendar.js");
+          const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
+          if (!conn) return [];
+
+          const now = new Date();
+          const endOfDay = new Date(now);
+          endOfDay.setHours(23, 59, 59, 999);
+
+          const result = await listGoogleCalendarEvents({
+            userId,
+            timeMinIso: now.toISOString(),
+            timeMaxIso: endOfDay.toISOString(),
+            maxResults: 5,
+          });
+
+          return (result?.items ?? []).map((e: any) => ({
+            title: e.summary || "Untitled event",
+            start: e.start?.dateTime || e.start?.date || null,
+            allDay: !e.start?.dateTime,
+          }));
+        } catch { return []; }
+      })();
+
+      [weather, todayEvents] = await Promise.all([weatherPromise, calendarPromise]);
+
       return {
         profile,
         memoryFacts,
         thread: safeThread,
         messages,
         providerConnections,
+        assistantName,
+        weather,
+        todayEvents,
       };
     }),
     startFresh: publicProcedure.mutation(async ({ ctx }) => {
