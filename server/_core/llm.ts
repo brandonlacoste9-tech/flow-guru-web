@@ -342,8 +342,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       const errorText = await response.text();
       console.warn(`[Flow Guru] Provider ${provider.name} failed (${response.status}):`, errorText);
       
-      // If it's an auth error or bad request and we have more providers, continue to next
-      if ((response.status === 401 || response.status === 400) && providers.indexOf(provider) < providers.length - 1) {
+      // If it's an auth error, bad request, or rate limit, and we have more providers, continue to next
+      if ((response.status === 401 || response.status === 400 || response.status === 429) && providers.indexOf(provider) < providers.length - 1) {
         console.log(`[Flow Guru] ${provider.name} failed with ${response.status}, trying next provider...`);
         continue;
       }
