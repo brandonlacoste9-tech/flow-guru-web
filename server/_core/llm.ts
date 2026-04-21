@@ -211,7 +211,7 @@ const normalizeToolChoice = (
 
 const resolveApiUrl = () => {
   if (ENV.deepSeekApiKey) return "https://api.deepseek.com/v1/chat/completions";
-  if (ENV.moonshotApiKey) return "https://api.moonshot.cn/v1/chat/completions";
+  if (ENV.moonshotApiKey) return "https://api.moonshot.ai/v1/chat/completions";
   return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
@@ -289,7 +289,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   // Define providers in order of priority (Moonshot first as requested)
   const providers = [];
-  if (hasMoonshot) providers.push({ name: "moonshot", model: "moonshot-v1-8k", key: ENV.moonshotApiKey, url: "https://api.moonshot.cn/v1/chat/completions" });
+  if (hasMoonshot) providers.push({ name: "moonshot", model: "moonshot-v1-8k", key: ENV.moonshotApiKey, url: "https://api.moonshot.ai/v1/chat/completions" });
   if (hasDeepSeek) providers.push({ name: "deepseek", model: "deepseek-chat", key: ENV.deepSeekApiKey, url: "https://api.deepseek.com/v1/chat/completions" });
   if (hasForge) providers.push({ name: "forge", model: "gemini-1.5-flash", key: ENV.forgeApiKey, url: ENV.forgeApiUrl || "https://forge.manus.im/v1/chat/completions" });
 
@@ -319,7 +319,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       });
 
       if (normalizedResponseFormat) {
-        payload.response_format = normalizedResponseFormat;
+        if (provider.name === "deepseek" && normalizedResponseFormat.type === "json_schema") {
+          payload.response_format = { type: "json_object" };
+        } else {
+          payload.response_format = normalizedResponseFormat;
+        }
       }
 
       const response = await fetch(provider.url, {
@@ -338,9 +342,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       const errorText = await response.text();
       console.warn(`[Flow Guru] Provider ${provider.name} failed (${response.status}):`, errorText);
       
-      // If it's an auth error and we have more providers, continue to next
-      if (response.status === 401 && providers.indexOf(provider) < providers.length - 1) {
-        console.log(`[Flow Guru] Auth failed for ${provider.name}, trying next provider...`);
+      // If it's an auth error or bad request and we have more providers, continue to next
+      if ((response.status === 401 || response.status === 400) && providers.indexOf(provider) < providers.length - 1) {
+        console.log(`[Flow Guru] ${provider.name} failed with ${response.status}, trying next provider...`);
         continue;
       }
 
