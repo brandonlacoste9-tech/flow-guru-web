@@ -512,7 +512,6 @@ export const appRouter = router({
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
 
-      // Save user message first
       await createConversationMessage({
         threadId,
         userId,
@@ -520,12 +519,197 @@ export const appRouter = router({
         content: input.message,
       });
 
-      // Load memory
       const profile = await getUserMemoryProfile(userId);
       const memoryFacts = await listUserMemoryFacts(userId);
       const history = await listConversationMessages(threadId);
 
-      // ── Feature A: Detect assistant name change ──────────────────────────────
-      const newAssistantName = detectAssistantNameChange(input.message);
-      if (newAssistantName) {
-        await c
+      // --- Name change detection (fast path, before planner) ---
+      const nameChangeMatch = input.message.match(
+        /(?:call\s+(?:you|yourself)|your\s+name\s+is|rename\s+(?:you|yourself)\s+(?:to)?|I(?:'ll| will)\s+call\s+you)\s+["']?([A-Za-z][A-Za-z0-9 ]{0,29})["']?/i
+      );
+      if (nameChangeMatch) {
+        const newName = nameChangeMatch[1].trim();
+        await createUserMemoryFacts(userId, [
+          { category: "preference", factKey: "assistant_name", factValue: newName, confidence: 100 },
+        ]);
+        const reply = `Got it! From now on I'm ${newName} 😊`;
+        await createConversationMessage({ threadId, userId, role: "assistant", content: reply });
+        await touchConversationThread(threadId);
+        const messages = await listConversationMessages(threadId);
+        return {
+          threadId,
+          reply,
+          messages,
+          memoryUpdate: { profileUpdated: false, factsAdded: 1 },
+          actionResult: null,
+        };
+      }
+
+      // --- Resolve custom assistant name from memory ---
+      const assistantNameFact = memoryFacts.find(
+        f => f.factKey === "assistant_name" && f.category === "preference"
+      );
+      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const userName = ctx.user?.name || "Brandon";
+
+      const memoryContext = buildMemoryContext({
+        userName,
+        profile,
+        facts: memoryFacts,
+      });
+
+      const systemPrompt = [
+        `You are ${assistantName}, ${userName}'s savvy, warm, and highly personal AI assistant.`,
+        "You feel like a close friend who has known the user for years. You are proactive, not reactive.",
+        "CAPABILITIES (use them, don't list them): ElevenLabs audio (music, chimes, ambient sounds, voice), Google Calendar, weather, directions, news briefings, reminders.",
+        "PERSONALITY RULES:",
+        "1. NEVER list features, NEVER say 'I can help with X, Y, Z'. Just DO the thing.",
+        "2. Keep replies to 1-2 sentences max. Be warm, not wordy.",
+        "3. Use saved memory to personalize EVERY reply — reference their routines, preferences, and habits naturally.",
+        "4. After completing an action, suggest ONE natural follow-up based on what you know about them.",
+        "5. If the user mentions music, play it. If they mention a time, book it. If they ask about weather, check it. Act first, confirm briefly.",
+        "6. Sound like a real person: use emoji sparingly, contractions naturally, and match the user's energy.",
+        "Saved memory:",
+        memoryContext,
+      ].join("\n\n");
+
+      let actionResult: AssistantActionResult | null = null;
+
+      try {
+        const plannedAction = await planAssistantAction({
+          userName,
+          memoryContext,
+          message: input.message,
+        });
+        actionResult = await executeAssistantAction(plannedAction, {
+          userId,
+          userName,
+          message: input.message,
+          memoryContext,
+          timeZone: input.timeZone ?? null,
+        });
+      } catch (error) {
+        console.warn("[Flow Guru] Action planning or execution failed. Continuing with standard chat.", error);
+        actionResult = {
+          action: "none",
+          status: "failed",
+          title: "Action unavailable",
+          summary: "I hit a snag while trying to carry that out, so I'll respond conversationally instead.",
+        };
+      }
+
+      let assistantReply = buildActionFallbackReply(actionResult);
+
+      try {
+        const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
+
+        if (actionResult && actionResult.action !== "none") {
+          const resultJson = formatActionResultContext(actionResult);
+          if (actionResult.status === "executed") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — YOU MUST ACKNOWLEDGE THIS IN YOUR REPLY:",
+                resultJson,
+                "",
+                "INSTRUCTION: The tool ran successfully. Your reply MUST confirm what happened using the data above.",
+                "For music: say what's playing (e.g., 'Playing house music for you now 🔥').",
+                "For weather: share the actual temperature and conditions.",
+                "For calendar: confirm what was booked or list the events.",
+                "For routes: share the estimated travel time.",
+                "For news: briefly mention the top headline.",
+                "Keep it short (1-2 sentences), warm, and enthusiastic. DO NOT ignore the tool result.",
+              ].join("\n"),
+            });
+          } else if (actionResult.status === "needs_connection") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — CONNECTION NEEDED:",
+                resultJson,
+                "",
+                "The user wants to do something that requires connecting an account first.",
+                "Warmly explain they need to connect the service and offer to help set it up.",
+              ].join("\n"),
+            });
+          } else if (actionResult.status === "needs_input") {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — MORE INFO NEEDED:",
+                resultJson,
+                "",
+                "The tool needs more information. Ask the user for the missing detail in a natural way.",
+              ].join("\n"),
+            });
+          } else {
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: [
+                "TOOL RESULT — FAILED:",
+                resultJson,
+                "",
+                "The tool didn't work. Briefly acknowledge the issue and offer an alternative.",
+              ].join("\n"),
+            });
+          }
+        }
+
+        const llmResponse = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt,
+            },
+            ...actionSystemMessages,
+            ...history.map((m: any) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content as string,
+            })),
+          ],
+        });
+
+        assistantReply =
+          extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+      } catch (error) {
+        console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
+      }
+
+      await createConversationMessage({
+        threadId,
+        userId,
+        role: "assistant",
+        content: assistantReply,
+      });
+      await touchConversationThread(threadId);
+
+      let memoryUpdate = {
+        profileUpdated: false,
+        factsAdded: 0,
+      };
+
+      try {
+        memoryUpdate = await extractAndPersistMemory({
+          userId,
+          userName,
+          userMessage: input.message,
+          assistantReply,
+        });
+      } catch (error) {
+        console.warn("[Flow Guru] Memory extraction failed, but the message send completed.", error);
+      }
+
+      const messages = await listConversationMessages(threadId);
+
+      return {
+        threadId,
+        reply: assistantReply,
+        messages,
+        memoryUpdate,
+        actionResult,
+      };
+    }),
+  }),
+});
+
+export type AppRouter = typeof appRouter;

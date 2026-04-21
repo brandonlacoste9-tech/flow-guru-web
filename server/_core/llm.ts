@@ -350,11 +350,22 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    // Fallback if the real API fails
+    console.warn(`[Flow Guru] LLM API failed (${response.status}):`, errorText);
     return {
       id: "error-fallback-" + Date.now(),
       created: Math.floor(Date.now() / 1000),
       model: "error-fallback",
       choices: [{
         index: 0,
-    
+        message: {
+          role: "assistant",
+          content: "I hit a temporary snag with my AI backend. Give me a moment and try again!",
+        },
+        finish_reason: "stop",
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+  }
+
+  return (await response.json()) as InvokeResult;
+}
