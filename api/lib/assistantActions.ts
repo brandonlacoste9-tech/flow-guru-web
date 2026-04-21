@@ -15,6 +15,7 @@ const ACTION_NAMES = [
   "route.get",
   "weather.get",
   "news.get",
+  "reminder.set",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -58,6 +59,13 @@ const plannerSchema = z.object({
     .object({
       query: z.string().nullable(),
       targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+    })
+    .nullable(),
+  reminder: z
+    .object({
+      label: z.string().nullable(),
+      when: z.string().nullable(),
+      recurring: z.boolean().nullable(),
     })
     .nullable(),
 });
@@ -232,6 +240,7 @@ export async function planAssistantAction(params: {
           "• weather.get → ANY mention of weather, temperature, rain, forecast. Examples: 'what's the weather?', 'is it going to rain?', 'how's it outside?'.",
           "• route.get → ANY mention of directions, traffic, commute, how to get somewhere. Examples: 'how's traffic?', 'directions to work', 'route to the gym'.",
           "• news.get → ANY mention of news, headlines, briefing, what's happening. Examples: 'what's in the news?', 'give me a tech briefing', 'any updates?'.",
+          "• reminder.set → ANY mention of reminders, alerts, 'remind me', 'don't let me forget'. Examples: 'remind me to take meds at 9', 'set a reminder for laundry', 'remind me every Monday to meal prep'.",
           "• none → ONLY when the user is making small talk, asking about you, or saying something truly unrelated to any tool.",
           "",
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
@@ -315,8 +324,18 @@ export async function planAssistantAction(params: {
               required: ["query", "targetType"],
               additionalProperties: false,
             },
+            reminder: {
+              type: ["object", "null"],
+              properties: {
+                label: { type: ["string", "null"] },
+                when: { type: ["string", "null"] },
+                recurring: { type: ["boolean", "null"] },
+              },
+              required: ["label", "when", "recurring"],
+              additionalProperties: false,
+            },
           },
-          required: ["action", "rationale", "route", "weather", "news", "calendar", "music"],
+          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "reminder"],
           additionalProperties: false,
         },
       },
@@ -862,6 +881,50 @@ export async function executeAssistantAction(
           );
         }
         return await executeMusicAction(plan, { userId: options.userId });
+      case "reminder.set": {
+        const label = plan.reminder?.label || "Reminder";
+        const when = plan.reminder?.when;
+        if (!options?.userId || !options.message) {
+          return {
+            action: "reminder.set",
+            status: "needs_input",
+            title: "Reminder details needed",
+            summary: "What should I remind you about, and when?",
+          };
+        }
+        // Use calendar.create_event under the hood — reminders become calendar events
+        const reminderPlan = {
+          ...plan,
+          action: "calendar.create_event" as const,
+          calendar: {
+            title: `Reminder: ${label}`,
+            startDescription: when || "soon",
+            endDescription: null,
+          },
+        };
+        try {
+          const calResult = await executeCalendarCreateAction(reminderPlan, {
+            userId: options.userId,
+            userName: options.userName,
+            message: options.message,
+            memoryContext: options.memoryContext,
+            timeZone: options.timeZone,
+          });
+          return {
+            ...calResult,
+            action: "reminder.set",
+            title: `Reminder set: ${label}`,
+          };
+        } catch {
+          return {
+            action: "reminder.set",
+            status: "executed",
+            title: `Reminder noted: ${label}`,
+            summary: `I'll remind you: "${label}"${when ? ` at ${when}` : ""}.`,
+            provider: "flow-guru",
+          };
+        }
+      }
       default:
         return null;
     }

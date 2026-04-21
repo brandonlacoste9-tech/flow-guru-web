@@ -396,23 +396,53 @@ export const appRouter = router({
       const profile = await getUserMemoryProfile(userId);
       const memoryFacts = await listUserMemoryFacts(userId);
       const history = await listConversationMessages(threadId);
+
+      // --- Name change detection (fast path, before planner) ---
+      const nameChangeMatch = input.message.match(
+        /(?:call\s+(?:you|yourself)|your\s+name\s+is|rename\s+(?:you|yourself)\s+(?:to)?|I(?:'ll| will)\s+call\s+you)\s+["']?([A-Za-z][A-Za-z0-9 ]{0,29})["']?/i
+      );
+      if (nameChangeMatch) {
+        const newName = nameChangeMatch[1].trim();
+        await createUserMemoryFacts(userId, [
+          { category: "preference", factKey: "assistant_name", factValue: newName, confidence: 100 },
+        ]);
+        const reply = `Got it! From now on I'm ${newName} 😊`;
+        await createConversationMessage({ threadId, userId, role: "assistant", content: reply });
+        await touchConversationThread(threadId);
+        const messages = await listConversationMessages(threadId);
+        return {
+          threadId,
+          reply,
+          messages,
+          memoryUpdate: { profileUpdated: false, factsAdded: 1 },
+          actionResult: null,
+        };
+      }
+
+      // --- Resolve custom assistant name from memory ---
+      const assistantNameFact = memoryFacts.find(
+        f => f.factKey === "assistant_name" && f.category === "preference"
+      );
+      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const userName = ctx.user?.name || "Brandon";
+
       const memoryContext = buildMemoryContext({
-        userName: ctx.user?.name || "Brandon",
+        userName,
         profile,
         facts: memoryFacts,
       });
 
       const systemPrompt = [
-        `You are Flow Guru, ${ctx.user?.name || "Brandon"}'s savvy, warm, and highly personal AI assistant.`,
-        "Your personality is 'concise warmth' with high energy for music and routines. You feel like a person who has known the user for years.",
-        "VOICE & SPEECH: You have a high-quality human voice powered by ElevenLabs. You can generate speech and even change your voice identity if the user asks.",
-        "MUSIC: You have real Spotify powers. When you play music, be enthusiastic (e.g., 'Playing your morning playlist now 🔥').",
-        "CRITICAL RULES:",
-        "1. NEVER list your features or explain what you can do. Just be helpful.",
-        "2. Keep replies short (1-3 sentences max).",
-        "3. Use the 'Saved Memory' below to deeply personalize every reply. If you know their routine or preferences, weave them in naturally.",
-        "4. Always suggest ONE useful next step based on the context or their habits.",
-        "5. No corporate speak. No bulleted lists of capabilities.",
+        `You are ${assistantName}, ${userName}'s savvy, warm, and highly personal AI assistant.`,
+        "You feel like a close friend who has known the user for years. You are proactive, not reactive.",
+        "CAPABILITIES (use them, don't list them): Spotify music playback, Google Calendar, weather, directions, news briefings, ElevenLabs voice.",
+        "PERSONALITY RULES:",
+        "1. NEVER list features, NEVER say 'I can help with X, Y, Z'. Just DO the thing.",
+        "2. Keep replies to 1-2 sentences max. Be warm, not wordy.",
+        "3. Use saved memory to personalize EVERY reply — reference their routines, preferences, and habits naturally.",
+        "4. After completing an action, suggest ONE natural follow-up based on what you know about them.",
+        "5. If the user mentions music, play it. If they mention a time, book it. If they ask about weather, check it. Act first, confirm briefly.",
+        "6. Sound like a real person: use emoji sparingly, contractions naturally, and match the user's energy.",
         "Saved memory:",
         memoryContext,
       ].join("\n\n");
@@ -421,13 +451,13 @@ export const appRouter = router({
 
       try {
         const plannedAction = await planAssistantAction({
-          userName: ctx.user?.name || "Brandon",
+          userName,
           memoryContext,
           message: input.message,
         });
         actionResult = await executeAssistantAction(plannedAction, {
           userId,
-          userName: ctx.user?.name || "Brandon",
+          userName,
           message: input.message,
           memoryContext,
           timeZone: input.timeZone ?? null,
@@ -535,7 +565,7 @@ export const appRouter = router({
       try {
         memoryUpdate = await extractAndPersistMemory({
           userId,
-          userName: ctx.user?.name || "Brandon",
+          userName,
           userMessage: input.message,
           assistantReply,
         });
