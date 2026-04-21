@@ -741,22 +741,53 @@ async function executeCalendarCreateAction(
   };
 }
 
-async function executeMusicAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
+async function executeMusicAction(
+  plan: AssistantActionPlan,
+  options: { userId: number }
+): Promise<AssistantActionResult> {
   const query = plan.music?.query || "some good music";
   const targetType = plan.music?.targetType || "track";
 
-  return {
-    action: "music.play",
-    status: "executed",
-    title: `Playing ${targetType}`,
-    summary: `I've started playing ${query} for you on Spotify.`,
-    provider: "spotify",
-    data: {
+  try {
+    const { searchAndPlaySpotify } = await import("./_core/spotify.js");
+    const result = await searchAndPlaySpotify({
+      userId: options.userId,
       query,
-      targetType,
-      externalUrl: `https://open.spotify.com/search/${encodeURIComponent(query)}`,
-    },
-  };
+      type: (targetType as string) || "track",
+    });
+
+    if (result.status === "no_device") {
+      return {
+        action: "music.play",
+        status: "needs_input",
+        title: "Spotify Device Needed",
+        summary: result.message || "I found the music, but I couldn't find an active Spotify device to play it on.",
+        provider: "spotify",
+      };
+    }
+
+    const item = result.item;
+    return {
+      action: "music.play",
+      status: "executed",
+      title: `Playing: ${item.name}`,
+      summary: `I've started ${item.name} by ${item.artists?.[0]?.name || "the artist"} on Spotify for you.`,
+      provider: "spotify",
+      data: {
+        item,
+        externalUrl: item.external_urls?.spotify,
+      },
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Spotify failed.";
+    return {
+      action: "music.play",
+      status: "failed",
+      title: "Spotify snag",
+      summary: msg,
+      provider: "spotify",
+    };
+  }
 }
 
 export async function executeAssistantAction(
@@ -810,7 +841,14 @@ export async function executeAssistantAction(
           timeZone: options.timeZone,
         });
       case "music.play":
-        return await executeMusicAction(plan);
+        if (!options?.userId) {
+          return connectionRequiredResult(
+            plan.action,
+            "spotify",
+            "I need you to be logged in before I can play music on your Spotify account.",
+          );
+        }
+        return await executeMusicAction(plan, { userId: options.userId });
       default:
         return null;
     }
