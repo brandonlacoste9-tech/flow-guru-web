@@ -313,8 +313,11 @@ async function extractAndPersistMemory(params: {
   };
 }
 
+import { voiceRouter } from "./_core/voiceRouter.js";
+
 export const appRouter = router({
   system: systemRouter,
+  voice: voiceRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

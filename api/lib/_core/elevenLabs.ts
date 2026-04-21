@@ -96,3 +96,29 @@ export async function speechToSpeech(options: SpeechToSpeechOptions): Promise<Bu
 
   return Buffer.from(await response.arrayBuffer());
 }
+
+/**
+ * Get a list of available voices from ElevenLabs
+ */
+export async function getVoices(): Promise<any[]> {
+  const apiKey = ENV.elevenLabsApiKey;
+  if (!apiKey) {
+    throw new Error("ElevenLabs API key is not configured.");
+  }
+
+  const url = "https://api.elevenlabs.io/v1/voices";
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "xi-api-key": apiKey,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`ElevenLabs Get Voices failed: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.voices;
+}
