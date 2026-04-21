@@ -120,11 +120,6 @@ async function getOrCreateThreadId(userId: number, requestedThreadId?: number) {
     }
   }
 
-  const existingThread = await findLatestConversationThread(userId);
-  if (existingThread && existingThread.userId === userId) {
-    return existingThread.id;
-  }
-
   const threadId = await createConversationThread({
     userId,
     title: "Flow Guru Chat",
