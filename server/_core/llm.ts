@@ -30,6 +30,7 @@ export type Message = {
   content: MessageContent | MessageContent[];
   name?: string;
   tool_call_id?: string;
+  tool_calls?: ToolCall[];
 };
 
 export type Tool = {
@@ -137,7 +138,7 @@ const normalizeContentPart = (
 };
 
 const normalizeMessage = (message: Message) => {
-  const { role, name, tool_call_id } = message;
+  const { role, name, tool_call_id, tool_calls } = message;
 
   if (role === "tool" || role === "function") {
     const content = ensureArray(message.content)
@@ -156,18 +157,22 @@ const normalizeMessage = (message: Message) => {
 
   // If there's only text content, collapse to a single string for compatibility
   if (contentParts.length === 1 && contentParts[0].type === "text") {
-    return {
+    const result: Record<string, unknown> = {
       role,
       name,
       content: contentParts[0].text,
     };
+    if (tool_calls && tool_calls.length > 0) result.tool_calls = tool_calls;
+    return result;
   }
 
-  return {
+  const result: Record<string, unknown> = {
     role,
     name,
     content: contentParts,
   };
+  if (tool_calls && tool_calls.length > 0) result.tool_calls = tool_calls;
+  return result;
 };
 
 const normalizeToolChoice = (
@@ -210,16 +215,15 @@ const normalizeToolChoice = (
 };
 
 const resolveApiUrl = () => {
-  if (ENV.deepSeekApiKey) return "https://api.deepseek.com/v1/chat/completions";
-  if (ENV.moonshotApiKey) return "https://api.moonshot.ai/v1/chat/completions";
+  if (process.env.DEEPSEEK_API_KEY) return "https://api.deepseek.com/v1/chat/completions";
   return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
 };
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey && !ENV.deepSeekApiKey && !ENV.moonshotApiKey) {
-    throw new Error("API Key is not configured. Please set DEEPSEEK_API_KEY, MOONSHOT_API_KEY, or BUILT_IN_FORGE_API_KEY.");
+  if (!ENV.forgeApiKey && !process.env.DEEPSEEK_API_KEY) {
+    throw new Error("API Key is not configured. Please set BUILT_IN_FORGE_API_KEY or DEEPSEEK_API_KEY.");
   }
 };
 
@@ -269,12 +273,27 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  const hasDeepSeek = ENV.deepSeekApiKey && ENV.deepSeekApiKey.trim().length > 0;
-  const hasMoonshot = ENV.moonshotApiKey && ENV.moonshotApiKey.trim().length > 0;
+  const hasDeepSeek = process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY.trim().length > 0;
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   // --- Creative Mock Fallback ---
-  // Simulation Mode Removed as requested. proceeding to real API calls.
+  if (!hasDeepSeek && !hasForge) {
+    console.warn("[Flow Guru] Operating in Simulation Mode (No API keys found)");
+    return {
+      id: "mock-" + Date.now(),
+      created: Math.floor(Date.now() / 1000),
+      model: "mock-guru-1.0",
+      choices: [{
+        index: 0,
+        message: {
+          role: "assistant",
+          content: "I'm awake! I'm currently running in **Simulation Mode** because my DeepSeek API key hasn't been added to Vercel yet. Once you add it, I'll be able to use my full intelligence to help you with your routines!",
+        },
+        finish_reason: "stop",
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+  }
 
   const {
     messages,
@@ -287,99 +306,55 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  // Define providers in order of priority (Moonshot first as requested)
-  const providers = [];
-  if (hasMoonshot) providers.push({ name: "moonshot", model: "moonshot-v1-8k", key: ENV.moonshotApiKey, url: "https://api.moonshot.ai/v1/chat/completions" });
-  if (hasDeepSeek) providers.push({ name: "deepseek", model: "deepseek-chat", key: ENV.deepSeekApiKey, url: "https://api.deepseek.com/v1/chat/completions" });
-  if (hasForge) providers.push({ name: "forge", model: "gemini-1.5-flash", key: ENV.forgeApiKey, url: ENV.forgeApiUrl || "https://forge.manus.im/v1/chat/completions" });
+  const payload: Record<string, unknown> = {
+    model: hasDeepSeek ? "deepseek-chat" : "gemini-1.5-flash",
+    messages: messages.map(normalizeMessage),
+  };
 
-  let lastError: any = null;
-
-  for (const provider of providers) {
-    try {
-      const payload: Record<string, unknown> = {
-        model: provider.model,
-        messages: messages.map(normalizeMessage),
-      };
-
-      if (tools && tools.length > 0) {
-        payload.tools = tools;
-      }
-
-      const normalizedToolChoice = normalizeToolChoice(toolChoice || tool_choice, tools);
-      if (normalizedToolChoice) {
-        payload.tool_choice = normalizedToolChoice;
-      }
-
-      const normalizedResponseFormat = normalizeResponseFormat({
-        responseFormat,
-        response_format,
-        outputSchema,
-        output_schema,
-      });
-
-      if (normalizedResponseFormat) {
-        if (provider.name === "deepseek" && normalizedResponseFormat.type === "json_schema") {
-          payload.response_format = { type: "json_object" };
-        } else {
-          payload.response_format = normalizedResponseFormat;
-        }
-      }
-
-      const response = await fetch(provider.url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${provider.key}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        return (await response.json()) as InvokeResult;
-      }
-
-      const errorText = await response.text();
-      console.warn(`[Flow Guru] Provider ${provider.name} failed (${response.status}):`, errorText);
-      
-      // If it's an auth error, bad request, or rate limit, and we have more providers, continue to next
-      if ((response.status === 401 || response.status === 400 || response.status === 429) && providers.indexOf(provider) < providers.length - 1) {
-        console.log(`[Flow Guru] ${provider.name} failed with ${response.status}, trying next provider...`);
-        continue;
-      }
-
-      // If not auth error or no more providers, return the error
-      return {
-        id: "error-fallback-" + Date.now(),
-        created: Math.floor(Date.now() / 1000),
-        model: "error-fallback",
-        choices: [{
-          index: 0,
-          message: {
-            role: "assistant",
-            content: `I hit a snag connecting to my brain using ${provider.name} (HTTP ${response.status})! Details: ${errorText.slice(0, 100)}...`,
-          },
-          finish_reason: "error",
-        }],
-      };
-    } catch (err) {
-      console.error(`[Flow Guru] Critical error with provider ${provider.name}:`, err);
-      lastError = err;
-    }
+  if (tools && tools.length > 0) {
+    payload.tools = tools;
   }
 
-  // If we get here, all providers failed
-  return {
-    id: "error-fallback-" + Date.now(),
-    created: Math.floor(Date.now() / 1000),
-    model: "error-fallback",
-    choices: [{
-      index: 0,
-      message: {
-        role: "assistant",
-        content: `I couldn't reach any of my thinking services. Please check your internet connection or API keys.`,
-      },
-      finish_reason: "error",
-    }],
-  };
-}
+  const normalizedToolChoice = normalizeToolChoice(
+    toolChoice || tool_choice,
+    tools
+  );
+  if (normalizedToolChoice) {
+    payload.tool_choice = normalizedToolChoice;
+  }
+
+  // Optimize for DeepSeek if present
+  if (hasDeepSeek) {
+    payload.max_tokens = 4096;
+  }
+
+  const normalizedResponseFormat = normalizeResponseFormat({
+    responseFormat,
+    response_format,
+    outputSchema,
+    output_schema,
+  });
+
+  if (normalizedResponseFormat) {
+    payload.response_format = normalizedResponseFormat;
+  }
+
+  const response = await fetch(resolveApiUrl(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${process.env.DEEPSEEK_API_KEY || ENV.forgeApiKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    // Fallback if the real API fails
+    return {
+      id: "error-fallback-" + Date.now(),
+      created: Math.floor(Date.now() / 1000),
+      model: "error-fallback",
+      choices: [{
+        index: 0,
+    

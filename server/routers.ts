@@ -1,7 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM, type Tool, type ToolCall } from "./_core/llm";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -60,6 +60,133 @@ const extractionSchema = z.object({
 });
 
 type ExtractionResult = z.infer<typeof extractionSchema>;
+
+// ─── Tool definitions ─────────────────────────────────────────────────────────
+
+const ASSISTANT_TOOLS: Tool[] = [
+  {
+    type: "function",
+    function: {
+      name: "playMusic",
+      description: "Play music for the user based on genre, mood, or playlist name",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Genre, mood, or playlist name (e.g. 'house music', 'morning playlist', 'lo-fi')",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "createCalendarEvent",
+      description: "Create a calendar event or reminder for the user",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          time: { type: "string", description: "ISO 8601 or natural language like 'tomorrow 9am'" },
+          description: { type: "string" },
+        },
+        required: ["title", "time"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getWeather",
+      description: "Get current weather for the user's saved location",
+      parameters: {
+        type: "object",
+        properties: {
+          location: {
+            type: "string",
+            description: "City or location, use user's saved location if available",
+          },
+        },
+        required: ["location"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "setReminder",
+      description: "Set a one-time or recurring reminder for the user",
+      parameters: {
+        type: "object",
+        properties: {
+          message: { type: "string" },
+          time: { type: "string" },
+          recurring: { type: "boolean", description: "Whether this repeats daily" },
+        },
+        required: ["message", "time"],
+      },
+    },
+  },
+];
+
+// ─── Tool stub handler ────────────────────────────────────────────────────────
+
+function executeToolStub(toolName: string, args: Record<string, unknown>): string {
+  switch (toolName) {
+    case "playMusic":
+      return `🎵 Playing ${args.query} now!`;
+    case "createCalendarEvent":
+      return `📅 Event '${args.title}' scheduled for ${args.time}!`;
+    case "getWeather":
+      return `🌤 Fetching weather for ${args.location}...`;
+    case "setReminder":
+      return `⏰ Reminder set: '${args.message}' at ${args.time}`;
+    default:
+      return "Tool executed successfully.";
+  }
+}
+
+// ─── Assistant name helpers ───────────────────────────────────────────────────
+
+/**
+ * Detects patterns like "call you X", "your name is X", "rename yourself X".
+ * Returns the new name string, or null if no match.
+ */
+function detectAssistantNameChange(message: string): string | null {
+  const lower = message.toLowerCase().trim();
+
+  const patterns = [
+    /(?:call\s+you|your\s+name\s+(?:is|should\s+be)|rename\s+yourself?|you\s+are\s+now\s+called?|go\s+by)\s+([A-Za-z][A-Za-z0-9 _-]{0,39})/i,
+  ];
+
+  for (const re of patterns) {
+    const match = re.exec(lower);
+    if (match) {
+      // Capitalise the first letter of each word
+      return match[1]
+        .trim()
+        .split(/\s+/)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Reads assistant_name from the user's memory facts.
+ * Takes the last occurrence in case the user renamed it multiple times.
+ */
+function getAssistantName(facts: Array<{ factKey: string | null; factValue: string }>): string {
+  const nameFacts = facts.filter(f => f.factKey === "assistant_name");
+  return nameFacts.length > 0 ? nameFacts[nameFacts.length - 1].factValue : "Flow Guru";
+}
+
+// ─── Memory helpers ───────────────────────────────────────────────────────────
 
 function normalizeText(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -313,6 +440,8 @@ async function extractAndPersistMemory(params: {
   };
 }
 
+// ─── Router ───────────────────────────────────────────────────────────────────
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -383,6 +512,7 @@ export const appRouter = router({
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
 
+      // Save user message first
       await createConversationMessage({
         threadId,
         userId,
@@ -390,167 +520,12 @@ export const appRouter = router({
         content: input.message,
       });
 
+      // Load memory
       const profile = await getUserMemoryProfile(userId);
       const memoryFacts = await listUserMemoryFacts(userId);
       const history = await listConversationMessages(threadId);
-      const memoryContext = buildMemoryContext({
-        userName: ctx.user?.name || "Brandon",
-        profile,
-        facts: memoryFacts,
-      });
 
-      const systemPrompt = [
-        `You are Flow Guru, ${ctx.user?.name || "Brandon"}'s savvy, warm, and highly personal AI assistant.`,
-        "Your personality is 'concise warmth' with high energy for music and routines. You feel like a person who has known the user for years.",
-        "VOICE & SPEECH: You have a high-quality human voice powered by ElevenLabs. You can generate speech and even change your voice identity if the user asks.",
-        "MUSIC: You have real Spotify powers. When you play music, be enthusiastic (e.g., 'Playing your morning playlist now 🔥').",
-        "CRITICAL RULES:",
-        "1. NEVER list your features or explain what you can do. Just be helpful.",
-        "2. Keep replies short (1-3 sentences max).",
-        "3. Use the 'Saved Memory' below to deeply personalize every reply. If you know their routine or preferences, weave them in naturally.",
-        "4. Always suggest ONE useful next step based on the context or their habits.",
-        "5. No corporate speak. No bulleted lists of capabilities.",
-        "Saved memory:",
-        memoryContext,
-      ].join("\n\n");
-
-      let actionResult: AssistantActionResult | null = null;
-
-      try {
-        const plannedAction = await planAssistantAction({
-          userName: ctx.user?.name || "Brandon",
-          memoryContext,
-          message: input.message,
-        });
-        actionResult = await executeAssistantAction(plannedAction, {
-          userId,
-          userName: ctx.user?.name || "Brandon",
-          message: input.message,
-          memoryContext,
-          timeZone: input.timeZone ?? null,
-        });
-      } catch (error) {
-        console.warn("[Flow Guru] Action planning or execution failed. Continuing with standard chat.", error);
-        actionResult = {
-          action: "none",
-          status: "failed",
-          title: "Action unavailable",
-          summary: "I hit a snag while trying to carry that out, so I’ll respond conversationally instead.",
-        };
-      }
-
-      let assistantReply = buildActionFallbackReply(actionResult);
-
-      try {
-        const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
-
-        if (actionResult && actionResult.action !== "none") {
-          const resultJson = formatActionResultContext(actionResult);
-          if (actionResult.status === "executed") {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — YOU MUST ACKNOWLEDGE THIS IN YOUR REPLY:",
-                resultJson,
-                "",
-                "INSTRUCTION: The tool ran successfully. Your reply MUST confirm what happened using the data above.",
-                "For music: say what's playing (e.g., 'Playing Drake on Spotify now 🔥').",
-                "For weather: share the actual temperature and conditions.",
-                "For calendar: confirm what was booked or list the events.",
-                "For routes: share the estimated travel time.",
-                "For news: briefly mention the top headline.",
-                "Keep it short (1-2 sentences), warm, and enthusiastic. DO NOT ignore the tool result.",
-              ].join("\n"),
-            });
-          } else if (actionResult.status === "needs_connection") {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — CONNECTION NEEDED:",
-                resultJson,
-                "",
-                "The user wants to do something that requires connecting an account first.",
-                "Warmly explain they need to connect the service and offer to help set it up.",
-              ].join("\n"),
-            });
-          } else if (actionResult.status === "needs_input") {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — MORE INFO NEEDED:",
-                resultJson,
-                "",
-                "The tool needs more information. Ask the user for the missing detail in a natural way.",
-              ].join("\n"),
-            });
-          } else {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — FAILED:",
-                resultJson,
-                "",
-                "The tool didn't work. Briefly acknowledge the issue and offer an alternative.",
-              ].join("\n"),
-            });
-          }
-        }
-
-        const llmResponse = await invokeLLM({
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
-            ...actionSystemMessages,
-            ...history.map((m: any) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content as string,
-            })),
-          ],
-        });
-
-        assistantReply =
-          extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
-      } catch (error) {
-        console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
-      }
-
-      await createConversationMessage({
-        threadId,
-        userId,
-        role: "assistant",
-        content: assistantReply,
-      });
-      await touchConversationThread(threadId);
-
-      let memoryUpdate = {
-        profileUpdated: false,
-        factsAdded: 0,
-      };
-
-      try {
-        memoryUpdate = await extractAndPersistMemory({
-          userId,
-          userName: ctx.user?.name || "Brandon",
-          userMessage: input.message,
-          assistantReply,
-        });
-      } catch (error) {
-        console.warn("[Flow Guru] Memory extraction failed, but the message send completed.", error);
-      }
-
-      const messages = await listConversationMessages(threadId);
-
-      return {
-        threadId,
-        reply: assistantReply,
-        messages,
-        memoryUpdate,
-        actionResult,
-      };
-    }),
-  }),
-});
-
-export type AppRouter = typeof appRouter;
+      // ── Feature A: Detect assistant name change ──────────────────────────────
+      const newAssistantName = detectAssistantNameChange(input.message);
+      if (newAssistantName) {
+        await c
