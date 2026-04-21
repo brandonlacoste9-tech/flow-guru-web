@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { theme } from '../../theme';
-import { Calendar, CloudSun, MapPin, Newspaper } from 'lucide-react-native';
+import { Calendar, CloudSun, MapPin, Newspaper, Music } from 'lucide-react-native';
 
 interface ActionCardProps {
   action: string;
@@ -19,6 +19,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ action, title, summary, 
       case 'calendar.create_event': return <Calendar color={theme.colors.accent} size={28} />;
       case 'route.get': return <MapPin color={theme.colors.accent} size={28} />;
       case 'news.get': return <Newspaper color={theme.colors.accent} size={28} />;
+      case 'music.play': return <Music color={theme.colors.accent} size={28} />;
       default: return null;
     }
   };

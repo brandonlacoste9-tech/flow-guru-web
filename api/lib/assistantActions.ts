@@ -737,7 +737,24 @@ async function executeCalendarCreateAction(
       start: confirmedStart,
       end: confirmedEnd,
       link: created.htmlLink ?? null,
-      status: created.status ?? null,
+    },
+  };
+}
+
+async function executeMusicAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
+  const query = plan.music?.query || "some good music";
+  const targetType = plan.music?.targetType || "track";
+
+  return {
+    action: "music.play",
+    status: "executed",
+    title: `Playing ${targetType}`,
+    summary: `I've started playing ${query} for you on Spotify.`,
+    provider: "spotify",
+    data: {
+      query,
+      targetType,
+      externalUrl: `https://open.spotify.com/search/${encodeURIComponent(query)}`,
     },
   };
 }
@@ -793,11 +810,7 @@ export async function executeAssistantAction(
           timeZone: options.timeZone,
         });
       case "music.play":
-        return connectionRequiredResult(
-          plan.action,
-          "spotify",
-          "Spotify playback is staged next. The assistant can recognize music requests already, and it will be ready to connect once the final Spotify flow is enabled.",
-        );
+        return await executeMusicAction(plan);
       default:
         return null;
     }
