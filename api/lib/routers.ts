@@ -535,6 +535,7 @@ export const appRouter = router({
         "- Check weather for any city",
         "- Get directions and travel times",
         "- Set reminders (via calendar)",
+        "- Browse the live web to find answers or perform tasks",
         "",
         `The user's saved memory:`,
         memoryContext,

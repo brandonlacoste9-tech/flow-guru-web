@@ -16,6 +16,7 @@ const ACTION_NAMES = [
   "weather.get",
   "news.get",
   "reminder.set",
+  "browser.use",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -66,6 +67,11 @@ const plannerSchema = z.object({
       label: z.string().nullable(),
       when: z.string().nullable(),
       recurring: z.boolean().nullable(),
+    })
+    .nullable(),
+  browser: z
+    .object({
+      task_description: z.string().nullable(),
     })
     .nullable(),
 });
@@ -961,6 +967,46 @@ export async function executeAssistantAction(
             title: `Reminder noted: ${label}`,
             summary: `I'll remind you: "${label}"${when ? ` at ${when}` : ""}.`,
             provider: "flow-guru",
+          };
+        }
+      }
+      case "browser.use": {
+        const task = plan.browser?.task_description;
+        if (!task) {
+          return {
+            action: plan.action,
+            status: "needs_input",
+            title: "Browser task details needed",
+            summary: "What specifically do you want me to do or look up on the web?",
+          };
+        }
+        
+        try {
+          const resp = await fetch("http://localhost:8000/browse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task }),
+            // Give it plenty of time, browser workflows are slow
+            signal: AbortSignal.timeout(180_000), 
+          });
+
+          if (!resp.ok) throw new Error("Browser microservice failed");
+          const j = await resp.json();
+
+          return {
+            action: plan.action,
+            status: "executed",
+            title: "Web Browsing Complete",
+            summary: j.result || "I finished the task online.",
+            provider: "browser-use",
+          };
+        } catch (error) {
+          return {
+            action: plan.action,
+            status: "failed",
+            title: "Web Browsing Failed",
+            summary: "I tried to accomplish this via the browser agent, but it encountered an error.",
+            provider: "browser-use",
           };
         }
       }
