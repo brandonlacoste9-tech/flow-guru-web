@@ -756,12 +756,24 @@ async function executeCalendarCreateAction(
   const confirmedStart = created.start?.dateTime ?? resolved.startIso;
   const confirmedEnd = created.end?.dateTime ?? endIso;
   const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
+  const formattedTime = formatCalendarEventDateTime(confirmedStart, confirmedTimeZone);
+
+  // Fire a push notification confirming the booking
+  try {
+    const { notifyOwner } = await import("./_core/notification.js");
+    await notifyOwner({
+      title: `📅 Booked: ${created.summary ?? eventTitle}`,
+      content: `${formattedTime}. You'll get a reminder from Google Calendar before it starts.`,
+    });
+  } catch (notifError) {
+    console.warn("[Flow Guru] Notification dispatch failed (non-blocking):", notifError);
+  }
 
   return {
     action: plan.action,
     status: "executed",
     title: `Booked: ${created.summary ?? eventTitle}`,
-    summary: `It’s on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
+    summary: `Done — ${eventTitle} is on your calendar for ${formattedTime}. I'll remind you before it starts.`,
     provider: "google-calendar",
     data: {
       id: created.id ?? null,
