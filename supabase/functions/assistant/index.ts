@@ -48,13 +48,34 @@ serve(async (req) => {
     const [memoryRow] = await sql`SELECT memory FROM user_memory WHERE user_id = ${userId}`
     let memory = memoryRow?.memory || {}
 
-    // Tool logic...
-    let reply = `I'm Flow Guru. I've connected to Neon! You said: "${message}"`;
+    // 2. Fetch from real Flow Guru Brain (Vercel)
+    const VERCEL_API_URL = "https://flow-guru-web.vercel.app/api/trpc/assistant.send";
+    
+    const vercelResponse = await fetch(VERCEL_API_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            message,
+            userId: userId, // Pass through the ID for memory lookup
+        })
+    });
 
+    if (!vercelResponse.ok) {
+        const errText = await vercelResponse.text();
+        throw new Error(`Vercel Brain Error: ${errText}`);
+    }
+
+    const { result } = await vercelResponse.json();
+    const reply = result?.data?.reply || "I'm here, but I'm having trouble thinking clearly right now.";
+    const actionResult = result?.data?.actionResult || null;
+
+    // 3. Persist to Supabase for mobile history
     await sql`INSERT INTO conversations (user_id, role, content) VALUES (${userId}, 'user', ${message})`
     await sql`INSERT INTO conversations (user_id, role, content) VALUES (${userId}, 'assistant', ${reply})`
 
-    return new Response(JSON.stringify({ reply }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ reply, actionResult }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { 
