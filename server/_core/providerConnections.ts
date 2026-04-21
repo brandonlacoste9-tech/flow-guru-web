@@ -8,6 +8,12 @@ import {
   getGoogleCalendarCallbackUrl,
   parseGoogleOAuthState,
 } from "./googleCalendar";
+import {
+  buildSpotifyOAuthState,
+  connectSpotify,
+  getSpotifyCallbackUrl,
+  parseSpotifyOAuthState,
+} from "./spotify";
 
 type SupportedProvider = "google-calendar" | "spotify";
 
@@ -137,18 +143,31 @@ export function registerProviderConnectionRoutes(app: Express) {
       return;
     }
 
-    await upsertProviderConnection({
-      userId: user.id,
-      provider: providerParam,
-      status: "pending",
-      lastError: `${config.label} linking is staged and awaiting the full OAuth exchange.`,
-    });
+    if (providerParam === "spotify") {
+      await upsertProviderConnection({
+        userId: user.id,
+        provider: providerParam,
+        status: "pending",
+        lastError: null,
+      });
 
-    res.status(202).json({
+      const redirectUri = getSpotifyCallbackUrl(req);
+      const authUrl = new URL("https://accounts.spotify.com/authorize");
+      authUrl.searchParams.set("client_id", ENV.spotifyClientId);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("scope", config.scopes.join(" "));
+      authUrl.searchParams.set("state", buildSpotifyOAuthState(user.id));
+
+      res.redirect(302, authUrl.toString());
+      return;
+    }
+
+    res.status(501).json({
       provider: providerParam,
       configured: true,
-      status: "pending",
-      message: `${config.label} linking is staged. The secure token exchange will be activated once the final OAuth flow is enabled.`,
+      status: "error",
+      message: `${config.label} provider is not fully implemented yet.`,
       scopes: config.scopes,
     });
   });
@@ -198,18 +217,45 @@ export function registerProviderConnectionRoutes(app: Express) {
       }
     }
 
-    await upsertProviderConnection({
-      userId: user.id,
-      provider: providerParam,
-      status: "error",
-      lastError: "Provider callback received before the secure OAuth exchange was activated.",
-    });
+    if (providerParam === "spotify") {
+      const code = typeof req.query.code === "string" ? req.query.code : null;
+      const state = typeof req.query.state === "string" ? req.query.state : null;
+      if (!code || !state) {
+        res.status(400).json({ error: "Spotify callback requires code and state." });
+        return;
+      }
+
+      try {
+        const parsedState = parseSpotifyOAuthState(state);
+        if (parsedState.userId !== user.id) {
+          throw new Error("Spotify OAuth state did not match the authenticated user.");
+        }
+
+        const result = await connectSpotify({
+          userId: user.id,
+          code,
+          redirectUri: getSpotifyCallbackUrl(req),
+        });
+
+        res.redirect(302, `/?integration=spotify&status=connected&account=${encodeURIComponent(result.externalAccountLabel)}`);
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Spotify connection failed.";
+        await upsertProviderConnection({
+          userId: user.id,
+          provider: "spotify",
+          status: "error",
+          lastError: message,
+        });
+        res.redirect(302, `/?integration=spotify&status=error&message=${encodeURIComponent(message)}`);
+        return;
+      }
+    }
 
     res.status(501).json({
       provider: providerParam,
       status: "error",
-      message:
-        "The callback route is staged, but the secure token exchange is not active yet. Add provider credentials to complete the integration.",
+      message: "Provider callback is not implemented yet.",
     });
   });
 }
