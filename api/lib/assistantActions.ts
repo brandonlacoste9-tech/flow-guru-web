@@ -17,6 +17,7 @@ const ACTION_NAMES = [
   "news.get",
   "reminder.set",
   "browser.use",
+  "system.subagent",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -72,6 +73,11 @@ const plannerSchema = z.object({
   browser: z
     .object({
       task_description: z.string().nullable(),
+    })
+    .nullable(),
+  subagent: z
+    .object({
+      task: z.string().nullable(),
     })
     .nullable(),
 });
@@ -1007,6 +1013,58 @@ export async function executeAssistantAction(
             title: "Web Browsing Failed",
             summary: "I tried to accomplish this via the browser agent, but it encountered an error.",
             provider: "browser-use",
+          };
+        }
+      }
+      case "system.subagent": {
+        const task = plan.subagent?.task;
+        if (!task) {
+          return {
+            action: plan.action,
+            status: "needs_input",
+            title: "Subagent task needed",
+            summary: "What specifically do you want the subagent to do?",
+          };
+        }
+        
+        try {
+          const resp = await fetch("http://127.0.0.1:3030/a2a", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer local_token" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "message/send",
+              params: {
+                message: {
+                  messageId: "msg-" + Date.now(),
+                  role: "user",
+                  parts: [{ kind: "text", text: task }]
+                }
+              }
+            }),
+            signal: AbortSignal.timeout(180_000), 
+          });
+
+          if (!resp.ok) throw new Error("Nullclaw A2A request failed");
+          const res = await resp.json();
+          const replyText = res.result?.message?.parts?.[0]?.text || "The subagent completed your request.";
+
+          return {
+            action: plan.action,
+            status: "executed",
+            title: "Subagent Task Complete",
+            summary: replyText,
+            provider: "nullclaw",
+            data: res,
+          };
+        } catch (e) {
+          return {
+            action: plan.action,
+            status: "failed",
+            title: "Subagent error",
+            summary: (e as Error).message,
+            provider: "nullclaw",
           };
         }
       }

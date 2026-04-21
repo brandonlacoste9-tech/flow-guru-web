@@ -536,6 +536,7 @@ export const appRouter = router({
         "- Get directions and travel times",
         "- Set reminders (via calendar)",
         "- Browse the live web to find answers or perform tasks",
+        "- Delegate complex or multi-step system tasks to an autonomous sub-agent",
         "",
         `The user's saved memory:`,
         memoryContext,
