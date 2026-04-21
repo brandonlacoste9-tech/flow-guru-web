@@ -128,9 +128,14 @@ export default function Home() {
   };
 
   const speakText = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    // Attempt to stream ultra-low latency VibeVoice AI speech
+    const audio = new Audio(`http://localhost:8000/speak?text=${encodeURIComponent(text)}`);
+    audio.play().catch(() => {
+      // Fallback if VibeVoice python microservice is down
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    });
   };
 
   const formatEventTime = (iso: string | null, allDay: boolean) => {
