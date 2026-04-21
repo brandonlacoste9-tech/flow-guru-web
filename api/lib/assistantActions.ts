@@ -775,52 +775,86 @@ async function executeCalendarCreateAction(
 
 async function executeMusicAction(
   plan: AssistantActionPlan,
-  options: { userId: number }
 ): Promise<AssistantActionResult> {
-  const query = plan.music?.query || "some good music";
-  const targetType = plan.music?.targetType || "track";
+  const query = plan.music?.query || "relaxing ambient music";
+
+  // Build descriptive prompt for ElevenLabs sound generation
+  const soundPrompt = buildSoundPrompt(query, plan.music?.targetType);
 
   try {
-    const { searchAndPlaySpotify } = await import("./_core/spotify.js");
-    const result = await searchAndPlaySpotify({
-      userId: options.userId,
-      query,
-      type: (targetType as string) || "track",
+    const { generateSoundAsDataUri } = await import("./_core/elevenLabs.js");
+    const audioDataUri = await generateSoundAsDataUri({
+      text: soundPrompt,
+      durationSeconds: 15,
+      promptInfluence: 0.7,
     });
 
-    if (result.status === "no_device") {
-      return {
-        action: "music.play",
-        status: "needs_input",
-        title: "Spotify Device Needed",
-        summary: result.message || "I found the music, but I couldn't find an active Spotify device to play it on.",
-        provider: "spotify",
-      };
-    }
-
-    const item = result.item;
     return {
       action: "music.play",
       status: "executed",
-      title: `Playing: ${item.name}`,
-      summary: `I've started ${item.name} by ${item.artists?.[0]?.name || "the artist"} on Spotify for you.`,
-      provider: "spotify",
+      title: `Playing: ${query}`,
+      summary: `Here's some ${query} for you 🔥`,
+      provider: "elevenlabs",
       data: {
-        item,
-        externalUrl: item.external_urls?.spotify,
+        audioDataUri,
+        query,
+        soundPrompt,
       },
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Spotify failed.";
+    const msg = error instanceof Error ? error.message : "Sound generation failed.";
     return {
       action: "music.play",
       status: "failed",
-      title: "Spotify snag",
-      summary: msg,
-      provider: "spotify",
+      title: "Audio snag",
+      summary: msg.includes("not configured")
+        ? "I need the ElevenLabs API key to play sounds. Can you add it in your Vercel settings?"
+        : `Couldn't generate that audio right now — ${msg}`,
+      provider: "elevenlabs",
     };
   }
 }
+
+/** Translate user music intent into an ElevenLabs sound generation prompt */
+function buildSoundPrompt(query: string, targetType?: string | null): string {
+  const q = query.toLowerCase();
+
+  // Alarm/chime sounds
+  if (/chime|alarm|bell|wake.?up|ring|alert/.test(q)) {
+    return `A pleasant, melodic ${q} sound. Gentle, ascending tones that feel warm and encouraging.`;
+  }
+
+  // Ambient/relaxing
+  if (/relax|ambient|calm|chill|zen|meditat|sleep|sooth/.test(q)) {
+    return `${query}. Soft, atmospheric soundscape with gentle pads and warm tones. Peaceful and calming.`;
+  }
+
+  // Nature sounds
+  if (/rain|ocean|waves|forest|bird|nature|thunder|wind|water|fire|campfire/.test(q)) {
+    return `Natural ${query} sounds. Rich, immersive, realistic environmental audio.`;
+  }
+
+  // Music genres
+  if (/house|techno|electronic|edm|dance|beat|bass|drum/.test(q)) {
+    return `Upbeat ${query} music. Punchy rhythm, energetic beat, electronic production.`;
+  }
+
+  if (/jazz|blues|soul|funk/.test(q)) {
+    return `Smooth ${query} music. Warm instruments, relaxed groove, sophisticated feel.`;
+  }
+
+  if (/classical|piano|orchestra|violin|cello/.test(q)) {
+    return `Beautiful ${query} music. Elegant, emotional, orchestral.`;
+  }
+
+  if (/lofi|lo-fi|hip.?hop|study/.test(q)) {
+    return `Lo-fi ${query} music. Warm vinyl crackle, mellow beats, cozy atmosphere.`;
+  }
+
+  // Generic music
+  return `${query} music. Pleasant, well-produced, high-quality audio.`;
+}
+
 
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
@@ -873,14 +907,7 @@ export async function executeAssistantAction(
           timeZone: options.timeZone,
         });
       case "music.play":
-        if (!options?.userId) {
-          return connectionRequiredResult(
-            plan.action,
-            "spotify",
-            "I need you to be logged in before I can play music on your Spotify account.",
-          );
-        }
-        return await executeMusicAction(plan, { userId: options.userId });
+        return await executeMusicAction(plan);
       case "reminder.set": {
         const label = plan.reminder?.label || "Reminder";
         const when = plan.reminder?.when;

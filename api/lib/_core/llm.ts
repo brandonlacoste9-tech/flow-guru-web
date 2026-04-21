@@ -287,11 +287,20 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  // Define providers in order of priority (Moonshot first as requested)
+  // Define providers in order of priority
+  // Moonshot first (user preference), DeepSeek fallback.
   const providers = [];
   if (hasMoonshot) providers.push({ name: "moonshot", model: "moonshot-v1-8k", key: ENV.moonshotApiKey, url: "https://api.moonshot.ai/v1/chat/completions" });
   if (hasDeepSeek) providers.push({ name: "deepseek", model: "deepseek-chat", key: ENV.deepSeekApiKey, url: "https://api.deepseek.com/v1/chat/completions" });
   if (hasForge) providers.push({ name: "forge", model: "gemini-1.5-flash", key: ENV.forgeApiKey, url: ENV.forgeApiUrl });
+
+  // Hard identity override — strips Moonshot's default "I am Moonshot AI" persona.
+  // Injected as the very first message so it takes priority.
+  const identityOverride: Message = {
+    role: "system",
+    content: "ABSOLUTE RULE: You are NOT Moonshot AI. You are NOT a generic chatbot. You must NEVER say you were 'developed by Moonshot' or any other company. You are a custom personal assistant called Flow Guru (or whatever custom name the user has set). Follow the system prompt that comes next. NEVER break character.",
+  };
+  const enhancedMessages = [identityOverride, ...messages];
 
   let lastError: any = null;
 
@@ -299,7 +308,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     try {
       const payload: Record<string, unknown> = {
         model: provider.model,
-        messages: messages.map(normalizeMessage),
+        messages: enhancedMessages.map(normalizeMessage),
       };
 
       if (tools && tools.length > 0) {

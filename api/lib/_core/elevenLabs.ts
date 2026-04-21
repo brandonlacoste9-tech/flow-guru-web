@@ -122,3 +122,59 @@ export async function getVoices(): Promise<any[]> {
   const data = await response.json();
   return data.voices;
 }
+
+export type SoundGenerationOptions = {
+  /** Description of the sound to generate, e.g. "morning alarm chime", "relaxing ocean waves" */
+  text: string;
+  /** Duration in seconds (0.5 to 22). If omitted, the model picks an optimal length. */
+  durationSeconds?: number;
+  /** If true, the sound will loop seamlessly */
+  loop?: boolean;
+  /** 0 to 1 — how closely the model follows the prompt */
+  promptInfluence?: number;
+};
+
+/**
+ * Generate a sound effect or ambient audio using ElevenLabs Sound Generation API.
+ * Returns raw audio as a Buffer (MP3).
+ */
+export async function generateSound(options: SoundGenerationOptions): Promise<Buffer> {
+  const apiKey = ENV.elevenLabsApiKey;
+  if (!apiKey) {
+    throw new Error("ElevenLabs API key is not configured.");
+  }
+
+  const url = "https://api.elevenlabs.io/v1/sound-generation";
+
+  const body: Record<string, unknown> = {
+    text: options.text,
+    model_id: "eleven_text_to_sound_v2",
+  };
+  if (options.durationSeconds != null) body.duration_seconds = options.durationSeconds;
+  if (options.loop != null) body.loop = options.loop;
+  if (options.promptInfluence != null) body.prompt_influence = options.promptInfluence;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "xi-api-key": apiKey,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`ElevenLabs Sound Generation failed: ${response.status} ${error}`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/**
+ * Generate a sound and return it as a base64 data URI for immediate playback.
+ */
+export async function generateSoundAsDataUri(options: SoundGenerationOptions): Promise<string> {
+  const buffer = await generateSound(options);
+  return `data:audio/mpeg;base64,${buffer.toString("base64")}`;
+}
