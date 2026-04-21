@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2 } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -58,6 +58,14 @@ export default function Home() {
       setIsGoogleConnected(!!gcal);
     }
   }, [bootstrap.data]);
+
+  const startFreshMutation = trpc.assistant.startFresh.useMutation({
+    onSuccess: (result) => {
+      setMessages([]);
+      if (result.thread) setCurrentThreadId(result.thread.id);
+    },
+    onError: (err) => toast.error("Failed to start new session")
+  });
 
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
@@ -170,6 +178,16 @@ export default function Home() {
             >
               <Calendar size={12} />
               <span>Connect Calendar</span>
+            </button>
+          )}
+
+          {hasContext && (
+            <button 
+              onClick={() => startFreshMutation.mutate()}
+              title="Start New Session"
+              className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center bg-black/50 backdrop-blur-md hover:bg-white/10 transition-all shadow-sm text-zinc-300 hover:text-white"
+            >
+              {startFreshMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <MessageSquarePlus size={14} />}
             </button>
           )}
 
