@@ -583,6 +583,60 @@ export const appRouter = router({
         actionResult,
       };
     }),
+    briefing: publicProcedure.mutation(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const memoryFacts = await listUserMemoryFacts(userId);
+      const profile = await getUserMemoryProfile(userId);
+
+      const assistantNameFact = memoryFacts.find(
+        f => f.factKey === "assistant_name" && f.category === "preference"
+      );
+      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const userName = ctx.user?.name || "Brandon";
+
+      // Find location from memory
+      const locationFact = memoryFacts.find(
+        f => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
+      );
+      const location = locationFact?.factValue || null;
+
+      const { generateBriefing } = await import("./_core/briefing.js");
+      const result = await generateBriefing({
+        userId,
+        userName,
+        assistantName,
+        location,
+        wakeUpTime: profile?.wakeUpTime ?? null,
+      });
+
+      return result;
+    }),
+    quickSound: publicProcedure
+      .input(z.object({
+        type: z.enum(["focus", "relax", "wake_up", "wind_down", "rain", "nature"]),
+        durationSeconds: z.number().min(5).max(30).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { generateQuickSound } = await import("./_core/briefing.js");
+        return await generateQuickSound(input.type, input.durationSeconds ?? 15);
+      }),
+    speak: publicProcedure
+      .input(z.object({
+        text: z.string().min(1).max(2000),
+        voiceId: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { textToSpeech } = await import("./_core/elevenLabs.js");
+        const buffer = await textToSpeech({
+          text: input.text,
+          voiceId: input.voiceId,
+          stability: 0.6,
+          similarityBoost: 0.8,
+        });
+        return {
+          audioDataUri: `data:audio/mpeg;base64,${buffer.toString("base64")}`,
+        };
+      }),
   }),
 });
 
