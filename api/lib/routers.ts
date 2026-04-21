@@ -151,7 +151,7 @@ async function extractAndPersistMemory(params: {
       {
         role: "system",
         content:
-          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.",
+          "You are a dedicated memory engine for Flow Guru. Extract durable user facts (wake-up times, routine steps, name of health providers, food preferences, family details, etc.) that would make a personal assistant more helpful. Avoid generic fluff. return nulls/empty array if no new specific context is found.",
       },
       {
         role: "user",
@@ -400,14 +400,14 @@ export const appRouter = router({
       });
 
       const systemPrompt = [
-        "You are Flow Guru, a calm and capable personal AI assistant.",
-        "Speak with quiet confidence, warmth, and concise clarity.",
-        "Use the saved memory below to personalize your responses so the assistant feels familiar with the user.",
-        "When an external action result is provided, rely on it faithfully and do not pretend an action succeeded if it did not.",
-        "Never claim to know facts that are not present in memory, the current conversation, or an action result.",
-        "Do not mention that you are reading a memory store unless the user explicitly asks.",
-        "When useful, gently reference routines, preferences, or recurring events from memory.",
-        "Keep the tone minimal, grounded, and supportive.",
+        `You are Flow Guru, ${ctx.user?.name || "Brandon"}'s savvy, warm, and highly personal AI assistant.`,
+        "Your personality is 'concise warmth'. You feel like a person who has known the user for years.",
+        "CRITICAL RULES:",
+        "1. NEVER list your features or explain what you can do. Just be helpful.",
+        "2. Keep replies short (1-3 sentences max).",
+        "3. Use the 'Saved Memory' below to deeply personalize every reply. If you know their routine or preferences, weave them in naturally.",
+        "4. Always suggest ONE useful next step based on the context or their habits.",
+        "5. No corporate speak. No bulleted lists of capabilities.",
         "Saved memory:",
         memoryContext,
       ].join("\n\n");
@@ -438,43 +438,37 @@ export const appRouter = router({
       }
 
       let assistantReply = buildActionFallbackReply(actionResult);
-      const shouldUseDirectActionReply =
-        actionResult?.status === "executed" &&
-        (actionResult.action === "calendar.create_event" ||
-          actionResult.action === "calendar.list_events");
 
-      if (!shouldUseDirectActionReply) {
-        try {
-          const llmResponse = await invokeLLM({
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt,
-              },
-              ...(actionResult
-                ? [
-                    {
-                      role: "system" as const,
-                      content: [
-                        "External action result for the current turn:",
-                        formatActionResultContext(actionResult),
-                        "Use the result directly. If the action needs a missing connection or missing details, explain that plainly and briefly.",
-                      ].join("\n\n"),
-                    },
-                  ]
-                : []),
-              ...history.map((m: any) => ({
-                role: m.role as "user" | "assistant",
-                content: m.content as string,
-              })),
-            ],
-          });
+      try {
+        const llmResponse = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt,
+            },
+            ...(actionResult
+              ? [
+                  {
+                    role: "system" as const,
+                    content: [
+                      "External action result for the current turn:",
+                      formatActionResultContext(actionResult),
+                      "Incorporate this result into your warm, personal reply. Be conversational, not robotic.",
+                    ].join("\n\n"),
+                  },
+                ]
+              : []),
+            ...history.map((m: any) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content as string,
+            })),
+          ],
+        });
 
-          assistantReply =
-            extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
-        } catch (error) {
-          console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
-        }
+        assistantReply =
+          extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+      } catch (error) {
+        console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
       }
 
       await createConversationMessage({
