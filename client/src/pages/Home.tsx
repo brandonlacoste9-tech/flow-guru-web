@@ -33,6 +33,7 @@ export default function Home() {
   const [todayEvents, setTodayEvents] = useState<any[]>([]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -62,6 +63,7 @@ export default function Home() {
   const startFreshMutation = trpc.assistant.startFresh.useMutation({
     onSuccess: (result) => {
       setMessages([]);
+      setView('dashboard');
       if (result.thread) setCurrentThreadId(result.thread.id);
     },
     onError: (err) => toast.error("Failed to start new session")
@@ -107,6 +109,7 @@ export default function Home() {
   const handleSend = (text: string) => {
     if (!text.trim() || sendMutation.isPending) return;
     setInputValue('');
+    setView('chat');
     sendMutation.mutate({
       message: text,
       threadId: currentThreadId,
@@ -181,7 +184,7 @@ export default function Home() {
             </button>
           )}
 
-          {hasContext && (
+          {view === 'chat' && (
             <button 
               onClick={() => startFreshMutation.mutate()}
               title="Start New Session"
@@ -208,7 +211,7 @@ export default function Home() {
 
           {/* Dashboard — only when no messages */}
           <AnimatePresence>
-            {!hasContext && (
+            {view === 'dashboard' && (
               <motion.div 
                 className="pt-8"
                 initial={{ opacity: 0, y: 20 }}
@@ -339,7 +342,7 @@ export default function Home() {
           </AnimatePresence>
 
           {/* Messages */}
-          {hasContext && (
+          {view === 'chat' && (
             <div className="space-y-6 pt-6">
               <AnimatePresence initial={false}>
                 {messages.map((message) => (
