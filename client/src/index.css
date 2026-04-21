@@ -158,11 +158,6 @@
     padding-right: 1rem;
   }
 
-  .flex {
-    min-height: 0;
-    min-width: 0;
-  }
-
   @media (min-width: 640px) {
     .container {
       padding-left: 1.5rem; /* 24px - tablet padding */
@@ -178,3 +173,9 @@
     }
   }
 }
+
+/* Prevent flex items from overflowing */
+.flex {
+  min-height: 0;
+  min-width: 0;
+}
