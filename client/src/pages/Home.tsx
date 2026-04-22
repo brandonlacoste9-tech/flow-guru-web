@@ -60,6 +60,42 @@ export default function Home() {
       setIsGoogleConnected(!!conns.find(c => c.provider === "google-calendar" && c.status === "connected"));
       setIsSpotifyConnected(!!conns.find(c => c.provider === "spotify" && c.status === "connected"));
     }
+
+    // If server had no location saved, fall back to browser geolocation
+    if (!data.weather && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const wxUrl = new URL("https://api.open-meteo.com/v1/forecast");
+          wxUrl.searchParams.set("latitude", String(latitude));
+          wxUrl.searchParams.set("longitude", String(longitude));
+          wxUrl.searchParams.set("current", "temperature_2m,apparent_temperature,weather_code");
+          wxUrl.searchParams.set("timezone", "auto");
+          const wxResp = await fetch(wxUrl.toString());
+          if (!wxResp.ok) return;
+          const wxData = await wxResp.json();
+          const c = wxData.current;
+          if (!c || c.temperature_2m == null) return;
+
+          const geoResp = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+          const geoData = geoResp.ok ? await geoResp.json() : null;
+          const locationName = geoData?.address?.city || geoData?.address?.town || geoData?.address?.village || "Your location";
+
+          const code = c.weather_code ?? 99;
+          let label = "unsettled weather";
+          if (code <= 1) label = "clear skies";
+          else if (code <= 3) label = "partly cloudy";
+          else if (code <= 48) label = "foggy";
+          else if (code <= 57) label = "drizzle";
+          else if (code <= 65) label = "rainy";
+          else if (code <= 77) label = "snowy";
+          else if (code <= 86) label = "snow showers";
+          else if (code <= 99) label = "thunderstorms";
+
+          setWeather({ tempC: Math.round(c.temperature_2m), feelsLikeC: Math.round(c.apparent_temperature ?? c.temperature_2m), label, locationName });
+        } catch { /* silently ignore */ }
+      }, () => { /* permission denied — leave spinner hidden */ });
+    }
   }, [bootstrap.data]);
 
   const startFreshMutation = trpc.assistant.startFresh.useMutation({
@@ -294,9 +330,13 @@ export default function Home() {
                         </div>
                         <p className="text-sm text-zinc-400 capitalize mt-1 font-medium">{weather.label} <span className="text-zinc-600">•</span> Feels like {weather.feelsLikeC}°</p>
                       </>
-                    ) : (
+                    ) : bootstrap.isLoading ? (
                       <div className="h-16 flex items-center justify-center">
                         <Loader2 className="w-5 h-5 text-zinc-600 animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="h-14 flex flex-col justify-center">
+                        <p className="text-sm text-zinc-400">Tell me your city to see live weather here.</p>
                       </div>
                     )}
                   </motion.div>
