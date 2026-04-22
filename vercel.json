@@ -12,6 +12,7 @@
   "rewrites": [
     { "source": "/api/trpc/:path*", "destination": "/api/trpc.ts" },
     { "source": "/api/health", "destination": "/api/health.ts" },
+    { "source": "/api/integrations/:path*", "destination": "/api/integrations.ts" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
