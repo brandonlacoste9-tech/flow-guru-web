@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, Music2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ export default function Home() {
   const [weather, setWeather] = useState<any>(null);
   const [todayEvents, setTodayEvents] = useState<any[]>([]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
 
@@ -55,8 +56,9 @@ export default function Home() {
     if (data.weather) setWeather(data.weather);
     if (data.todayEvents) setTodayEvents(data.todayEvents);
     if (data.providerConnections) {
-      const gcal = (data.providerConnections as any[]).find(c => c.provider === "google-calendar" && c.status === "connected");
-      setIsGoogleConnected(!!gcal);
+      const conns = data.providerConnections as any[];
+      setIsGoogleConnected(!!conns.find(c => c.provider === "google-calendar" && c.status === "connected"));
+      setIsSpotifyConnected(!!conns.find(c => c.provider === "spotify" && c.status === "connected"));
     }
   }, [bootstrap.data]);
 
@@ -71,7 +73,14 @@ export default function Home() {
 
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
-      setMessages(result.messages as Message[]);
+      const msgs = result.messages as Message[];
+      if (result.actionResult && (result.actionResult as any).action !== 'none') {
+        const lastIdx = [...msgs].map((m, i) => ({ m, i })).reverse().find(({ m }) => m.role === 'assistant')?.i;
+        if (lastIdx !== undefined) {
+          msgs[lastIdx] = { ...msgs[lastIdx], actionResult: result.actionResult };
+        }
+      }
+      setMessages(msgs);
       if (result.threadId) setCurrentThreadId(result.threadId);
       if (speechEnabled && result.reply) speakText(result.reply);
     },
@@ -153,6 +162,10 @@ export default function Home() {
     window.location.href = '/api/integrations/google-calendar/start';
   };
 
+  const handleConnectSpotify = () => {
+    window.location.href = '/api/integrations/spotify/start';
+  };
+
   return (
     <div className="flex flex-col h-screen bg-black text-white font-['Outfit'] selection:bg-blue-500/30 overflow-hidden">
       {/* Background Ambient Glow */}
@@ -183,19 +196,33 @@ export default function Home() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
         >
-          {/* Connection Status Badge */}
+          {/* Connection Status Badges */}
           {isGoogleConnected ? (
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium">
               <CheckCircle2 size={12} />
               <span>Calendar connected</span>
             </div>
           ) : (
-            <button 
+            <button
               onClick={handleConnectCalendar}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-white/10 hover:border-blue-500/50 hover:bg-zinc-800 transition-all text-zinc-300 text-xs font-medium"
             >
               <Calendar size={12} />
               <span>Connect Calendar</span>
+            </button>
+          )}
+          {isSpotifyConnected ? (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium">
+              <CheckCircle2 size={12} />
+              <span>Spotify connected</span>
+            </div>
+          ) : (
+            <button
+              onClick={handleConnectSpotify}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-white/10 hover:border-green-500/50 hover:bg-zinc-800 transition-all text-zinc-300 text-xs font-medium"
+            >
+              <Music2 size={12} />
+              <span>Connect Spotify</span>
             </button>
           )}
 

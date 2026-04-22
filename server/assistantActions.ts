@@ -4,6 +4,7 @@ import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
 } from "./_core/googleCalendar";
+import { generateImage } from "./_core/imageGeneration";
 import { invokeLLM } from "./_core/llm";
 import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map";
 
@@ -15,6 +16,7 @@ const ACTION_NAMES = [
   "route.get",
   "weather.get",
   "news.get",
+  "image.generate",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -58,6 +60,11 @@ const plannerSchema = z.object({
     .object({
       query: z.string().nullable(),
       targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+    })
+    .nullable(),
+  image: z
+    .object({
+      prompt: z.string().nullable(),
     })
     .nullable(),
 });
@@ -232,6 +239,7 @@ export async function planAssistantAction(params: {
           "• weather.get → ANY mention of weather, temperature, rain, forecast. Examples: 'what's the weather?', 'is it going to rain?', 'how's it outside?'.",
           "• route.get → ANY mention of directions, traffic, commute, how to get somewhere. Examples: 'how's traffic?', 'directions to work', 'route to the gym'.",
           "• news.get → ANY mention of news, headlines, briefing, what's happening. Examples: 'what's in the news?', 'give me a tech briefing', 'any updates?'.",
+          "• image.generate → ANY mention of generating, creating, drawing, or making an image or picture. Examples: 'generate an image of a sunset', 'draw me a cat', 'create a picture of...'.",
           "• none → ONLY when the user is making small talk, asking about you, or saying something truly unrelated to any tool.",
           "",
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
@@ -315,8 +323,16 @@ export async function planAssistantAction(params: {
               required: ["query", "targetType"],
               additionalProperties: false,
             },
+            image: {
+              type: ["object", "null"],
+              properties: {
+                prompt: { type: ["string", "null"] },
+              },
+              required: ["prompt"],
+              additionalProperties: false,
+            },
           },
-          required: ["action", "rationale", "route", "weather", "news", "calendar", "music"],
+          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "image"],
           additionalProperties: false,
         },
       },
@@ -863,6 +879,25 @@ export async function executeAssistantAction(
           );
         }
         return await executeMusicAction(plan, { userId: options.userId });
+      case "image.generate": {
+        const prompt = plan.image?.prompt;
+        if (!prompt) {
+          return {
+            action: plan.action,
+            status: "needs_input",
+            title: "Image generation",
+            summary: "I'd be happy to generate an image — what would you like me to create?",
+          };
+        }
+        const { url } = await generateImage({ prompt });
+        return {
+          action: plan.action,
+          status: "executed",
+          title: "Generated image",
+          summary: prompt,
+          data: { imageUrl: url, prompt },
+        };
+      }
       default:
         return null;
     }

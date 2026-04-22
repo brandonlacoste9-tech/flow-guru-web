@@ -1,5 +1,5 @@
 import React from "react";
-import { Calendar, Cloud, MapPin, Newspaper, Sparkles } from "lucide-react";
+import { Calendar, Cloud, ImageIcon, MapPin, Newspaper, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Mirrors server `AssistantActionResult` without importing server code into the client bundle. */
@@ -17,6 +17,7 @@ function getActionIcon(action: string) {
   if (action?.includes("weather")) return Cloud;
   if (action?.includes("route")) return MapPin;
   if (action?.includes("news")) return Newspaper;
+  if (action?.includes("image")) return ImageIcon;
   return Sparkles;
 }
 
@@ -61,6 +62,17 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
         <p className="text-zinc-300 text-[16px] leading-relaxed">
           No story cards were available for this news result yet.
         </p>
+      );
+    }
+  } else if (result.action === "image.generate") {
+    const imageUrl = (data as { imageUrl?: string }).imageUrl;
+    if (imageUrl) {
+      body = (
+        <img
+          src={imageUrl}
+          alt={result.summary}
+          className="rounded-xl w-full object-cover mt-1"
+        />
       );
     }
   }
