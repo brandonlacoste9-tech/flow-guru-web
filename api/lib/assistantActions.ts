@@ -1006,7 +1006,7 @@ export async function executeAssistantAction(
         }
         
         try {
-          const resp = await fetch("http://localhost:8000/browse", {
+          const resp = await fetch(`${process.env.BROWSER_SERVICE_URL ?? "http://localhost:8000"}/browse`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ task }),
@@ -1025,11 +1025,14 @@ export async function executeAssistantAction(
             provider: "browser-use",
           };
         } catch (error) {
+          const isOffline = (error as any)?.cause?.code === "ECONNREFUSED";
           return {
             action: plan.action,
             status: "failed",
             title: "Web Browsing Failed",
-            summary: "I tried to accomplish this via the browser agent, but it encountered an error.",
+            summary: isOffline
+              ? "The browser service isn't running. Start it locally or set BROWSER_SERVICE_URL in your environment."
+              : "I tried to accomplish this via the browser agent, but it encountered an error.",
             provider: "browser-use",
           };
         }
@@ -1046,9 +1049,9 @@ export async function executeAssistantAction(
         }
         
         try {
-          const resp = await fetch("http://127.0.0.1:3030/a2a", {
+          const resp = await fetch(`${process.env.SUBAGENT_URL ?? "http://127.0.0.1:3030"}/a2a`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": "Bearer local_token" },
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.SUBAGENT_TOKEN ?? "local_token"}` },
             body: JSON.stringify({
               jsonrpc: "2.0",
               id: 1,
@@ -1077,11 +1080,14 @@ export async function executeAssistantAction(
             data: res,
           };
         } catch (e) {
+          const isOffline = (e as any)?.cause?.code === "ECONNREFUSED";
           return {
             action: plan.action,
             status: "failed",
             title: "Subagent error",
-            summary: (e as Error).message,
+            summary: isOffline
+              ? "The nullclaw agent isn't running. Start it locally or set SUBAGENT_URL in your environment."
+              : (e as Error).message,
             provider: "nullclaw",
           };
         }
