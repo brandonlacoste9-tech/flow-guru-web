@@ -158,14 +158,6 @@ export default function Home() {
   const userName = user?.name?.split(' ')[0] || "there";
   const hasContext = messages.length > 0;
 
-  const handleConnectCalendar = () => {
-    window.location.href = '/api/integrations/google-calendar/start';
-  };
-
-  const handleConnectSpotify = () => {
-    window.location.href = '/api/integrations/spotify/start';
-  };
-
   return (
     <div className="flex flex-col h-screen bg-black text-white font-['Outfit'] selection:bg-blue-500/30 overflow-hidden">
       {/* Background Ambient Glow */}
@@ -203,13 +195,13 @@ export default function Home() {
               <span>Calendar connected</span>
             </div>
           ) : (
-            <button
-              onClick={handleConnectCalendar}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-white/10 hover:border-blue-500/50 hover:bg-zinc-800 transition-all text-zinc-300 text-xs font-medium"
+            <a
+              href="/api/integrations/google-calendar/start"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-white/10 hover:border-blue-500/50 transition-all text-zinc-300 text-xs font-medium"
             >
               <Calendar size={12} />
               <span>Connect Calendar</span>
-            </button>
+            </a>
           )}
           {isSpotifyConnected ? (
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium">
@@ -217,13 +209,13 @@ export default function Home() {
               <span>Spotify connected</span>
             </div>
           ) : (
-            <button
-              onClick={handleConnectSpotify}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-white/10 hover:border-green-500/50 hover:bg-zinc-800 transition-all text-zinc-300 text-xs font-medium"
+            <a
+              href="/api/integrations/spotify/start"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-white/10 hover:border-green-500/50 transition-all text-zinc-300 text-xs font-medium"
             >
               <Music2 size={12} />
               <span>Connect Spotify</span>
-            </button>
+            </a>
           )}
 
           {view === 'chat' && (
@@ -323,7 +315,7 @@ export default function Home() {
                         <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Today</span>
                       </div>
                       {!isGoogleConnected && (
-                         <button onClick={handleConnectCalendar} className="text-[10px] uppercase font-bold tracking-wider text-blue-400 hover:text-blue-300">Connect</button>
+                        <a href="/api/integrations/google-calendar/start" className="text-[10px] uppercase font-bold tracking-wider text-blue-400 hover:text-blue-300">Connect</a>
                       )}
                     </div>
                     
