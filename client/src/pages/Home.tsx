@@ -98,6 +98,21 @@ export default function Home() {
     onError: (err) => toast.error("Failed to start new session")
   });
 
+  const speakMutation = trpc.assistant.speak.useMutation({
+    onSuccess: (result) => {
+      const audio = new Audio(result.audioDataUri);
+      audio.onended = () => setIsSpeaking(false);
+      audio.onerror = () => setIsSpeaking(false);
+      audio.play().catch(() => setIsSpeaking(false));
+    },
+    onError: () => {
+      setIsSpeaking(false);
+      // Fallback to browser TTS if ElevenLabs is unavailable
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+    }
+  });
+
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
       setMessages(result.messages as Message[]);
@@ -158,26 +173,29 @@ export default function Home() {
 
   const speakText = (text: string) => {
     if (!speechEnabled) return;
-    
+    // Strip markdown before speaking
+    const clean = text
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\n+/g, ' ')
+      .trim();
     setIsSpeaking(true);
-    // Use our new ElevenLabs endpoint
-    const audio = new Audio(`/api/speak?text=${encodeURIComponent(text)}&voiceId=${VOICE_IDS[voiceGenderRef.current]}`);
-    
-    audio.onended = () => setIsSpeaking(false);
-    audio.onerror = () => setIsSpeaking(false);
-
-    audio.play().catch(() => {
-      // Fallback if ElevenLabs fails
-      if (!('speechSynthesis' in window)) {
-        setIsSpeaking(false);
-        return;
+    speakMutation.mutate(
+      { text: clean, voiceId: VOICE_IDS[voiceGenderRef.current] },
+      {
+        onError: () => {
+          setIsSpeaking(false);
+          // Fallback to browser TTS if ElevenLabs is unavailable
+          if (!('speechSynthesis' in window)) return;
+          window.speechSynthesis.cancel();
+          const utt = new SpeechSynthesisUtterance(clean);
+          utt.rate = 1.05;
+          utt.pitch = 1.0;
+          window.speechSynthesis.speak(utt);
+        },
       }
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    });
+    );
   };
 
   const formatEventTime = (iso: string | null, allDay: boolean) => {
