@@ -132,16 +132,27 @@ async function ensureSchemaOnce(): Promise<void> {
 export async function getDb() {
   if (_db) return _db;
 
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) {
+  // Try multiple env var names — Vercel-Neon integration sets POSTGRES_URL,
+  // while manual setup uses DATABASE_URL. Prefer the non-SSL pooled URL for postgres.js.
+  const rawUrl =
+    process.env.POSTGRES_URL_NO_SSL ||
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL;
+
+  if (!rawUrl) {
     console.warn("[Database] No DATABASE_URL found. Operating in persistence-free mode.");
     return null;
   }
 
+  // postgres.js doesn't support channel_binding — strip it from the URL
+  const dbUrl = rawUrl.replace(/[?&]channel_binding=[^&]*/g, '').replace(/\?$/, '');
+  console.log('[DB] Connecting to:', dbUrl.replace(/:[^:@]+@/, ':***@'));
+
   try {
     const client = postgres(dbUrl, {
-      ssl: "require",
-      connect_timeout: 10,
+      ssl: dbUrl.includes('sslmode=require') || dbUrl.includes('neon.tech') ? { rejectUnauthorized: false } : false,
+      connect_timeout: 15,
       max: 1,
       // Neon pooler (transaction mode) + postgres.js: prepared statements break; disable them.
       prepare: false,
