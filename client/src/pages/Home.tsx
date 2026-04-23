@@ -284,7 +284,7 @@ export default function Home() {
   const userName = user?.name?.split(' ')[0] || "Brandon";
 
   // AI reminders — checks calendar events and wake-up time every minute
-  useReminders({
+  const { alarmState, dismissAlarm, snoozeAlarm } = useReminders({
     enabled: speechEnabled,
     userName,
     wakeUpTime,
@@ -696,6 +696,55 @@ export default function Home() {
           feelsLikeC={weather.feelsLikeC}
         />
       )}
+
+      {/* ── Alarm Overlay ── */}
+      <AnimatePresence>
+        {alarmState.firing && (
+          <motion.div
+            key="alarm-overlay"
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.92 }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              transition={{ duration: 0.3, delay: 0.05 }}
+              className="bg-card border border-border rounded-3xl shadow-2xl px-8 py-10 flex flex-col items-center gap-6 max-w-sm w-full mx-4"
+            >
+              {/* Pulsing bell icon */}
+              <motion.div
+                animate={{ scale: [1, 1.15, 1] }}
+                transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+                className="text-6xl select-none"
+              >
+                ⏰
+              </motion.div>
+              <div className="text-center">
+                <p className="text-xl font-semibold text-foreground">Alarm</p>
+                <p className="text-sm text-muted-foreground mt-1">{alarmState.label}</p>
+              </div>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={snoozeAlarm}
+                  className="flex-1 py-3 rounded-2xl bg-muted hover:bg-muted/80 text-foreground font-semibold text-base transition-colors"
+                >
+                  Snooze 9 min
+                </button>
+                <button
+                  onClick={dismissAlarm}
+                  className="flex-1 py-3 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base transition-colors"
+                >
+                  Turn Off
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

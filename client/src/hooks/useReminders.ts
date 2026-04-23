@@ -1,8 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { usePushNotifications } from './usePushNotifications';
-import { playAlarmSound, type AlarmSoundType } from './useAlarmSound';
+import { playAlarmSound, stopAlarmSound, type AlarmSoundType } from './useAlarmSound';
 
 interface UseRemindersOptions {
   enabled: boolean;
@@ -14,9 +14,19 @@ interface UseRemindersOptions {
   alarmDays?: string | null; // comma-separated day indices, 0=Sun..6=Sat, e.g. '1,2,3,4,5'
 }
 
+export interface AlarmState {
+  firing: boolean;
+  label: string; // e.g. "Wake-up alarm — 7:00 AM"
+}
+
 // Track which reminders have already fired today to avoid repeats
 const firedReminders = new Set<string>();
 const scheduledPushes = new Set<string>();
+
+// Max alarm duration: 10 minutes
+const MAX_ALARM_MS = 10 * 60 * 1000;
+// Snooze duration: 9 minutes
+const SNOOZE_MS = 9 * 60 * 1000;
 
 export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender, alarmSound = 'chime', alarmDays }: UseRemindersOptions) {
   // Use refs so the interval callback always reads the latest values (no stale closures)
@@ -35,6 +45,64 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   userNameRef.current = userName;
   enabledRef.current = enabled;
 
+  // ── Alarm overlay state ──────────────────────────────────────────────────────
+  const [alarmState, setAlarmState] = useState<AlarmState>({ firing: false, label: '' });
+  const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Start the alarm: play sound, show overlay, set 10-min auto-stop */
+  const fireAlarm = useCallback((label: string, sound: AlarmSoundType, spokenMsg: string) => {
+    // Clear any pending snooze
+    if (snoozeTimerRef.current) { clearTimeout(snoozeTimerRef.current); snoozeTimerRef.current = null; }
+    // Clear any previous auto-stop
+    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
+
+    // Play sound continuously (we loop by re-calling every 30s until stopped)
+    const startLooping = (s: AlarmSoundType) => {
+      playAlarmSound(s, MAX_ALARM_MS); // pass full 10 min — stopAlarmSound will cut it
+    };
+    startLooping(sound);
+
+    setAlarmState({ firing: true, label });
+    setTimeout(() => speakRef.current(spokenMsg), sound === 'chime' ? 3500 : 1000);
+
+    // Auto-stop after 10 minutes
+    autoStopTimerRef.current = setTimeout(() => {
+      stopAlarmSound();
+      setAlarmState({ firing: false, label: '' });
+    }, MAX_ALARM_MS);
+  }, []);
+
+  /** Dismiss the alarm entirely */
+  const dismissAlarm = useCallback(() => {
+    stopAlarmSound();
+    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
+    if (snoozeTimerRef.current) { clearTimeout(snoozeTimerRef.current); snoozeTimerRef.current = null; }
+    setAlarmState({ firing: false, label: '' });
+  }, []);
+
+  /** Snooze the alarm for 9 minutes */
+  const snoozeAlarm = useCallback(() => {
+    stopAlarmSound();
+    if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
+    const currentLabel = alarmState.label;
+    const currentSound = alarmSoundRef.current;
+    const currentUser = userNameRef.current;
+    setAlarmState({ firing: false, label: '' });
+    snoozeTimerRef.current = setTimeout(() => {
+      fireAlarm(currentLabel, currentSound, `Hey ${currentUser}, your snoozed alarm is going off now!`);
+    }, SNOOZE_MS);
+  }, [alarmState.label, fireAlarm]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+      if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+      stopAlarmSound();
+    };
+  }, []);
+
   const utils = trpc.useUtils();
   const { permission, requestPermission, scheduleReminder } = usePushNotifications();
 
@@ -52,12 +120,14 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     const handleSwMessage = (event: MessageEvent) => {
       if (event.data?.type === 'PLAY_ALARM') {
         const sound = (event.data.alarmSound as AlarmSoundType) || alarmSoundRef.current;
-        playAlarmSound(sound, 30000);
+        const label = event.data.label || 'Alarm';
+        const msg = event.data.spokenMsg || `Hey ${userNameRef.current}, your alarm is going off!`;
+        fireAlarm(label, sound, msg);
       }
     };
     navigator.serviceWorker?.addEventListener('message', handleSwMessage);
     return () => navigator.serviceWorker?.removeEventListener('message', handleSwMessage);
-  }, [enabled]);
+  }, [enabled, fireAlarm]);
 
   // The actual check function — reads from refs so it's always fresh
   const checkReminders = useCallback(async () => {
@@ -87,10 +157,11 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
         const key = `wakeup-${todayKey}`;
         if (!firedReminders.has(key)) {
           firedReminders.add(key);
+          const timeLabel = new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+          const label = `Wake-up alarm — ${timeLabel}`;
           const msg = `Good morning, ${currentUserName}! It's ${currentWakeUpTime} — time to rise and shine. Let's make today incredible!`;
-          toast.success('Good morning! ☀️', { description: `Wake-up reminder — ${currentWakeUpTime}` });
-          playAlarmSound(currentAlarmSound, 30000);
-          setTimeout(() => speakRef.current(msg), currentAlarmSound === 'chime' ? 3500 : 1000);
+          toast.success('Good morning! ☀️', { description: label });
+          fireAlarm(label, currentAlarmSound, msg);
         }
       }
     }
@@ -120,8 +191,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             const timeStr = eventStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
             const msg = `Hey ${currentUserName}, heads up — ${event.title} starts in 15 minutes at ${timeStr}. Get ready!`;
             toast.info(`⏰ ${event.title}`, { description: `Starts in 15 minutes at ${timeStr}` });
-            playAlarmSound(currentAlarmSound, 8000);
-            setTimeout(() => speakRef.current(msg), currentAlarmSound === 'chime' ? 3500 : 1000);
+            fireAlarm(`${event.title} — in 15 minutes`, currentAlarmSound, msg);
           }
         }
 
@@ -133,8 +203,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             const timeStr = eventStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
             const msg = `${currentUserName}, ${event.title} is starting in just 5 minutes. You're on!`;
             toast.warning(`🔔 ${event.title}`, { description: `Starting in 5 minutes!` });
-            playAlarmSound(currentAlarmSound, 8000);
-            setTimeout(() => speakRef.current(msg), currentAlarmSound === 'chime' ? 3500 : 1000);
+            fireAlarm(`${event.title} — in 5 minutes`, currentAlarmSound, msg);
           }
         }
 
@@ -145,15 +214,14 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             firedReminders.add(key);
             const msg = `${currentUserName}, it's time — ${event.title} is starting right now. Go get it!`;
             toast.error(`🚀 ${event.title}`, { description: `Starting now!` });
-            playAlarmSound(currentAlarmSound, 30000);
-            setTimeout(() => speakRef.current(msg), currentAlarmSound === 'chime' ? 3500 : 1000);
+            fireAlarm(`${event.title} — starting now!`, currentAlarmSound, msg);
           }
         }
       }
     } catch {
       // Silent fail — reminders are best-effort
     }
-  }, [utils]); // Only depends on utils — everything else read from refs
+  }, [utils, fireAlarm]); // Only depends on utils and fireAlarm — everything else read from refs
 
   // Set up the interval once — it never needs to be re-registered
   useEffect(() => {
@@ -242,4 +310,6 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
 
     schedulePushes();
   }, [enabled, permission, utils, scheduleReminder]);
+
+  return { alarmState, dismissAlarm, snoozeAlarm };
 }
