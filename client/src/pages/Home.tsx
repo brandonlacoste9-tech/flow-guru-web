@@ -33,8 +33,6 @@ interface Message {
 const SUGGESTIONS = [
   "What's on my calendar today?",
   "What's the weather?",
-  "Book lunch at noon tomorrow",
-  "Remind me to call Mom at 5pm",
 ];
 
 export default function Home() {
