@@ -63,6 +63,7 @@ export function Settings() {
 
   const [wakeUpTime, setWakeUpTime] = useState('');
   const [alarmSound, setAlarmSound] = useState<string>('chime');
+  const [alarmDays, setAlarmDays] = useState<string>('0,1,2,3,4,5,6');
   const [dailyRoutine, setDailyRoutine] = useState('');
   const [preferencesSummary, setPreferencesSummary] = useState('');
   const [profileDirty, setProfileDirty] = useState(false);
@@ -78,6 +79,7 @@ export function Settings() {
     onSuccess: (data: any) => {
       setWakeUpTime(data.wakeUpTime ?? '');
       setAlarmSound(data.alarmSound ?? 'chime');
+      setAlarmDays(data.alarmDays ?? '0,1,2,3,4,5,6');
       setDailyRoutine(data.dailyRoutine ?? '');
       setPreferencesSummary(data.preferencesSummary ?? '');
       setInstructions(data.customInstructions ?? '');
@@ -210,8 +212,30 @@ export function Settings() {
                   </div>
                   <p className="text-[10px] text-muted-foreground">Click Test to preview the selected alarm sound.</p>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Days</label>
+                  <div className="flex gap-1.5">
+                    {(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] as const).map((day, idx) => {
+                      const active = alarmDays.split(',').map(Number).includes(idx);
+                      return (
+                        <button key={day} type="button"
+                          onClick={() => {
+                            const current = alarmDays ? alarmDays.split(',').map(Number) : [];
+                            const next = active ? current.filter(d => d !== idx) : [...current, idx].sort((a,b) => a-b);
+                            setAlarmDays(next.join(','));
+                            setProfileDirty(true);
+                          }}
+                          className={cn('flex-1 py-2 rounded-xl text-xs font-bold transition-all border',
+                            active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Select which days of the week the wake-up alarm fires.</p>
+                </div>
                 <button disabled={!profileDirty || saveProfileMutation.isLoading}
-                  onClick={() => saveProfileMutation.mutate({ wakeUpTime, dailyRoutine, preferencesSummary, alarmSound } as any)}
+                  onClick={() => saveProfileMutation.mutate({ wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays } as any)}
                   className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
                     profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
                   <Save size={14} />{saveProfileMutation.isLoading ? 'Saving...' : 'Save Profile'}

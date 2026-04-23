@@ -11,16 +11,18 @@ interface UseRemindersOptions {
   speakText: (text: string) => void;
   voiceGender: 'male' | 'female';
   alarmSound?: AlarmSoundType;
+  alarmDays?: string | null; // comma-separated day indices, 0=Sun..6=Sat, e.g. '1,2,3,4,5'
 }
 
 // Track which reminders have already fired today to avoid repeats
 const firedReminders = new Set<string>();
 const scheduledPushes = new Set<string>();
 
-export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender, alarmSound = 'chime' }: UseRemindersOptions) {
+export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender, alarmSound = 'chime', alarmDays }: UseRemindersOptions) {
   // Use refs so the interval callback always reads the latest values (no stale closures)
   const wakeUpTimeRef = useRef(wakeUpTime);
   const alarmSoundRef = useRef(alarmSound);
+  const alarmDaysRef = useRef(alarmDays);
   const speakRef = useRef(speakText);
   const userNameRef = useRef(userName);
   const enabledRef = useRef(enabled);
@@ -28,6 +30,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   // Keep refs in sync with props on every render
   wakeUpTimeRef.current = wakeUpTime ?? null;
   alarmSoundRef.current = alarmSound;
+  alarmDaysRef.current = alarmDays;
   speakRef.current = speakText;
   userNameRef.current = userName;
   enabledRef.current = enabled;
@@ -55,7 +58,14 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     const currentUserName = userNameRef.current;
 
     // ── Wake-up reminder ──
-    if (currentWakeUpTime) {
+    const currentAlarmDays = alarmDaysRef.current;
+    const todayDayOfWeek = now.getDay(); // 0=Sun, 6=Sat
+    const alarmDaysSet = currentAlarmDays
+      ? new Set(currentAlarmDays.split(',').map(Number))
+      : new Set([0,1,2,3,4,5,6]);
+    const alarmAllowedToday = alarmDaysSet.has(todayDayOfWeek);
+
+    if (currentWakeUpTime && alarmAllowedToday) {
       const parts = currentWakeUpTime.split(':');
       const wh = parseInt(parts[0], 10);
       const wm = parseInt(parts[1], 10);

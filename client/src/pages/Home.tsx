@@ -61,6 +61,7 @@ export default function Home() {
   const [showNews, setShowNews] = useState(false);
   const [countryCode, setCountryCode] = useState<string>('us');
   const [wakeUpTime, setWakeUpTime] = useState<string | null>(null);
+  const [alarmDays, setAlarmDays] = useState<string>('0,1,2,3,4,5,6');
   const [alarmSound, setAlarmSound] = useState<import('@/hooks/useAlarmSound').AlarmSoundType>(() => {
     return (localStorage.getItem('alarmSound') as import('@/hooks/useAlarmSound').AlarmSoundType) || 'chime';
   });
@@ -91,6 +92,7 @@ export default function Home() {
       setAlarmSound(data.alarmSound as import('@/hooks/useAlarmSound').AlarmSoundType);
       localStorage.setItem('alarmSound', data.alarmSound);
     }
+    if (data.alarmDays) setAlarmDays(data.alarmDays);
   }, [profileQuery.data]);
 
   const bootstrap = trpc.assistant.bootstrap.useQuery(undefined, { enabled: true });
@@ -289,6 +291,7 @@ export default function Home() {
     speakText,
     voiceGender,
     alarmSound,
+    alarmDays,
   });
 
   const handleConnectCalendar = () => {
