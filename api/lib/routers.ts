@@ -180,7 +180,7 @@ async function extractAndPersistMemory(params: {
       type: "json_schema",
       json_schema: {
         name: "memory_extraction",
-        strict: true,
+        strict: false,
         schema: {
           type: "object",
           properties: {

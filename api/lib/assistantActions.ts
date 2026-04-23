@@ -275,7 +275,7 @@ export async function planAssistantAction(params: {
       type: "json_schema",
       json_schema: {
         name: "assistant_action_plan",
-        strict: true,
+        strict: false,
         schema: {
           type: "object",
           properties: {
@@ -441,7 +441,7 @@ async function resolveCalendarDetails(params: {
       type: "json_schema",
       json_schema: {
         name: "calendar_resolution",
-        strict: true,
+        strict: false,
         schema: {
           type: "object",
           properties: {
