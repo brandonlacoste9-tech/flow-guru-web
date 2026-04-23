@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, CheckCircle2, MessageSquarePlus, Music, Navigation, Newspaper, AlarmClock, ChevronRight } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, CheckCircle2, MessageSquarePlus, Music, Navigation, Newspaper, AlarmClock, ChevronRight, Pause, Play, MapPin } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { ActionResultCard } from "@/components/ActionResultCard";
 import { motion, AnimatePresence } from "framer-motion";
+
+const WEATHER_CODE_LABELS: [number, string][] = [
+  [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
+  [65, "rainy"], [77, "snowy"], [82, "rain showers"], [86, "snow showers"], [99, "thunderstorms"],
+];
+function weatherLabel(code: number): string {
+  return WEATHER_CODE_LABELS.find(([max]) => code <= max)?.[1] ?? "unsettled";
+}
 
 interface Message {
   id: string | number;
@@ -44,6 +52,10 @@ export default function Home() {
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
   const [briefingScript, setBriefingScript] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<{ label: string; uri: string } | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const nowPlayingAudioRef = useRef<HTMLAudioElement | null>(null);
+  const geoFetchedRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -69,6 +81,36 @@ export default function Home() {
       setIsGoogleConnected(!!gcal);
     }
   }, [bootstrap.data]);
+
+  // Auto-geolocation: fetch weather client-side if bootstrap didn't return any
+  useEffect(() => {
+    if (bootstrap.isLoading) return;
+    if (weather !== null) return;
+    if (geoFetchedRef.current) return;
+    if (!('geolocation' in navigator)) return;
+    geoFetchedRef.current = true;
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      try {
+        const [cityRes, wxRes] = await Promise.all([
+          fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`),
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,weather_code&timezone=auto`),
+        ]);
+        const cityData = cityRes.ok ? await cityRes.json() : {};
+        const wxData = wxRes.ok ? await wxRes.json() : {};
+        const c = wxData.current;
+        if (!c || c.temperature_2m == null) return;
+        const cityName = cityData.city || cityData.locality || cityData.principalSubdivision || "Your location";
+        setWeather({
+          tempC: Math.round(c.temperature_2m),
+          feelsLikeC: Math.round(c.apparent_temperature ?? c.temperature_2m),
+          label: weatherLabel(c.weather_code ?? 99),
+          locationName: cityName,
+        });
+      } catch { /* silent */ }
+    }, () => { /* denied — no problem */ });
+  }, [bootstrap.isLoading, weather]);
 
   // Auto-trigger morning briefing once per day on load
   useEffect(() => {
@@ -110,6 +152,32 @@ export default function Home() {
     },
     onError: () => setBriefingLoading(false),
   });
+
+  const quickSoundMutation = trpc.assistant.quickSound.useMutation({
+    onSuccess: (result) => {
+      // Stop previous track
+      if (nowPlayingAudioRef.current) {
+        nowPlayingAudioRef.current.pause();
+        nowPlayingAudioRef.current = null;
+      }
+      const audio = new Audio(result.audioDataUri);
+      audio.onended = () => { setIsPlaying(false); setNowPlaying(null); };
+      audio.onpause = () => setIsPlaying(false);
+      audio.onplay = () => setIsPlaying(true);
+      nowPlayingAudioRef.current = audio;
+      audio.play().catch(() => {});
+      setNowPlaying({ label: result.label, uri: result.audioDataUri });
+      setIsPlaying(true);
+    },
+    onError: () => toast.error("Couldn't load audio right now."),
+  });
+
+  const toggleNowPlaying = () => {
+    const audio = nowPlayingAudioRef.current;
+    if (!audio) return;
+    if (isPlaying) audio.pause();
+    else audio.play().catch(() => {});
+  };
 
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
@@ -212,10 +280,17 @@ export default function Home() {
   // Next upcoming event (first event with a future start time)
   const nextEvent = todayEvents.find(e => e.start && new Date(e.start).getTime() > Date.now());
 
-  // Context-aware quick actions
-  const quickActions = hour < 12
+  type QuickAction = {
+    icon: React.ElementType;
+    label: string;
+    sound?: "focus" | "relax" | "wake_up" | "wind_down" | "rain" | "nature";
+    msg?: string;
+    loading?: boolean;
+  };
+
+  const quickActions: QuickAction[] = hour < 12
     ? [
-        { icon: Music, label: "Focus music", msg: "play some focus music" },
+        { icon: Music, label: "Focus music", sound: "focus" },
         { icon: Navigation, label: "Traffic", msg: "how's traffic to work?" },
         { icon: Newspaper, label: "Top news", msg: "what's in the news?" },
         { icon: Calendar, label: "My day", msg: "what's on my calendar today?" },
@@ -225,14 +300,22 @@ export default function Home() {
         { icon: Navigation, label: "Traffic home", msg: "how's traffic home?" },
         { icon: Calendar, label: "This afternoon", msg: "what do I have this afternoon?" },
         { icon: Newspaper, label: "Top news", msg: "what's happening in the news?" },
-        { icon: Music, label: "Focus music", msg: "play some focus music" },
+        { icon: Music, label: "Focus music", sound: "focus" },
       ]
     : [
-        { icon: Music, label: "Wind down", msg: "play something relaxing" },
+        { icon: Music, label: "Wind down", sound: "wind_down" },
         { icon: Calendar, label: "Tomorrow", msg: "what's on my calendar tomorrow?" },
         { icon: Newspaper, label: "Top news", msg: "what's in the news tonight?" },
         { icon: AlarmClock, label: "Set reminder", msg: "set a reminder for me" },
       ];
+
+  const handleQuickAction = (action: QuickAction) => {
+    if (action.sound) {
+      quickSoundMutation.mutate({ type: action.sound });
+    } else if (action.msg) {
+      handleSend(action.msg);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen bg-black text-white font-['Outfit'] selection:bg-blue-500/30 overflow-hidden">
@@ -428,6 +511,32 @@ export default function Home() {
                   </div>
                 </motion.div>
 
+                {/* Now Playing bar */}
+                <AnimatePresence>
+                  {nowPlaying && (
+                    <motion.div
+                      className="mb-3 flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-3"
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                        <Music className="w-3.5 h-3.5 text-blue-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-white truncate">{nowPlaying.label}</p>
+                        <p className="text-[11px] text-zinc-500">Now playing</p>
+                      </div>
+                      <button
+                        onClick={toggleNowPlaying}
+                        className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+                      >
+                        {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Quick-action chips */}
                 <motion.div
                   className="grid grid-cols-2 gap-2.5"
@@ -435,24 +544,31 @@ export default function Home() {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.45 }}
                 >
-                  {quickActions.map(({ icon: Icon, label, msg }, idx) => (
-                    <motion.button
-                      key={label}
-                      onClick={() => handleSend(msg)}
-                      initial={{ opacity: 0, scale: 0.92 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.5 + idx * 0.07 }}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.97 }}
-                      className="flex items-center gap-3 bg-white/4 hover:bg-white/8 border border-white/5 hover:border-white/10 rounded-2xl px-4 py-3.5 text-left transition-all group"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
-                        <Icon className="w-4 h-4 text-zinc-300" />
-                      </div>
-                      <span className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors">{label}</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-zinc-600 ml-auto group-hover:text-zinc-400 transition-colors" />
-                    </motion.button>
-                  ))}
+                  {quickActions.map((action, idx) => {
+                    const Icon = action.icon;
+                    const isLoadingThis = action.sound != null && quickSoundMutation.isPending;
+                    return (
+                      <motion.button
+                        key={action.label}
+                        onClick={() => handleQuickAction(action)}
+                        disabled={isLoadingThis}
+                        initial={{ opacity: 0, scale: 0.92 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.5 + idx * 0.07 }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.97 }}
+                        className="flex items-center gap-3 bg-white/4 hover:bg-white/8 border border-white/5 hover:border-white/10 rounded-2xl px-4 py-3.5 text-left transition-all group disabled:opacity-60"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
+                          {isLoadingThis
+                            ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                            : <Icon className="w-4 h-4 text-zinc-300" />}
+                        </div>
+                        <span className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors">{action.label}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-zinc-600 ml-auto group-hover:text-zinc-400 transition-colors" />
+                      </motion.button>
+                    );
+                  })}
                 </motion.div>
               </motion.div>
             )}
