@@ -288,12 +288,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   // Define providers in order of priority
-  // Moonshot first (user preference), DeepSeek fallback.
+  // Forge (Manus proxy) first as most reliable, then Moonshot, then DeepSeek as fallbacks.
   const providers = [];
   if (ENV.useLocalAi) providers.push({ name: "localai", model: "gpt-4", key: "none", url: `${ENV.localAiUrl}/v1/chat/completions` });
+  if (hasForge) providers.push({ name: "forge", model: "gemini-2.5-flash", key: ENV.forgeApiKey, url: `${ENV.forgeApiUrl.replace(/\/$/, "")}/chat/completions` });
   if (hasMoonshot) providers.push({ name: "moonshot", model: "moonshot-v1-8k", key: ENV.moonshotApiKey, url: "https://api.moonshot.ai/v1/chat/completions" });
   if (hasDeepSeek) providers.push({ name: "deepseek", model: "deepseek-chat", key: ENV.deepSeekApiKey, url: "https://api.deepseek.com/v1/chat/completions" });
-  if (hasForge) providers.push({ name: "forge", model: "gemini-1.5-flash", key: ENV.forgeApiKey, url: ENV.forgeApiUrl });
 
   // Hard identity override — strips Moonshot's default "I am Moonshot AI" persona.
   // Injected as the very first message so it takes priority.
@@ -329,7 +329,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       });
 
       if (normalizedResponseFormat) {
-        if (provider.name === "deepseek" && normalizedResponseFormat.type === "json_schema") {
+        // DeepSeek and Forge (Manus proxy) don't support json_schema — convert to json_object
+        if ((provider.name === "deepseek" || provider.name === "forge") && normalizedResponseFormat.type === "json_schema") {
           payload.response_format = { type: "json_object" };
         } else {
           payload.response_format = normalizedResponseFormat;
@@ -352,13 +353,13 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       const errorText = await response.text();
       console.warn(`[Flow Guru] Provider ${provider.name} failed (${response.status}):`, errorText);
       
-      // If it's an auth error, bad request, or rate limit, and we have more providers, continue to next
-      if ((response.status === 401 || response.status === 400 || response.status === 429) && providers.indexOf(provider) < providers.length - 1) {
+      // Always try the next provider if available
+      if (providers.indexOf(provider) < providers.length - 1) {
         console.log(`[Flow Guru] ${provider.name} failed with ${response.status}, trying next provider...`);
         continue;
       }
 
-      // If not auth error or no more providers, return the error
+      // No more providers, return the error
       return {
         id: "error-fallback-" + Date.now(),
         created: Math.floor(Date.now() / 1000),
