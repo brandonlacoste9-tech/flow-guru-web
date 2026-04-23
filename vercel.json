@@ -10,10 +10,6 @@
       "maxDuration": 60
     }
   },
-  "builds": [
-    { "src": "api/*.ts", "use": "@vercel/node" },
-    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist/public" } }
-  ],
   "rewrites": [
     { "source": "/api/integrations/google-calendar/start", "destination": "/api/google-calendar-start.ts" },
     { "source": "/api/integrations/google-calendar/callback", "destination": "/api/google-calendar-callback.ts" },
