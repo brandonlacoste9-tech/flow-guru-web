@@ -445,10 +445,11 @@ export default function Home() {
 
                   {/* Calendar Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors"
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 }}
+                    onClick={() => navigate("/calendar")}
                   >
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
                     <div className="flex items-center justify-between mb-3">
@@ -456,7 +457,7 @@ export default function Home() {
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Today</span>
                       </div>
-                      <button onClick={() => navigate("/calendar")} className="text-[10px] uppercase font-bold tracking-wider text-primary hover:underline">Open Calendar</button>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-primary">Open Calendar</span>
                     </div>
                     
                     {todayEvents.length > 0 ? (
