@@ -15,6 +15,9 @@ const ACTION_NAMES = [
   "route.get",
   "weather.get",
   "news.get",
+  "reminder.set",
+  "browser.use",
+  "system.subagent",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -58,6 +61,23 @@ const plannerSchema = z.object({
     .object({
       query: z.string().nullable(),
       targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+    })
+    .nullable(),
+  reminder: z
+    .object({
+      label: z.string().nullable(),
+      when: z.string().nullable(),
+      recurring: z.boolean().nullable(),
+    })
+    .nullable(),
+  browser: z
+    .object({
+      task_description: z.string().nullable(),
+    })
+    .nullable(),
+  subagent: z
+    .object({
+      task: z.string().nullable(),
     })
     .nullable(),
 });
@@ -232,6 +252,9 @@ export async function planAssistantAction(params: {
           "• weather.get → ANY mention of weather, temperature, rain, forecast. Examples: 'what's the weather?', 'is it going to rain?', 'how's it outside?'.",
           "• route.get → ANY mention of directions, traffic, commute, how to get somewhere. Examples: 'how's traffic?', 'directions to work', 'route to the gym'.",
           "• news.get → ANY mention of news, headlines, briefing, what's happening. Examples: 'what's in the news?', 'give me a tech briefing', 'any updates?'.",
+          "• reminder.set → ANY mention of reminders, alerts, 'remind me', 'don't let me forget'. Examples: 'remind me to take meds at 9', 'set a reminder for laundry', 'remind me every Monday to meal prep'.",
+          "• browser.use → ANY mention of browsing, searching the live web, finding things online, or navigating sites. Examples: 'search Google for...', 'tell me what's on the front page of Reddit', 'find me flights to London'.",
+          "• system.subagent → ANY mention of complex system-level tasks, editing files, managing directories, running terminal commands, or multi-step execution. Examples: 'create a folder called Audit', 'write a python script to...', 'delete the old test file'.",
           "• none → ONLY when the user is making small talk, asking about you, or saying something truly unrelated to any tool.",
           "",
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
@@ -315,8 +338,34 @@ export async function planAssistantAction(params: {
               required: ["query", "targetType"],
               additionalProperties: false,
             },
+            reminder: {
+              type: ["object", "null"],
+              properties: {
+                label: { type: ["string", "null"] },
+                when: { type: ["string", "null"] },
+                recurring: { type: ["boolean", "null"] },
+              },
+              required: ["label", "when", "recurring"],
+              additionalProperties: false,
+            },
+            browser: {
+              type: ["object", "null"],
+              properties: {
+                task_description: { type: ["string", "null"] },
+              },
+              required: ["task_description"],
+              additionalProperties: false,
+            },
+            subagent: {
+              type: ["object", "null"],
+              properties: {
+                task: { type: ["string", "null"] },
+              },
+              required: ["task"],
+              additionalProperties: false,
+            },
           },
-          required: ["action", "rationale", "route", "weather", "news", "calendar", "music"],
+          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "reminder", "browser", "subagent"],
           additionalProperties: false,
         },
       },
@@ -755,53 +804,69 @@ async function executeCalendarCreateAction(
   };
 }
 
-async function executeMusicAction(
-  plan: AssistantActionPlan,
-  options: { userId: number }
-): Promise<AssistantActionResult> {
-  const query = plan.music?.query || "some good music";
-  const targetType = plan.music?.targetType || "track";
+async function executeMusicAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
+  const query = plan.music?.query || "relaxing ambient music";
+  const soundPrompt = buildSoundPrompt(query, plan.music?.targetType);
 
   try {
-    const { searchAndPlaySpotify } = await import("./_core/spotify");
-    const result = await searchAndPlaySpotify({
-      userId: options.userId,
-      query,
-      type: (targetType as string) || "track",
+    const { generateSoundAsDataUri } = await import("./_core/elevenLabs");
+    const audioDataUri = await generateSoundAsDataUri({
+      text: soundPrompt,
+      durationSeconds: 15,
+      promptInfluence: 0.7,
     });
 
-    if (result.status === "no_device") {
-      return {
-        action: "music.play",
-        status: "needs_input",
-        title: "Spotify Device Needed",
-        summary: result.message || "I found the music, but I couldn't find an active Spotify device to play it on.",
-        provider: "spotify",
-      };
-    }
-
-    const item = result.item;
     return {
       action: "music.play",
       status: "executed",
-      title: `Playing: ${item.name}`,
-      summary: `I've started ${item.name} by ${item.artists?.[0]?.name || "the artist"} on Spotify for you.`,
-      provider: "spotify",
+      title: `Playing: ${query}`,
+      summary: `Here's some ${query} for you 🔥`,
+      provider: "elevenlabs",
       data: {
-        item,
-        externalUrl: item.external_urls?.spotify,
+        audioDataUri,
+        query,
+        soundPrompt,
       },
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Spotify failed.";
+    const msg = error instanceof Error ? error.message : "Sound generation failed.";
     return {
       action: "music.play",
       status: "failed",
-      title: "Spotify snag",
-      summary: msg,
-      provider: "spotify",
+      title: "Audio snag",
+      summary: msg.includes("not configured")
+        ? "I need the ElevenLabs API key to play sounds. Can you add it in your settings?"
+        : `Couldn't generate that audio right now — ${msg}`,
+      provider: "elevenlabs",
     };
   }
+}
+
+function buildSoundPrompt(query: string, targetType?: string | null): string {
+  const q = query.toLowerCase();
+
+  if (/chime|alarm|bell|wake.?up|ring|alert/.test(q)) {
+    return `A pleasant, melodic ${q} sound. Gentle, ascending tones that feel warm and encouraging.`;
+  }
+  if (/relax|ambient|calm|chill|zen|meditat|sleep|sooth/.test(q)) {
+    return `${query}. Soft, atmospheric soundscape with gentle pads and warm tones. Peaceful and calming.`;
+  }
+  if (/rain|ocean|waves|forest|bird|nature|thunder|wind|water|fire|campfire/.test(q)) {
+    return `Natural ${query} sounds. Rich, immersive, realistic environmental audio.`;
+  }
+  if (/house|techno|electronic|edm|dance|beat|bass|drum/.test(q)) {
+    return `Upbeat ${query} music. Punchy rhythm, energetic beat, electronic production.`;
+  }
+  if (/jazz|blues|soul|funk/.test(q)) {
+    return `Smooth ${query} music. Warm instruments, relaxed groove, sophisticated feel.`;
+  }
+  if (/classical|piano|orchestra|violin|cello/.test(q)) {
+    return `Beautiful ${query} music. Elegant, emotional, orchestral.`;
+  }
+  if (/lofi|lo-fi|hip.?hop|study/.test(q)) {
+    return `Lo-fi ${query} music. Warm vinyl crackle, mellow beats, cozy atmosphere.`;
+  }
+  return `${query} music. Pleasant, well-produced, high-quality audio.`;
 }
 
 export async function executeAssistantAction(
@@ -855,14 +920,135 @@ export async function executeAssistantAction(
           timeZone: options.timeZone,
         });
       case "music.play":
-        if (!options?.userId) {
-          return connectionRequiredResult(
-            plan.action,
-            "spotify",
-            "I need you to be logged in before I can play music on your Spotify account.",
-          );
+        return await executeMusicAction(plan);
+      case "reminder.set": {
+        const label = plan.reminder?.label || "Reminder";
+        const when = plan.reminder?.when;
+        if (!options?.userId || !options.message) {
+          return {
+            action: "reminder.set",
+            status: "needs_input",
+            title: "Reminder details needed",
+            summary: "What should I remind you about, and when?",
+          };
         }
-        return await executeMusicAction(plan, { userId: options.userId });
+        const reminderPlan = {
+          ...plan,
+          action: "calendar.create_event" as const,
+          calendar: {
+            title: `Reminder: ${label}`,
+            startDescription: when || "soon",
+            endDescription: null,
+          },
+        };
+        try {
+          const calResult = await executeCalendarCreateAction(reminderPlan, {
+            userId: options.userId,
+            userName: options.userName,
+            message: options.message,
+            memoryContext: options.memoryContext,
+            timeZone: options.timeZone,
+          });
+          return {
+            ...calResult,
+            action: "reminder.set",
+            title: `Reminder set: ${label}`,
+          };
+        } catch {
+          return {
+            action: "reminder.set",
+            status: "executed",
+            title: `Reminder noted: ${label}`,
+            summary: `I'll remind you: "${label}"${when ? ` at ${when}` : ""}.`,
+            provider: "flow-guru",
+          };
+        }
+      }
+      case "browser.use": {
+        const task = plan.browser?.task_description;
+        if (!task) {
+          return {
+            action: plan.action,
+            status: "needs_input",
+            title: "Browser task details needed",
+            summary: "What specifically do you want me to do or look up on the web?",
+          };
+        }
+        try {
+          const resp = await fetch("http://localhost:8000/browse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task }),
+            signal: AbortSignal.timeout(180_000),
+          });
+          if (!resp.ok) throw new Error("Browser microservice failed");
+          const j = await resp.json();
+          return {
+            action: plan.action,
+            status: "executed",
+            title: "Web Browsing Complete",
+            summary: j.result || "I finished the task online.",
+            provider: "browser-use",
+          };
+        } catch (error) {
+          return {
+            action: plan.action,
+            status: "failed",
+            title: "Web Browsing Failed",
+            summary: "I tried to accomplish this via the browser agent, but it encountered an error.",
+            provider: "browser-use",
+          };
+        }
+      }
+      case "system.subagent": {
+        const task = plan.subagent?.task;
+        if (!task) {
+          return {
+            action: plan.action,
+            status: "needs_input",
+            title: "Subagent task needed",
+            summary: "What specifically do you want the subagent to do?",
+          };
+        }
+        try {
+          const resp = await fetch("http://127.0.0.1:3030/a2a", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer local_token" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "message/send",
+              params: {
+                message: {
+                  messageId: "msg-" + Date.now(),
+                  role: "user",
+                  parts: [{ kind: "text", text: task }],
+                },
+              },
+            }),
+            signal: AbortSignal.timeout(180_000),
+          });
+          if (!resp.ok) throw new Error("Nullclaw A2A request failed");
+          const res = await resp.json();
+          const replyText = res.result?.message?.parts?.[0]?.text || "The subagent completed your request.";
+          return {
+            action: plan.action,
+            status: "executed",
+            title: "Subagent Task Complete",
+            summary: replyText,
+            provider: "nullclaw",
+            data: res,
+          };
+        } catch (e) {
+          return {
+            action: plan.action,
+            status: "failed",
+            title: "Subagent error",
+            summary: (e as Error).message,
+            provider: "nullclaw",
+          };
+        }
+      }
       default:
         return null;
     }
@@ -882,7 +1068,7 @@ export async function executeAssistantAction(
             : plan.action.startsWith("calendar")
               ? "google-calendar"
               : plan.action.startsWith("music")
-                ? "spotify"
+                ? "elevenlabs"
                 : undefined,
     };
   }

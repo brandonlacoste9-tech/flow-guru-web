@@ -65,4 +65,61 @@ describe("ActionResultCard", () => {
     expect(html).toContain("needs input");
     expect(html).toContain("without fully executing the action");
   });
+
+  it("renders an audio player element for music.play with an audio data URI", () => {
+    const html = renderCard({
+      action: "music.play",
+      status: "executed",
+      title: "Playing: lofi study beats",
+      summary: "Here is some lofi study beats for you.",
+      provider: "elevenlabs",
+      data: {
+        audioDataUri: "data:audio/mpeg;base64,abc123",
+        query: "lofi study beats",
+      },
+    });
+
+    expect(html).toContain("<audio");
+    expect(html).toContain("data:audio/mpeg;base64,abc123");
+    expect(html).toContain("lofi study beats");
+  });
+
+  it("renders the summary text for browser.use executed results", () => {
+    const html = renderCard({
+      action: "browser.use",
+      status: "executed",
+      title: "Web Browsing Complete",
+      summary: "The current Bitcoin price is $65,000.",
+      provider: "browser-use",
+    });
+
+    expect(html).toContain("Web Browsing Complete");
+    expect(html).toContain("The current Bitcoin price is $65,000.");
+  });
+
+  it("renders an error state with the failure message for failed actions", () => {
+    const html = renderCard({
+      action: "browser.use",
+      status: "failed",
+      title: "Web Browsing Failed",
+      summary: "I tried to accomplish this via the browser agent, but it encountered an error.",
+      provider: "browser-use",
+    });
+
+    expect(html).toContain("Web Browsing Failed");
+    expect(html).toContain("encountered an error");
+  });
+
+  it("renders the summary for system.subagent completed results", () => {
+    const html = renderCard({
+      action: "system.subagent",
+      status: "executed",
+      title: "Subagent Task Complete",
+      summary: "Done — I created the folder structure for the Audit project.",
+      provider: "nullclaw",
+    });
+
+    expect(html).toContain("Subagent Task Complete");
+    expect(html).toContain("Done");
+  });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+const hasGoogleCredentials = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
 describe("google oauth credentials", () => {
-  it("accepts the configured client identity at the token endpoint", async () => {
+  it.skipIf(!hasGoogleCredentials)("accepts the configured client identity at the token endpoint", async () => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 

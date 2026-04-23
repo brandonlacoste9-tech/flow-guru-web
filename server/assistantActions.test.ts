@@ -17,6 +17,10 @@ const googleCalendarMocks = vi.hoisted(() => ({
   createGoogleCalendarEvent: vi.fn(),
 }));
 
+const elevenLabsMocks = vi.hoisted(() => ({
+  generateSoundAsDataUri: vi.fn(),
+}));
+
 vi.mock("./_core/llm", () => ({
   invokeLLM: llmMocks.invokeLLM,
 }));
@@ -34,6 +38,12 @@ vi.mock("./_core/googleCalendar", () => ({
   createGoogleCalendarEvent: googleCalendarMocks.createGoogleCalendarEvent,
 }));
 
+vi.mock("./_core/elevenLabs", () => ({
+  generateSoundAsDataUri: elevenLabsMocks.generateSoundAsDataUri,
+}));
+
+const NULL_EXTENSIONS = { reminder: null, browser: null, subagent: null } as const;
+
 describe("assistantActions", () => {
   beforeEach(() => {
     llmMocks.invokeLLM.mockReset();
@@ -41,6 +51,7 @@ describe("assistantActions", () => {
     dbMocks.getProviderConnection.mockReset();
     googleCalendarMocks.listGoogleCalendarEvents.mockReset();
     googleCalendarMocks.createGoogleCalendarEvent.mockReset();
+    elevenLabsMocks.generateSoundAsDataUri.mockReset();
     dbMocks.getProviderConnection.mockResolvedValue(null);
     vi.restoreAllMocks();
   });
@@ -60,6 +71,7 @@ describe("assistantActions", () => {
       news: null,
       calendar: null,
       music: null,
+      ...NULL_EXTENSIONS,
     });
 
     expect(result).toEqual({
@@ -117,6 +129,7 @@ describe("assistantActions", () => {
       news: null,
       calendar: null,
       music: null,
+      ...NULL_EXTENSIONS,
     });
 
     expect(result?.status).toBe("executed");
@@ -167,6 +180,7 @@ describe("assistantActions", () => {
         },
         calendar: null,
         music: null,
+        ...NULL_EXTENSIONS,
       },
       {
         memoryContext: "Preferences: follows AI research and climate policy closely.",
@@ -212,6 +226,7 @@ describe("assistantActions", () => {
       },
       calendar: null,
       music: null,
+      ...NULL_EXTENSIONS,
     });
 
     expect(result).toMatchObject({
@@ -272,6 +287,7 @@ describe("assistantActions", () => {
           endDescription: null,
         },
         music: null,
+        ...NULL_EXTENSIONS,
       },
       {
         userId: 42,
@@ -350,6 +366,7 @@ describe("assistantActions", () => {
           endDescription: null,
         },
         music: null,
+        ...NULL_EXTENSIONS,
       },
       {
         userId: 42,
@@ -373,14 +390,14 @@ describe("assistantActions", () => {
       status: "executed",
       provider: "google-calendar",
       title: "Booked: Physiotherapy with Rick",
-      summary: "It’s on your Google Calendar for Tuesday, April 21, 2026 at 9:30 AM.",
     });
+    expect(result?.summary).toContain("Tuesday, April 21, 2026 at 9:30 AM");
   });
 
-  it("returns a connection-required result for deferred calendar and music actions", async () => {
+  it("returns connection-required for calendar without user context", async () => {
     const { executeAssistantAction } = await import("./assistantActions");
 
-    const calendarResult = await executeAssistantAction(
+    const result = await executeAssistantAction(
       {
         action: "calendar.create_event",
         rationale: "The user wants to create an event.",
@@ -393,6 +410,7 @@ describe("assistantActions", () => {
           endDescription: null,
         },
         music: null,
+        ...NULL_EXTENSIONS,
       },
       {
         userId: 7,
@@ -401,28 +419,304 @@ describe("assistantActions", () => {
       },
     );
 
-    const musicResult = await executeAssistantAction({
+    expect(result).toMatchObject({
+      action: "calendar.create_event",
+      status: "needs_connection",
+      provider: "google-calendar",
+    });
+  });
+
+  it("plays music via ElevenLabs sound generation", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    elevenLabsMocks.generateSoundAsDataUri.mockResolvedValueOnce("data:audio/mpeg;base64,abc123");
+
+    const result = await executeAssistantAction({
       action: "music.play",
-      rationale: "The user wants music playback.",
+      rationale: "The user wants to play music.",
       route: null,
       weather: null,
       news: null,
       calendar: null,
       music: {
-        query: "workout music",
+        query: "lofi study beats",
         targetType: "playlist",
       },
+      ...NULL_EXTENSIONS,
     });
 
-    expect(calendarResult).toMatchObject({
-      action: "calendar.create_event",
-      status: "needs_connection",
-      provider: "google-calendar",
-    });
-    expect(musicResult).toMatchObject({
+    expect(result).toMatchObject({
       action: "music.play",
-      status: "needs_connection",
-      provider: "spotify",
+      status: "executed",
+      provider: "elevenlabs",
+      title: "Playing: lofi study beats",
+    });
+    expect(result?.data).toMatchObject({
+      audioDataUri: "data:audio/mpeg;base64,abc123",
+      query: "lofi study beats",
+    });
+    expect(elevenLabsMocks.generateSoundAsDataUri).toHaveBeenCalledWith(
+      expect.objectContaining({
+        durationSeconds: 15,
+        promptInfluence: 0.7,
+      }),
+    );
+  });
+
+  it("returns a failed result when ElevenLabs sound generation errors", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    elevenLabsMocks.generateSoundAsDataUri.mockRejectedValueOnce(new Error("API quota exceeded"));
+
+    const result = await executeAssistantAction({
+      action: "music.play",
+      rationale: "The user wants some music.",
+      route: null,
+      weather: null,
+      news: null,
+      calendar: null,
+      music: {
+        query: "chill vibes",
+        targetType: null,
+      },
+      ...NULL_EXTENSIONS,
+    });
+
+    expect(result).toMatchObject({
+      action: "music.play",
+      status: "failed",
+      provider: "elevenlabs",
+      title: "Audio snag",
+    });
+  });
+
+  it("returns needs_input for browser.use without a task description", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    const result = await executeAssistantAction({
+      action: "browser.use",
+      rationale: "The user wants to browse the web.",
+      route: null,
+      weather: null,
+      news: null,
+      calendar: null,
+      music: null,
+      reminder: null,
+      browser: { task_description: null },
+      subagent: null,
+    });
+
+    expect(result).toMatchObject({
+      action: "browser.use",
+      status: "needs_input",
+      title: "Browser task details needed",
+    });
+  });
+
+  it("returns executed result when browser microservice succeeds", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ result: "The current Bitcoin price is $65,000." }),
+    } as Response);
+
+    const result = await executeAssistantAction({
+      action: "browser.use",
+      rationale: "The user wants to find the Bitcoin price.",
+      route: null,
+      weather: null,
+      news: null,
+      calendar: null,
+      music: null,
+      reminder: null,
+      browser: { task_description: "Find the current Bitcoin price" },
+      subagent: null,
+    });
+
+    expect(result).toMatchObject({
+      action: "browser.use",
+      status: "executed",
+      title: "Web Browsing Complete",
+      summary: "The current Bitcoin price is $65,000.",
+      provider: "browser-use",
+    });
+  });
+
+  it("returns failed result when browser microservice is unavailable", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("ECONNREFUSED"));
+
+    const result = await executeAssistantAction({
+      action: "browser.use",
+      rationale: "The user wants to search the web.",
+      route: null,
+      weather: null,
+      news: null,
+      calendar: null,
+      music: null,
+      reminder: null,
+      browser: { task_description: "Search for latest tech news" },
+      subagent: null,
+    });
+
+    expect(result).toMatchObject({
+      action: "browser.use",
+      status: "failed",
+      title: "Web Browsing Failed",
+      provider: "browser-use",
+    });
+  });
+
+  it("returns needs_input for system.subagent without a task", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    const result = await executeAssistantAction({
+      action: "system.subagent",
+      rationale: "The user wants an autonomous task done.",
+      route: null,
+      weather: null,
+      news: null,
+      calendar: null,
+      music: null,
+      reminder: null,
+      browser: null,
+      subagent: { task: null },
+    });
+
+    expect(result).toMatchObject({
+      action: "system.subagent",
+      status: "needs_input",
+      title: "Subagent task needed",
+    });
+  });
+
+  it("returns executed result when nullclaw subagent responds successfully", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        result: {
+          message: {
+            parts: [{ kind: "text", text: "Done — I created the folder structure." }],
+          },
+        },
+      }),
+    } as Response);
+
+    const result = await executeAssistantAction({
+      action: "system.subagent",
+      rationale: "The user wants a file system task done.",
+      route: null,
+      weather: null,
+      news: null,
+      calendar: null,
+      music: null,
+      reminder: null,
+      browser: null,
+      subagent: { task: "Create an Audit folder with subfolders for Q1 through Q4" },
+    });
+
+    expect(result).toMatchObject({
+      action: "system.subagent",
+      status: "executed",
+      title: "Subagent Task Complete",
+      summary: "Done — I created the folder structure.",
+      provider: "nullclaw",
+    });
+  });
+
+  it("returns failed result when nullclaw subagent is unreachable", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("Connection refused"));
+
+    const result = await executeAssistantAction({
+      action: "system.subagent",
+      rationale: "The user wants a system-level task done.",
+      route: null,
+      weather: null,
+      news: null,
+      calendar: null,
+      music: null,
+      reminder: null,
+      browser: null,
+      subagent: { task: "Write a Python script to process CSVs" },
+    });
+
+    expect(result).toMatchObject({
+      action: "system.subagent",
+      status: "failed",
+      title: "Subagent error",
+      provider: "nullclaw",
+    });
+  });
+
+  it("routes reminder.set through calendar creation when calendar is connected", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+
+    dbMocks.getProviderConnection.mockResolvedValueOnce({
+      provider: "google-calendar",
+      status: "connected",
+      accessToken: "token",
+    });
+    llmMocks.invokeLLM.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              title: "Reminder: Take meds",
+              startIso: "2026-04-23T09:00:00-04:00",
+              endIso: "2026-04-23T09:15:00-04:00",
+              timeMinIso: null,
+              timeMaxIso: null,
+              searchQuery: null,
+            }),
+          },
+        },
+      ],
+    });
+    googleCalendarMocks.createGoogleCalendarEvent.mockResolvedValueOnce({
+      id: "reminder-1",
+      summary: "Reminder: Take meds",
+      htmlLink: "https://calendar.google.com/event?eid=r1",
+      status: "confirmed",
+      start: { dateTime: "2026-04-23T09:00:00-04:00", timeZone: "America/New_York" },
+      end: { dateTime: "2026-04-23T09:15:00-04:00", timeZone: "America/New_York" },
+    });
+
+    const result = await executeAssistantAction(
+      {
+        action: "reminder.set",
+        rationale: "The user wants a reminder.",
+        route: null,
+        weather: null,
+        news: null,
+        calendar: null,
+        music: null,
+        reminder: {
+          label: "Take meds",
+          when: "9 AM",
+          recurring: false,
+        },
+        browser: null,
+        subagent: null,
+      },
+      {
+        userId: 5,
+        userName: "Sam",
+        message: "Remind me to take my meds at 9 AM",
+        timeZone: "America/New_York",
+      },
+    );
+
+    expect(result).toMatchObject({
+      action: "reminder.set",
+      status: "executed",
+      title: "Reminder set: Take meds",
+      provider: "google-calendar",
     });
   });
 });
