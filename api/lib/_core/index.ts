@@ -69,7 +69,7 @@ export async function createMainApp() {
       if (!text) {
         return res.status(400).send("Text query parameter is required");
       }
-      const { textToSpeech } = await import("../elevenLabs.js");
+      const { textToSpeech } = await import("./elevenLabs.js");
       const audioBuffer = await textToSpeech({ text, voiceId, stability: 0.75, similarityBoost: 0.75 });
       res.setHeader("Content-Type", "audio/mpeg");
       res.send(audioBuffer);
