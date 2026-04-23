@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc-client';
@@ -75,16 +75,19 @@ export function Settings() {
   const [newFactValue, setNewFactValue] = useState('');
   const [showAddFact, setShowAddFact] = useState(false);
 
-  const profileQuery = trpc.settings.getProfile.useQuery(undefined, {
-    onSuccess: (data: any) => {
-      setWakeUpTime(data.wakeUpTime ?? '');
-      setAlarmSound(data.alarmSound ?? 'chime');
-      setAlarmDays(data.alarmDays ?? '0,1,2,3,4,5,6');
-      setDailyRoutine(data.dailyRoutine ?? '');
-      setPreferencesSummary(data.preferencesSummary ?? '');
-      setInstructions(data.customInstructions ?? '');
-    },
-  });
+  const profileQuery = trpc.settings.getProfile.useQuery(undefined);
+
+  // React Query v5: onSuccess on useQuery is removed — use useEffect watching .data instead
+  useEffect(() => {
+    const data = profileQuery.data as any;
+    if (!data) return;
+    setWakeUpTime(data.wakeUpTime ?? '');
+    setAlarmSound(data.alarmSound ?? 'chime');
+    setAlarmDays(data.alarmDays ?? '0,1,2,3,4,5,6');
+    setDailyRoutine(data.dailyRoutine ?? '');
+    setPreferencesSummary(data.preferencesSummary ?? '');
+    setInstructions(data.customInstructions ?? '');
+  }, [profileQuery.data]);
 
   // Fixed: use correct procedure name 'listFacts'
   const factsQuery = trpc.settings.listFacts.useQuery();
