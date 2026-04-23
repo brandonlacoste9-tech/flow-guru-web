@@ -7,6 +7,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { ActionResultCard } from "@/components/ActionResultCard";
 import { motion, AnimatePresence } from "framer-motion";
 import { OrbVisualizer } from "@/components/OrbVisualizer";
+import { useLocation } from "wouter";
 
 interface Message {
   id: string | number;
@@ -23,6 +24,7 @@ const SUGGESTIONS = [
 ];
 
 export default function Home() {
+  const [, navigate] = useLocation();
   const { user, logout } = useAuth({ redirectOnUnauthenticated: false });
   const [messages, setMessages] = useState<Message[]>([]);
   const [isListening, setIsListening] = useState(false);
@@ -328,9 +330,7 @@ export default function Home() {
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Today</span>
                       </div>
-                      {!isGoogleConnected && (
-                         <button onClick={handleConnectCalendar} className="text-[10px] uppercase font-bold tracking-wider text-primary hover:underline">Connect</button>
-                      )}
+                      <button onClick={() => navigate("/calendar")} className="text-[10px] uppercase font-bold tracking-wider text-primary hover:underline">Open Calendar</button>
                     </div>
                     
                     {isGoogleConnected ? (

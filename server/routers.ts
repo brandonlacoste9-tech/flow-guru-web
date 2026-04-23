@@ -15,6 +15,10 @@ import {
   createConversationMessage,
   createConversationThread,
   createUserMemoryFacts,
+  createLocalEvent,
+  deleteLocalEvent,
+  listLocalEvents,
+  updateLocalEvent,
   findLatestConversationThread,
   getConversationThreadById,
   getUserMemoryProfile,
@@ -444,6 +448,67 @@ async function extractAndPersistMemory(params: {
 
 export const appRouter = router({
   system: systemRouter,
+  calendar: router({
+    list: publicProcedure
+      .input(z.object({
+        startAt: z.string(),
+        endAt: z.string(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        return await listLocalEvents(userId, new Date(input.startAt), new Date(input.endAt));
+      }),
+    create: publicProcedure
+      .input(z.object({
+        title: z.string().min(1).max(255),
+        description: z.string().optional(),
+        startAt: z.string(),
+        endAt: z.string(),
+        location: z.string().optional(),
+        allDay: z.boolean().default(false),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const id = await createLocalEvent({
+          userId,
+          title: input.title,
+          description: input.description ?? null,
+          startAt: new Date(input.startAt),
+          endAt: new Date(input.endAt),
+          location: input.location ?? null,
+          allDay: input.allDay ? 1 : 0,
+        });
+        return { id };
+      }),
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().min(1).max(255).optional(),
+        description: z.string().nullable().optional(),
+        startAt: z.string().optional(),
+        endAt: z.string().optional(),
+        location: z.string().nullable().optional(),
+        allDay: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { id, allDay, startAt, endAt, ...rest } = input;
+        await updateLocalEvent(userId, id, {
+          ...rest,
+          ...(startAt ? { startAt: new Date(startAt) } : {}),
+          ...(endAt ? { endAt: new Date(endAt) } : {}),
+          ...(allDay !== undefined ? { allDay: allDay ? 1 : 0 } : {}),
+        });
+        return { success: true };
+      }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await deleteLocalEvent(userId, input.id);
+        return { success: true };
+      }),
+  }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

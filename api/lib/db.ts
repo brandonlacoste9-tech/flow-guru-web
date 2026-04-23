@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./drizzle/schema.js";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
 
 let _db: any = null;
 /** Raw postgres.js client — required for self-heal DDL (`unsafe`), not the `postgres` factory. */
@@ -383,18 +383,30 @@ export async function listLocalEvents(userId: number, startAfter?: Date, endBefo
       const db = await getDb();
       if (!db) return [];
       await ensureTables(db);
-      let query = db.select().from(schema.localEvents).where(eq(schema.localEvents.userId, userId));
-      
-      const conditions = [eq(schema.localEvents.userId, userId)];
-      if (startAfter) conditions.push(desc(schema.localEvents.startAt)); // placeholder for actual filtering
-      
-      // Simpler version for now to avoid complex drizzle-orm imports if not already there
+      const conditions: any[] = [eq(schema.localEvents.userId, userId)];
+      if (startAfter) conditions.push(gte(schema.localEvents.startAt, startAfter));
+      if (endBefore) conditions.push(lte(schema.localEvents.startAt, endBefore));
       return await db.select().from(schema.localEvents)
-        .where(eq(schema.localEvents.userId, userId))
+        .where(and(...conditions))
         .orderBy(schema.localEvents.startAt);
     } catch (err) {
       console.error("[DB] listLocalEvents failed:", err);
       return [];
+    }
+}
+
+export async function updateLocalEvent(userId: number, eventId: number, data: Partial<{
+  title: string; description: string | null; startAt: Date; endAt: Date; location: string | null; allDay: number;
+}>): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      await ensureTables(db);
+      await db.update(schema.localEvents)
+        .set({ ...data, updatedAt: new Date() })
+        .where(and(eq(schema.localEvents.id, eventId), eq(schema.localEvents.userId, userId)));
+    } catch (err) {
+      console.error("[DB] updateLocalEvent failed:", err);
     }
 }
 
