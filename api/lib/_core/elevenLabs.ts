@@ -18,8 +18,8 @@ export type SpeechToSpeechOptions = {
   modelId?: string;
 };
 
-const DEFAULT_VOICE_ID = "nPczCjzI2devNBz1zQrb"; // Brian — warm, natural, conversational
-const DEFAULT_TTS_MODEL = "eleven_turbo_v2_5"; // Fastest + highest quality
+const DEFAULT_VOICE_ID = "N2lVS1wzUvBXUvBCW9ng"; // Callum (Buddy-like, Energetic)
+const DEFAULT_TTS_MODEL = "eleven_turbo_v2_5";
 const DEFAULT_STS_MODEL = "eleven_english_sts_v2";
 
 /**
@@ -32,24 +32,26 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
   }
 
   const voiceId = options.voiceId || DEFAULT_VOICE_ID;
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+  const url = ENV.useLocalAi ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+
+  const body: any = ENV.useLocalAi 
+    ? { model: "en-us-librispeech-low.onnx", input: options.text } // LocalAI TTS payload
+    : {
+        text: options.text,
+        model_id: options.modelId || DEFAULT_TTS_MODEL,
+        voice_settings: {
+          stability: options.stability ?? 0.5,
+          similarity_boost: options.similarityBoost ?? 0.75,
+        },
+      };
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      "xi-api-key": apiKey,
+      ...(ENV.useLocalAi ? {} : { "xi-api-key": apiKey }),
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      text: options.text,
-      model_id: options.modelId || DEFAULT_TTS_MODEL,
-      voice_settings: {
-        stability: options.stability ?? 0.35,
-        similarity_boost: options.similarityBoost ?? 0.85,
-        style: 0.2,
-        use_speaker_boost: true,
-      },
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {

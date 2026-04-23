@@ -24,9 +24,6 @@ import {
   resolveAssistantUserId,
   touchConversationThread,
   upsertUserMemoryProfile,
-  createLocalEvent,
-  listLocalEvents,
-  deleteLocalEvent,
 } from "./db";
 
 const sendMessageInput = z.object({
@@ -520,32 +517,43 @@ export const appRouter = router({
 
       const calendarPromise = (async (): Promise<CalendarItem[]> => {
         try {
+          const { listGoogleCalendarEvents } = await import("./_core/googleCalendar");
+          const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
+          if (!conn) return [];
           const now = new Date();
           const endOfDay = new Date(now);
           endOfDay.setHours(23, 59, 59, 999);
-
-          const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
-          if (conn) {
-            const { listGoogleCalendarEvents } = await import("./_core/googleCalendar");
-            const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
-            return (result?.items ?? []).map((e: any) => ({ title: e.summary || "Untitled event", start: e.start?.dateTime || e.start?.date || null, allDay: !e.start?.dateTime }));
-          } else {
-            const localEvents = await listLocalEvents(userId);
-            return localEvents
-              .filter(e => {
-                const start = new Date(e.startAt);
-                return start >= now && start <= endOfDay;
-              })
-              .map(e => ({
-                title: e.title,
-                start: e.startAt.toISOString(),
-                allDay: !!e.allDay
-              }));
-          }
+          const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
+          return (result?.items ?? []).map((e: any) => ({ title: e.summary || "Untitled event", start: e.start?.dateTime || e.start?.date || null, allDay: !e.start?.dateTime }));
         } catch { return []; }
       })();
 
       [weather, todayEvents] = await Promise.all([weatherPromise, calendarPromise]);
+
+      // --- Generate Proactive Greeting ---
+      let proactiveGreeting: string | null = null;
+      if (messages.length === 0) {
+        try {
+          const userName = ctx.user?.name || "there";
+          const memoryContext = buildMemoryContext({ userName, profile, facts: memoryFacts });
+          const weatherContext = weather ? `${weather.tempC}°C and ${weather.label} in ${weather.locationName}` : "unknown weather";
+          const eventsContext = todayEvents.length > 0 
+            ? todayEvents.map(e => `- ${e.title} at ${e.start ? new Date(e.start).toLocaleTimeString() : 'all day'}`).join("\n")
+            : "no events today";
+
+          const greetingResponse = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: `You are ${assistantName}, a premium personal assistant. Generate a short (1-2 sentence) warm greeting for ${userName}. Mention their weather (${weatherContext}) and one brief thing about their day (${eventsContext}) if relevant. Sound like a close friend. DO NOT use placeholders.`,
+              }
+            ]
+          });
+          proactiveGreeting = extractAssistantText(greetingResponse.choices[0]?.message.content ?? "");
+        } catch (e) {
+          console.error("[Flow Guru] Failed to generate proactive greeting", e);
+        }
+      }
 
       return {
         profile,
@@ -556,6 +564,7 @@ export const appRouter = router({
         assistantName,
         weather,
         todayEvents,
+        proactiveGreeting,
       };
     }),
     startFresh: publicProcedure.mutation(async ({ ctx }) => {
@@ -595,6 +604,9 @@ export const appRouter = router({
       };
     }),
     send: publicProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
+      try {
+        fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] /api/trpc/chat.send CALLED with: ${input.message}\n`);
+      } catch (e) {}
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
 
@@ -644,46 +656,34 @@ export const appRouter = router({
         facts: memoryFacts,
       });
 
-      const hour = new Date().getHours();
-      const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night";
       const systemPrompt = [
-        `You are ${assistantName}, ${userName}'s personal AI assistant. It is currently ${timeOfDay}.`,
+        `You are ${assistantName}, ${userName}'s personal assistant.`,
+        "You sound like a close friend. Short, warm, direct. Never robotic.",
         "",
-        "PERSONALITY:",
-        "You are warm, sharp, and human. You talk like a trusted friend who happens to be incredibly capable.",
-        "Never sound like a customer service bot. Never sound like a generic AI.",
-        "You have a subtle wit, you're encouraging, and you get straight to the point.",
+        "RULES:",
+        "- Reply in 1-2 sentences max. Be concise.",
+        "- NEVER list what you can do. NEVER say 'I can help with...' or 'Would you like me to...'",
+        "- When you book something, confirm briefly: 'Done — physio with Rick is on your calendar for tomorrow at 9:30 AM.'",
+        "- When you check weather, share the actual data: 'It's 18°C and partly cloudy in Toronto right now.'",
+        "- When the user mentions a time or event, just book it. Don't ask for confirmation.",
+        "- Use the user's name and saved memory naturally. Reference their habits.",
+        "- Sound human: contractions, casual tone, occasional emoji.",
         "",
-        "HARD RULES — never break these:",
-        "- Max 1-2 sentences. If you can say it in 5 words, say it in 5 words.",
-        "- NEVER start with 'Sure!', 'Certainly!', 'Of course!', 'Great!', 'Absolutely!', or 'Happy to help'.",
-        "- NEVER say 'I can help you with that' or list your capabilities.",
-        "- NEVER ask permission before acting — just do it and report back.",
-        "- NEVER use generic affirmations. Lead with the actual answer.",
-        "- Use contractions (it's, you're, that's). Sound spoken, not written.",
-        "- Reference the user's name and memory naturally — not every message, but when it fits.",
+        "THINGS YOU CAN DO (but never mention these to the user):",
+        "- Book events on Google Calendar",
+        "- List upcoming calendar events",
+        "- Check weather for any city",
+        "- Get directions and travel times",
+        "- Set reminders (via calendar)",
         "",
-        "TONE EXAMPLES (match this energy):",
-        `User: what's the weather like?`,
-        `${assistantName}: 14°C and cloudy in Toronto right now — grab a jacket.`,
-        "",
-        `User: book physio at 9:30 tomorrow`,
-        `${assistantName}: Done — physio is on your calendar for tomorrow at 9:30 AM.`,
-        "",
-        `User: what do I have this afternoon?`,
-        `${assistantName}: Team sync at 2 PM and that's it — pretty light afternoon.`,
-        "",
-        `User: how's traffic to the office?`,
-        `${assistantName}: About 28 minutes right now, slightly heavier than usual on the 401.`,
-        "",
-        `User: how are you?`,
-        `${assistantName}: All good — what do you need?`,
-        "",
-        "TIME CONTEXT:",
-        `It is ${timeOfDay}. Tailor your energy accordingly — calm and efficient in the morning, slightly looser in the evening.`,
-        "",
-        `${userName}'s saved memory:`,
+        `The user's saved memory:`,
         memoryContext,
+        "",
+        "AUTONOMOUS AGENT PROTOCOL (The Manus Loop):",
+        "1. ANALYZE: Process the user intent and current project state.",
+        "2. SELECT: Choose the precise tool (Browser or Sub-Agent) for the next step.",
+        "3. OBSERVE: Wait for the result. Never hallucinate outputs.",
+        "4. ITERATE: If the task needs more steps, delegate them one by one.",
       ].join("\n");
 
       let actionResult: AssistantActionResult | null = null;
@@ -702,7 +702,10 @@ export const appRouter = router({
           timeZone: input.timeZone ?? null,
         });
       } catch (error) {
-        console.warn("[Flow Guru] Action planning or execution failed. Continuing with standard chat.", error);
+        console.error("[Flow Guru] SYSTEM FAILURE IN SEND:", error);
+        if (error instanceof Error) {
+          console.error("[Flow Guru] Stack:", error.stack);
+        }
         actionResult = {
           action: "none",
           status: "failed",
@@ -876,37 +879,7 @@ export const appRouter = router({
           audioDataUri: `data:audio/mpeg;base64,${buffer.toString("base64")}`,
         };
       }),
-    listLocalEvents: protectedProcedure.query(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
-      return await listLocalEvents(userId);
-    }),
-    createLocalEvent: protectedProcedure
-      .input(z.object({
-        title: z.string().min(1),
-        description: z.string().optional(),
-        startAt: z.date(),
-        endAt: z.date(),
-        location: z.string().optional(),
-        allDay: z.boolean().optional(),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const userId = await resolveAssistantUserId(ctx.user);
-        return await createLocalEvent({
-          userId,
-          ...input,
-          startAt: input.startAt,
-          endAt: input.endAt,
-          allDay: input.allDay ? 1 : 0,
-        });
-      }),
-    deleteLocalEvent: protectedProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        const userId = await resolveAssistantUserId(ctx.user);
-        await deleteLocalEvent(userId, input.id);
-        return { success: true };
-      }),
   }),
 });
 
-export type AppRouter = typeof appRouter;
+export type AppRouter = typeof appRouter;

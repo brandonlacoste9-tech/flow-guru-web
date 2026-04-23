@@ -290,6 +290,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   // Define providers in order of priority
   // Moonshot first (user preference), DeepSeek fallback.
   const providers = [];
+  if (ENV.useLocalAi) providers.push({ name: "localai", model: "gpt-4", key: "none", url: `${ENV.localAiUrl}/v1/chat/completions` });
   if (hasMoonshot) providers.push({ name: "moonshot", model: "moonshot-v1-8k", key: ENV.moonshotApiKey, url: "https://api.moonshot.ai/v1/chat/completions" });
   if (hasDeepSeek) providers.push({ name: "deepseek", model: "deepseek-chat", key: ENV.deepSeekApiKey, url: "https://api.deepseek.com/v1/chat/completions" });
   if (hasForge) providers.push({ name: "forge", model: "gemini-1.5-flash", key: ENV.forgeApiKey, url: ENV.forgeApiUrl });

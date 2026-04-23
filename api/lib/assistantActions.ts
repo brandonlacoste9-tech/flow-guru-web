@@ -372,13 +372,24 @@ export async function planAssistantAction(params: {
     },
   });
 
+  console.log("[Flow Guru] Planner output:", extractTextContent(response.choices[0]?.message.content ?? ""));
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  const parsed = plannerSchema.safeParse(JSON.parse(raw || "{}"));
-  if (!parsed.success) {
-    throw new Error(`Planner output did not match schema: ${parsed.error.message}`);
+  
+  // Robust JSON Extraction (The Lasso Pattern)
+  let jsonString = raw;
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonString = jsonMatch[0];
   }
 
-  return parsed.data;
+  try {
+    const parsed = plannerSchema.parse(JSON.parse(jsonString));
+    return parsed;
+  } catch (e) {
+    console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw:", raw);
+    fs.appendFileSync("debug_logs.txt", `[${new Date().toISOString()}] Parse Error: ${e}\nRaw: ${raw}\n`);
+    throw new Error(`Failed to parse AI plan: ${(e as Error).message}`);
+  }
 }
 
 async function geocodeAddress(address: string) {
@@ -817,8 +828,48 @@ async function executeCalendarCreateAction(
 
 async function executeMusicAction(
   plan: AssistantActionPlan,
+  options?: { userId?: number },
 ): Promise<AssistantActionResult> {
   const query = plan.music?.query || "relaxing ambient music";
+  const targetType = plan.music?.targetType || "track";
+
+  if (options?.userId) {
+    try {
+      const { searchAndPlaySpotify } = await import("./_core/spotify.js");
+      const result = await searchAndPlaySpotify({
+        userId: options.userId,
+        query,
+        type: targetType === "liked" ? "track" : targetType,
+      });
+
+      if (result.status === "success") {
+        return {
+          action: "music.play",
+          status: "executed",
+          title: `Playing on Spotify`,
+          summary: `Playing ${result.item.name} on Spotify 🔥`,
+          provider: "spotify",
+          data: result,
+        };
+      } else if (result.status === "no_device") {
+        return {
+          action: "music.play",
+          status: "executed",
+          title: "Spotify device needed",
+          summary: result.message,
+          provider: "spotify",
+          data: result,
+        };
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes("Spotify not connected")) {
+        // Continue to ElevenLabs fallback
+      } else {
+        console.warn("[Flow Guru] Spotify playback failed, falling back to ElevenLabs:", msg);
+      }
+    }
+  }
 
   // Build descriptive prompt for ElevenLabs sound generation
   const soundPrompt = buildSoundPrompt(query, plan.music?.targetType);
@@ -949,7 +1000,7 @@ export async function executeAssistantAction(
           timeZone: options.timeZone,
         });
       case "music.play":
-        return await executeMusicAction(plan);
+        return await executeMusicAction(plan, options);
       case "reminder.set": {
         const label = plan.reminder?.label || "Reminder";
         const when = plan.reminder?.when;
@@ -1036,6 +1087,10 @@ export async function executeAssistantAction(
       }
       case "system.subagent": {
         const task = plan.subagent?.task;
+        try {
+          fs.appendFileSync("debug_logs.txt", `[${new Date().toISOString()}] Executing subagent: ${task}\n`);
+        } catch (e) {}
+        console.log("[Flow Guru] Executing subagent task:", task);
         if (!task) {
           return {
             action: plan.action,
@@ -1046,6 +1101,7 @@ export async function executeAssistantAction(
         }
         
         try {
+          console.log("[Flow Guru] Calling Nullclaw A2A at http://127.0.0.1:3030/a2a...");
           const resp = await fetch("http://127.0.0.1:3030/a2a", {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": "Bearer local_token" },
@@ -1064,8 +1120,14 @@ export async function executeAssistantAction(
             signal: AbortSignal.timeout(180_000), 
           });
 
-          if (!resp.ok) throw new Error("Nullclaw A2A request failed");
+          console.log("[Flow Guru] Nullclaw status:", resp.status);
+          if (!resp.ok) {
+            const errText = await resp.text();
+            console.error("[Flow Guru] Nullclaw error body:", errText);
+            throw new Error(`Nullclaw A2A request failed: ${resp.status} ${errText}`);
+          }
           const res = await resp.json();
+          console.log("[Flow Guru] Nullclaw response:", JSON.stringify(res, null, 2));
           const replyText = res.result?.message?.parts?.[0]?.text || "The subagent completed your request.";
 
           return {
@@ -1077,6 +1139,7 @@ export async function executeAssistantAction(
             data: res,
           };
         } catch (e) {
+          console.error("[Flow Guru] Subagent execution catch block:", e);
           return {
             action: plan.action,
             status: "failed",

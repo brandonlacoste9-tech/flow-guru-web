@@ -1,5 +1,6 @@
 import { ENV } from "./env";
 import { upsertProviderConnection, getProviderConnection } from "../db";
+import { encryptToken, decryptToken } from "./crypto";
 
 const SPOTIFY_AUTH_URL = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API_BASE = "https://api.spotify.com/v1";
@@ -59,8 +60,8 @@ export async function connectSpotify(params: {
     userId: params.userId,
     provider: "spotify" as const,
     status: "connected" as const,
-    accessToken: tokenData.access_token,
-    refreshToken: tokenData.refresh_token || null,
+    accessToken: encryptToken(tokenData.access_token),
+    refreshToken: encryptToken(tokenData.refresh_token || null),
     expiresAtUnixMs: tokenData.expires_in ? Date.now() + tokenData.expires_in * 1000 : null,
     externalAccountLabel: meData.display_name || meData.id || "Spotify Account",
     lastError: null,
@@ -76,6 +77,11 @@ export async function refreshSpotifyToken(userId: number) {
     throw new Error("No Spotify refresh token available.");
   }
 
+  const storedRefreshToken = decryptToken(connection.refreshToken);
+  if (!storedRefreshToken) {
+    throw new Error("No Spotify refresh token available.");
+  }
+
   const authHeader = btoa(`${ENV.spotifyClientId}:${ENV.spotifyClientSecret}`);
   const response = await fetch(SPOTIFY_AUTH_URL, {
     method: "POST",
@@ -85,7 +91,7 @@ export async function refreshSpotifyToken(userId: number) {
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: connection.refreshToken,
+      refresh_token: storedRefreshToken,
     }),
   });
 
@@ -96,13 +102,13 @@ export async function refreshSpotifyToken(userId: number) {
   const tokenData = await response.json();
   const updated = {
     ...connection,
-    accessToken: tokenData.access_token,
-    refreshToken: tokenData.refresh_token || connection.refreshToken,
+    accessToken: encryptToken(tokenData.access_token),
+    refreshToken: encryptToken(tokenData.refresh_token || storedRefreshToken),
     expiresAtUnixMs: Date.now() + tokenData.expires_in * 1000,
   };
 
   await upsertProviderConnection(updated);
-  return tokenData.access_token;
+  return tokenData.access_token as string;
 }
 
 export async function searchAndPlaySpotify(params: {
@@ -115,7 +121,7 @@ export async function searchAndPlaySpotify(params: {
     throw new Error("Spotify not connected.");
   }
 
-  let token = connection.accessToken;
+  let token = decryptToken(connection.accessToken);
   if (connection.expiresAtUnixMs && Date.now() > Number(connection.expiresAtUnixMs)) {
     token = await refreshSpotifyToken(params.userId);
   }

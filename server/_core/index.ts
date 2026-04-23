@@ -1,4 +1,8 @@
-// Removed dotenv for Vercel stability
+// Removed dotenv for Vercel stability, but re-enabled for Local Dev
+import dotenv from "dotenv";
+if (!process.env.VERCEL) {
+  dotenv.config();
+}
 console.log('>>> FLOW GURU SERVER STARTING...');
 import express from "express";
 import { createServer } from "http";
@@ -7,6 +11,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerProviderConnectionRoutes } from "./providerConnections";
 import { registerStorageProxy } from "./storageProxy";
+import { registerElevenLabsRoutes } from "./elevenlabs";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 // Removed static import of vite/dev-tools to prevent Vercel 500 errors
@@ -35,12 +40,11 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 export async function createMainApp() {
   const app = express();
   
-  // 1. TRPC API - HIGHEST PRIORITY (Regex catch-all for any TRPC call)
+  // 1. TRPC API - HIGHEST PRIORITY (Specific to /api/trpc to avoid catching source files)
   const trpcMiddleware = createExpressMiddleware({
     router: appRouter,
     createContext,
   });
-  app.use(/.*trpc.*/, trpcMiddleware);
   app.use("/api/trpc", trpcMiddleware);
   app.use("/trpc", trpcMiddleware);
 
@@ -60,6 +64,7 @@ export async function createMainApp() {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   registerProviderConnectionRoutes(app);
+  registerElevenLabsRoutes(app);
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {

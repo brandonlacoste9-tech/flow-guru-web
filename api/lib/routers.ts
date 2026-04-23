@@ -32,6 +32,8 @@ const sendMessageInput = z.object({
   threadId: z.number().int().positive().optional(),
 });
 
+
+
 const MEMORY_FACT_CATEGORIES = [
   "wake_up_time",
   "daily_routine",
@@ -516,45 +518,56 @@ export const appRouter = router({
         facts: memoryFacts,
       });
 
-      const hour = new Date().getHours();
-      const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night";
+      const now = new Date();
+      const userTimeZone = input.timeZone || "UTC";
+      const dateStr = now.toLocaleDateString("en-US", { 
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        timeZone: userTimeZone
+      });
+      const timeStr = now.toLocaleTimeString("en-US", { 
+        hour: 'numeric', minute: '2-digit', hour12: true,
+        timeZone: userTimeZone
+      });
+
+      const isGoogleConnected = (await listProviderConnections(userId)).some(c => c.provider === "google-calendar" && c.status === "connected");
+      const isSpotifyConnected = (await listProviderConnections(userId)).some(c => c.provider === "spotify" && c.status === "connected");
+
       const systemPrompt = [
-        `You are ${assistantName}, ${userName}'s personal AI assistant. It is currently ${timeOfDay}.`,
+        `You are ${assistantName}, ${userName}'s personal Flow Guru and loyal buddy.`,
+        `Current Time: ${timeStr} on ${dateStr}`,
+        `User Timezone: ${input.timeZone || "UTC"}`,
+        `Integrations: Google Calendar: ${isGoogleConnected ? 'CONNECTED' : 'NOT CONNECTED'}, Spotify: ${isSpotifyConnected ? 'CONNECTED' : 'NOT CONNECTED'}`,
         "",
-        "PERSONALITY:",
-        "You are warm, sharp, and human. You talk like a trusted friend who happens to be incredibly capable.",
-        "Never sound like a customer service bot. Never sound like a generic AI.",
-        "You have a subtle wit, you're encouraging, and you get straight to the point.",
+        "PERSONALITY & TONE:",
+        "- Be encouraging, high-energy, and effortlessly smooth. You're here to keep them in the zone.",
+        "- Speak with a natural, conversational flow. Avoid robotic lists or choppy structures.",
+        "- Use the user's name naturally. Reference their habits and saved memory (preferences, routine) in almost every reply.",
+        "- Use human fillers like 'Ah', 'Got it', 'Actually', or 'Honestly' occasionally to keep the vibe casual and smooth.",
+        "- If an integration is NOT CONNECTED and the user asks for related info, politely suggest they click the 'Connect' link in their dashboard.",
+        "- Use contractions and occasional emojis. You're a buddy, not a bot.",
         "",
-        "HARD RULES — never break these:",
-        "- Max 1-2 sentences. If you can say it in 5 words, say it in 5 words.",
-        "- NEVER start with 'Sure!', 'Certainly!', 'Of course!', 'Great!', 'Absolutely!', or 'Happy to help'.",
-        "- NEVER say 'I can help you with that' or list your capabilities.",
-        "- NEVER ask permission before acting — just do it and report back.",
-        "- NEVER use generic affirmations. Lead with the actual answer.",
-        "- Use contractions (it's, you're, that's). Sound spoken, not written.",
-        "- Reference the user's name and memory naturally — not every message, but when it fits.",
+        "RULES:",
+        "- Reply in 1-2 sentences max. Extreme brevity is key.",
+        "- NEVER say 'I can help with...' or 'As an AI...'. Just do the work.",
+        "- When you book or check something, confirm with enthusiasm: 'Done! Physio with Rick is in for 9:30 AM tomorrow. You got this!'",
         "",
-        "TONE EXAMPLES (match this energy):",
-        `User: what's the weather like?`,
-        `${assistantName}: 14°C and cloudy in Toronto right now — grab a jacket.`,
+        "THINGS YOU CAN DO (but never mention these to the user):",
+        "- Book events on Google Calendar",
+        "- List upcoming calendar events",
+        "- Check weather for any city",
+        "- Get directions and travel times",
+        "- Set reminders (via calendar)",
+        "- Play music, playlists, and artists on Spotify or via sound generation",
+        "- Browse the live web to find answers or perform tasks",
+        "- Delegate complex or multi-step system tasks (shell, files, script execution) to an autonomous sub-agent",
         "",
-        `User: book physio at 9:30 tomorrow`,
-        `${assistantName}: Done — physio is on your calendar for tomorrow at 9:30 AM.`,
+        "AUTONOMOUS AGENT PROTOCOL (The Manus Loop):",
+        "1. ANALYZE: Process the user intent and current project state.",
+        "2. SELECT: Choose the precise tool (Browser or Sub-Agent) for the next step.",
+        "3. OBSERVE: You must wait for the tool output. Do not hallucinate results.",
+        "4. ITERATE: If the sub-agent needs more steps, delegate them one by one until the goal is finished.",
         "",
-        `User: what do I have this afternoon?`,
-        `${assistantName}: Team sync at 2 PM and that's it — pretty light afternoon.`,
-        "",
-        `User: how's traffic to the office?`,
-        `${assistantName}: About 28 minutes right now, slightly heavier than usual on the 401.`,
-        "",
-        `User: how are you?`,
-        `${assistantName}: All good — what do you need?`,
-        "",
-        "TIME CONTEXT:",
-        `It is ${timeOfDay}. Tailor your energy accordingly — calm and efficient in the morning, slightly looser in the evening.`,
-        "",
-        `${userName}'s saved memory:`,
+        `The user's saved memory:`,
         memoryContext,
       ].join("\n");
 
@@ -574,7 +587,10 @@ export const appRouter = router({
           timeZone: input.timeZone ?? null,
         });
       } catch (error) {
-        console.warn("[Flow Guru] Action planning or execution failed. Continuing with standard chat.", error);
+        console.error("[Flow Guru] SYSTEM FAILURE:", error);
+        if (error instanceof Error) {
+          console.error("[Flow Guru] Stack:", error.stack);
+        }
         actionResult = {
           action: "none",
           status: "failed",
@@ -736,13 +752,17 @@ export const appRouter = router({
         text: z.string().min(1).max(2000),
         voiceId: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const memoryFacts = await listUserMemoryFacts(userId);
+        const voiceFact = memoryFacts.find(f => f.factKey === "voice_id" || f.factKey === "preferred_voice");
+        
         const { textToSpeech } = await import("./_core/elevenLabs.js");
         const buffer = await textToSpeech({
           text: input.text,
-          voiceId: input.voiceId,
-          stability: 0.6,
-          similarityBoost: 0.8,
+          voiceId: input.voiceId || voiceFact?.factValue,
+          stability: 0.75, // Higher stability for smoother, less jittery delivery
+          similarityBoost: 0.75,
         });
         return {
           audioDataUri: `data:audio/mpeg;base64,${buffer.toString("base64")}`,

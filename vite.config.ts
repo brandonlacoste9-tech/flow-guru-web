@@ -170,6 +170,10 @@ export default defineConfig({
   },
   server: {
     host: true,
+    proxy: {
+      "/api": "http://localhost:3000",
+      "/trpc": "http://localhost:3000",
+    },
     allowedHosts: [
       ".manuspre.computer",
       ".manus.computer",
@@ -181,6 +185,12 @@ export default defineConfig({
     ],
     fs: {
       strict: true,
+      allow: [
+        path.resolve(import.meta.dirname),
+        path.resolve(import.meta.dirname, "client"),
+        path.resolve(import.meta.dirname, "shared"),
+        path.resolve(import.meta.dirname, "node_modules"),
+      ],
       deny: ["**/.*"],
     },
   },

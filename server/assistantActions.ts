@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getProviderConnection, createLocalEvent, listLocalEvents } from "./db";
+import { getProviderConnection } from "./db";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
@@ -15,7 +15,6 @@ const ACTION_NAMES = [
   "route.get",
   "weather.get",
   "news.get",
-  "reminder.set",
   "browser.use",
   "system.subagent",
 ] as const;
@@ -30,6 +29,16 @@ const NEWS_ISSUE_SLUGS = [
 const plannerSchema = z.object({
   action: z.enum(ACTION_NAMES),
   rationale: z.string(),
+  browser: z
+    .object({
+      task: z.string().nullable(),
+    })
+    .nullable(),
+  subagent: z
+    .object({
+      task: z.string().nullable(),
+    })
+    .nullable(),
   route: z
     .object({
       origin: z.string().nullable(),
@@ -61,23 +70,6 @@ const plannerSchema = z.object({
     .object({
       query: z.string().nullable(),
       targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
-    })
-    .nullable(),
-  reminder: z
-    .object({
-      label: z.string().nullable(),
-      when: z.string().nullable(),
-      recurring: z.boolean().nullable(),
-    })
-    .nullable(),
-  browser: z
-    .object({
-      task_description: z.string().nullable(),
-    })
-    .nullable(),
-  subagent: z
-    .object({
-      task: z.string().nullable(),
     })
     .nullable(),
 });
@@ -245,17 +237,21 @@ export async function planAssistantAction(params: {
           "You are Flow Guru's intent classifier. Your ONLY job is to decide which tool to call.",
           "ALWAYS choose an action when possible — err on the side of calling a tool rather than returning 'none'.",
           "",
-          "ACTION RULES:",
-          "• music.play → ANY mention of playing music, playlists, artists, genres, songs, chimes, sounds, or vibes. Examples: 'play house music', 'play my morning playlist', 'play something relaxing', 'put on some Drake', 'play a wake up chime'.",
-          "• calendar.create_event → ANY mention of scheduling, booking, adding to calendar, reminders. Examples: 'book physio at 9:30', 'schedule lunch with mom', 'remind me to call the dentist tomorrow'.",
-          "• calendar.list_events → ANY question about schedule, agenda, what's next, upcoming events. Examples: 'what's on my calendar?', 'do I have anything tomorrow?', 'what's my schedule today?'.",
-          "• weather.get → ANY mention of weather, temperature, rain, forecast. Examples: 'what's the weather?', 'is it going to rain?', 'how's it outside?'.",
-          "• route.get → ANY mention of directions, traffic, commute, how to get somewhere. Examples: 'how's traffic?', 'directions to work', 'route to the gym'.",
-          "• news.get → ANY mention of news, headlines, briefing, what's happening. Examples: 'what's in the news?', 'give me a tech briefing', 'any updates?'.",
-          "• reminder.set → ANY mention of reminders, alerts, 'remind me', 'don't let me forget'. Examples: 'remind me to take meds at 9', 'set a reminder for laundry', 'remind me every Monday to meal prep'.",
-          "• browser.use → ANY mention of browsing, searching the live web, finding things online, or navigating sites. Examples: 'search Google for...', 'tell me what's on the front page of Reddit', 'find me flights to London'.",
-          "• system.subagent → ANY mention of complex system-level tasks, editing files, managing directories, running terminal commands, or multi-step execution. Examples: 'create a folder called Audit', 'write a python script to...', 'delete the old test file'.",
-          "• none → ONLY when the user is making small talk, asking about you, or saying something truly unrelated to any tool.",
+          "AVAILABLE TOOLS:",
+          "- calendar.create_event: For scheduling or booking things on the calendar.",
+          "- calendar.list_events: For checking a schedule or listing upcoming items.",
+          "- weather.get: For checking current or future weather conditions.",
+          "- route.get: For travel times, directions, or distances between points.",
+          "- music.play: For playing music on Spotify.",
+          "- news.get: For latest headlines or specific news issues.",
+          "- browser.use: For browsing the web to find answers, research topics, or perform web-based tasks.",
+          "- system.subagent: For ANY complex system tasks: file operations, terminal commands, writing scripts, running Python, or performing multi-step autonomous actions on the user's machine.",
+          "- none: Use this for general conversation or if no tool fits.",
+          "",
+          "AGENT DELEGATION RULES:",
+          "- If the user asks to 'Check XYZ website', 'Search for...', or 'Find out who won...', use 'browser.use'.",
+          "- If the user asks to 'Add a file', 'Create a folder', 'Python script', 'Run a command', or 'Do a system audit', use 'system.subagent'.",
+          "- Prefer 'system.subagent' for ALL file system and shell operations.",
           "",
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
         ].join("\n"),
@@ -338,34 +334,20 @@ export async function planAssistantAction(params: {
               required: ["query", "targetType"],
               additionalProperties: false,
             },
-            reminder: {
-              type: ["object", "null"],
-              properties: {
-                label: { type: ["string", "null"] },
-                when: { type: ["string", "null"] },
-                recurring: { type: ["boolean", "null"] },
-              },
-              required: ["label", "when", "recurring"],
-              additionalProperties: false,
-            },
             browser: {
               type: ["object", "null"],
-              properties: {
-                task_description: { type: ["string", "null"] },
-              },
-              required: ["task_description"],
+              properties: { task: { type: "string" } },
+              required: ["task"],
               additionalProperties: false,
             },
             subagent: {
               type: ["object", "null"],
-              properties: {
-                task: { type: ["string", "null"] },
-              },
+              properties: { task: { type: "string" } },
               required: ["task"],
               additionalProperties: false,
             },
           },
-          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "reminder", "browser", "subagent"],
+          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "browser", "subagent"],
           additionalProperties: false,
         },
       },
@@ -373,12 +355,27 @@ export async function planAssistantAction(params: {
   });
 
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  const parsed = plannerSchema.safeParse(JSON.parse(raw || "{}"));
-  if (!parsed.success) {
-    throw new Error(`Planner output did not match schema: ${parsed.error.message}`);
+  try {
+    fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Planner Raw: ${raw}\n`);
+  } catch (e) {}
+
+  // Robust JSON Extraction
+  let jsonString = raw;
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonString = jsonMatch[0];
   }
 
-  return parsed.data;
+  try {
+    const parsed = plannerSchema.parse(JSON.parse(jsonString));
+    return parsed;
+  } catch (e) {
+    console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw:", raw);
+    try {
+      fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Parse Error: ${e}\n`);
+    } catch (err) {}
+    throw new Error(`Failed to parse AI plan: ${(e as Error).message}`);
+  }
 }
 
 async function geocodeAddress(address: string) {
@@ -655,7 +652,13 @@ async function executeCalendarListAction(
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
   const connection = await getProviderConnection(options.userId, "google-calendar");
-  const isGoogleConnected = connection && (connection as any).status === "connected";
+  if (!connection || (connection as any).status !== "connected") {
+    return connectionRequiredResult(
+      plan.action,
+      "google-calendar",
+      "Google Calendar needs to be connected before I can check your schedule.",
+    );
+  }
 
   const resolved = await resolveCalendarDetails({
     plan,
@@ -665,60 +668,37 @@ async function executeCalendarListAction(
     timeZone: options.timeZone,
   });
 
-  const timeMin = resolved.timeMinIso ? new Date(resolved.timeMinIso) : new Date();
-  const timeMax = resolved.timeMaxIso ? new Date(resolved.timeMaxIso) : new Date(Date.now() + 1000 * 60 * 60 * 24 * 7);
+  const events = await listGoogleCalendarEvents({
+    userId: options.userId,
+    timeMinIso: resolved.timeMinIso ?? new Date().toISOString(),
+    timeMaxIso:
+      resolved.timeMaxIso ?? new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+    maxResults: 5,
+    query: resolved.searchQuery ?? normalizeText(plan.calendar?.title),
+  });
 
-  let items: any[] = [];
-  let provider = "local-calendar";
-
-  if (isGoogleConnected) {
-    const events = await listGoogleCalendarEvents({
-      userId: options.userId,
-      timeMinIso: timeMin.toISOString(),
-      timeMaxIso: timeMax.toISOString(),
-      maxResults: 5,
-      query: resolved.searchQuery ?? normalizeText(plan.calendar?.title),
-    });
-    items = (events.items ?? []).map(event => ({
-      id: event.id ?? null,
-      title: event.summary ?? "Untitled event",
-      description: event.description ?? null,
-      start: event.start?.dateTime ?? event.start?.date ?? null,
-      end: event.end?.dateTime ?? event.end?.date ?? null,
-      location: event.location ?? null,
-      link: event.htmlLink ?? null,
-      attendees: event.attendees?.map(attendee => attendee.displayName ?? attendee.email ?? "Guest") ?? [],
-      status: event.status ?? null,
-    }));
-    provider = "google-calendar";
-  } else {
-    const localEvents = await listLocalEvents(options.userId);
-    items = localEvents
-      .filter(e => {
-        const start = new Date(e.startAt);
-        return start >= timeMin && start <= timeMax;
-      })
-      .map(e => ({
-        id: e.id,
-        title: e.title,
-        description: e.description,
-        start: e.startAt.toISOString(),
-        end: e.endAt.toISOString(),
-        location: e.location,
-        allDay: !!e.allDay,
-      }));
-  }
+  const items = (events.items ?? []).map(event => ({
+    id: event.id ?? null,
+    title: event.summary ?? "Untitled event",
+    description: event.description ?? null,
+    start: event.start?.dateTime ?? event.start?.date ?? null,
+    end: event.end?.dateTime ?? event.end?.date ?? null,
+    location: event.location ?? null,
+    link: event.htmlLink ?? null,
+    attendees: event.attendees?.map(attendee => attendee.displayName ?? attendee.email ?? "Guest") ?? [],
+    status: event.status ?? null,
+  }));
 
   if (!items.length) {
     return {
       action: plan.action,
       status: "executed",
       title: "Schedule is clear",
-      summary: `I didn’t find any matching events in your ${provider === "google-calendar" ? "Google Calendar" : "local calendar"} for that window.`,
-      provider,
+      summary: "I didn’t find any matching Google Calendar events in that window.",
+      provider: "google-calendar",
       data: {
-        timeMinIso: timeMin.toISOString(),
-        timeMaxIso: timeMax.toISOString(),
+        timeMinIso: resolved.timeMinIso ?? null,
+        timeMaxIso: resolved.timeMaxIso ?? null,
         events: [],
       },
     };
@@ -727,12 +707,12 @@ async function executeCalendarListAction(
   return {
     action: plan.action,
     status: "executed",
-    title: `Upcoming ${provider === "google-calendar" ? "Google Calendar" : "Local"} events`,
+    title: "Upcoming Google Calendar events",
     summary: `I found ${items.length} event${items.length === 1 ? "" : "s"} on your calendar.`,
-    provider,
+    provider: "google-calendar",
     data: {
-      timeMinIso: timeMin.toISOString(),
-      timeMaxIso: timeMax.toISOString(),
+      timeMinIso: resolved.timeMinIso ?? null,
+      timeMaxIso: resolved.timeMaxIso ?? null,
       events: items,
     },
   };
@@ -752,7 +732,13 @@ async function executeCalendarCreateAction(
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
   const connection = await getProviderConnection(options.userId, "google-calendar");
-  const isGoogleConnected = connection && (connection as any).status === "connected";
+  if (!connection || (connection as any).status !== "connected") {
+    return connectionRequiredResult(
+      plan.action,
+      "google-calendar",
+      "Google Calendar needs to be connected before I can book that for you.",
+    );
+  }
 
   if (!normalizeText(plan.calendar?.title) || !normalizeText(plan.calendar?.startDescription)) {
     return {
@@ -760,7 +746,7 @@ async function executeCalendarCreateAction(
       status: "needs_input",
       title: "Calendar details needed",
       summary: "I can book that as soon as I know the event title and when it should start.",
-      provider: isGoogleConnected ? "google-calendar" : "local-calendar",
+      provider: "google-calendar",
     };
   }
 
@@ -778,131 +764,90 @@ async function executeCalendarCreateAction(
       action: plan.action,
       status: "needs_input",
       title: "Timing still needed",
-      summary: "I’m close, but I still need a clearer time for that booking before I add it to your calendar.",
-      provider: isGoogleConnected ? "google-calendar" : "local-calendar",
-    };
-  }
-
-  const startAt = new Date(resolved.startIso);
-  const endAt = resolved.endIso 
-    ? new Date(resolved.endIso) 
-    : new Date(startAt.getTime() + 1000 * 60 * 60);
-
-  if (isGoogleConnected) {
-    const created = await createGoogleCalendarEvent({
-      userId: options.userId,
-      title: eventTitle,
-      startIso: startAt.toISOString(),
-      endIso: endAt.toISOString(),
-      timeZone: options.timeZone ?? null,
-    });
-
-    const confirmedStart = created.start?.dateTime ?? startAt.toISOString();
-    const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
-
-    return {
-      action: plan.action,
-      status: "executed",
-      title: `Booked: ${created.summary ?? eventTitle}`,
-      summary: `It’s on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
+      summary: "I’m close, but I still need a clearer time for that booking before I add it to Google Calendar.",
       provider: "google-calendar",
-      data: {
-        id: created.id ?? null,
-        title: created.summary ?? eventTitle,
-        start: confirmedStart,
-        end: created.end?.dateTime ?? endAt.toISOString(),
-        link: created.htmlLink ?? null,
-        status: created.status ?? null,
-      },
-    };
-  } else {
-    const eventId = await createLocalEvent({
-      userId: options.userId,
-      title: eventTitle,
-      startAt,
-      endAt,
-      allDay: 0,
-    });
-
-    return {
-      action: plan.action,
-      status: "executed",
-      title: `Booked: ${eventTitle}`,
-      summary: `It’s on your local calendar for ${formatCalendarEventDateTime(startAt.toISOString(), options.timeZone)}.`,
-      provider: "local-calendar",
-      data: {
-        id: eventId,
-        title: eventTitle,
-        start: startAt.toISOString(),
-        end: endAt.toISOString(),
-      },
     };
   }
+
+  const endIso =
+    resolved.endIso ?? new Date(new Date(resolved.startIso).getTime() + 1000 * 60 * 60).toISOString();
+
+  const created = await createGoogleCalendarEvent({
+    userId: options.userId,
+    title: eventTitle,
+    startIso: resolved.startIso,
+    endIso,
+    timeZone: options.timeZone ?? null,
+  });
+
+  const confirmedStart = created.start?.dateTime ?? resolved.startIso;
+  const confirmedEnd = created.end?.dateTime ?? endIso;
+  const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
+
+  return {
+    action: plan.action,
+    status: "executed",
+    title: `Booked: ${created.summary ?? eventTitle}`,
+    summary: `It’s on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
+    provider: "google-calendar",
+    data: {
+      id: created.id ?? null,
+      title: created.summary ?? eventTitle,
+      start: confirmedStart,
+      end: confirmedEnd,
+      link: created.htmlLink ?? null,
+      status: created.status ?? null,
+    },
+  };
 }
 
-async function executeMusicAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
-  const query = plan.music?.query || "relaxing ambient music";
-  const soundPrompt = buildSoundPrompt(query, plan.music?.targetType);
+async function executeMusicAction(
+  plan: AssistantActionPlan,
+  options: { userId: number }
+): Promise<AssistantActionResult> {
+  const query = plan.music?.query || "some good music";
+  const targetType = plan.music?.targetType || "track";
 
   try {
-    const { generateSoundAsDataUri } = await import("./_core/elevenLabs");
-    const audioDataUri = await generateSoundAsDataUri({
-      text: soundPrompt,
-      durationSeconds: 15,
-      promptInfluence: 0.7,
+    const { searchAndPlaySpotify } = await import("./_core/spotify");
+    const result = await searchAndPlaySpotify({
+      userId: options.userId,
+      query,
+      type: (targetType as string) || "track",
     });
 
+    if (result.status === "no_device") {
+      return {
+        action: "music.play",
+        status: "needs_input",
+        title: "Spotify Device Needed",
+        summary: result.message || "I found the music, but I couldn't find an active Spotify device to play it on.",
+        provider: "spotify",
+      };
+    }
+
+    const item = result.item;
     return {
       action: "music.play",
       status: "executed",
-      title: `Playing: ${query}`,
-      summary: `Here's some ${query} for you 🔥`,
-      provider: "elevenlabs",
+      title: `Playing: ${item.name}`,
+      summary: `I've started ${item.name} by ${item.artists?.[0]?.name || "the artist"} on Spotify for you.`,
+      provider: "spotify",
       data: {
-        audioDataUri,
-        query,
-        soundPrompt,
+        item,
+        externalUrl: item.external_urls?.spotify,
       },
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Sound generation failed.";
+    const msg = error instanceof Error ? error.message : "Spotify failed.";
     return {
       action: "music.play",
       status: "failed",
-      title: "Audio snag",
-      summary: msg.includes("not configured")
-        ? "I need the ElevenLabs API key to play sounds. Can you add it in your settings?"
-        : `Couldn't generate that audio right now — ${msg}`,
-      provider: "elevenlabs",
+      title: "Spotify snag",
+      summary: msg,
+      provider: "spotify",
     };
   }
-}
-
-function buildSoundPrompt(query: string, targetType?: string | null): string {
-  const q = query.toLowerCase();
-
-  if (/chime|alarm|bell|wake.?up|ring|alert/.test(q)) {
-    return `A pleasant, melodic ${q} sound. Gentle, ascending tones that feel warm and encouraging.`;
-  }
-  if (/relax|ambient|calm|chill|zen|meditat|sleep|sooth/.test(q)) {
-    return `${query}. Soft, atmospheric soundscape with gentle pads and warm tones. Peaceful and calming.`;
-  }
-  if (/rain|ocean|waves|forest|bird|nature|thunder|wind|water|fire|campfire/.test(q)) {
-    return `Natural ${query} sounds. Rich, immersive, realistic environmental audio.`;
-  }
-  if (/house|techno|electronic|edm|dance|beat|bass|drum/.test(q)) {
-    return `Upbeat ${query} music. Punchy rhythm, energetic beat, electronic production.`;
-  }
-  if (/jazz|blues|soul|funk/.test(q)) {
-    return `Smooth ${query} music. Warm instruments, relaxed groove, sophisticated feel.`;
-  }
-  if (/classical|piano|orchestra|violin|cello/.test(q)) {
-    return `Beautiful ${query} music. Elegant, emotional, orchestral.`;
-  }
-  if (/lofi|lo-fi|hip.?hop|study/.test(q)) {
-    return `Lo-fi ${query} music. Warm vinyl crackle, mellow beats, cozy atmosphere.`;
-  }
-  return `${query} music. Pleasant, well-produced, high-quality audio.`;
 }
 
 export async function executeAssistantAction(
@@ -956,58 +901,22 @@ export async function executeAssistantAction(
           timeZone: options.timeZone,
         });
       case "music.play":
-        return await executeMusicAction(plan);
-      case "reminder.set": {
-        const label = plan.reminder?.label || "Reminder";
-        const when = plan.reminder?.when;
-        if (!options?.userId || !options.message) {
-          return {
-            action: "reminder.set",
-            status: "needs_input",
-            title: "Reminder details needed",
-            summary: "What should I remind you about, and when?",
-          };
+        if (!options?.userId) {
+          return connectionRequiredResult(
+            plan.action,
+            "spotify",
+            "I need you to be logged in before I can play music on your Spotify account.",
+          );
         }
-        const reminderPlan = {
-          ...plan,
-          action: "calendar.create_event" as const,
-          calendar: {
-            title: `Reminder: ${label}`,
-            startDescription: when || "soon",
-            endDescription: null,
-          },
-        };
-        try {
-          const calResult = await executeCalendarCreateAction(reminderPlan, {
-            userId: options.userId,
-            userName: options.userName,
-            message: options.message,
-            memoryContext: options.memoryContext,
-            timeZone: options.timeZone,
-          });
-          return {
-            ...calResult,
-            action: "reminder.set",
-            title: `Reminder set: ${label}`,
-          };
-        } catch {
-          return {
-            action: "reminder.set",
-            status: "executed",
-            title: `Reminder noted: ${label}`,
-            summary: `I'll remind you: "${label}"${when ? ` at ${when}` : ""}.`,
-            provider: "flow-guru",
-          };
-        }
-      }
+        return await executeMusicAction(plan, { userId: options.userId });
       case "browser.use": {
-        const task = plan.browser?.task_description;
+        const task = plan.browser?.task;
         if (!task) {
           return {
             action: plan.action,
             status: "needs_input",
-            title: "Browser task details needed",
-            summary: "What specifically do you want me to do or look up on the web?",
+            title: "Browser task needed",
+            summary: "What specifically do you want me to look up or do on the web?",
           };
         }
         try {
@@ -1015,18 +924,18 @@ export async function executeAssistantAction(
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ task }),
-            signal: AbortSignal.timeout(180_000),
+            signal: AbortSignal.timeout(300_000), // 5 min timeout for complex browsing
           });
-          if (!resp.ok) throw new Error("Browser microservice failed");
-          const j = await resp.json();
+          if (!resp.ok) throw new Error("Browser service failed.");
+          const res = await resp.json();
           return {
             action: plan.action,
             status: "executed",
-            title: "Web Browsing Complete",
-            summary: j.result || "I finished the task online.",
+            title: "Research Complete",
+            summary: res.result || "I've finished looking that up for you.",
             provider: "browser-use",
           };
-        } catch (error) {
+        } catch (e) {
           return {
             action: plan.action,
             status: "failed",
@@ -1038,6 +947,9 @@ export async function executeAssistantAction(
       }
       case "system.subagent": {
         const task = plan.subagent?.task;
+        try {
+          fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Executing Subagent Task: ${task}\n`);
+        } catch (e) {}
         if (!task) {
           return {
             action: plan.action,
@@ -1046,6 +958,7 @@ export async function executeAssistantAction(
             summary: "What specifically do you want the subagent to do?",
           };
         }
+        
         try {
           const resp = await fetch("http://127.0.0.1:3030/a2a", {
             method: "POST",
@@ -1058,15 +971,20 @@ export async function executeAssistantAction(
                 message: {
                   messageId: "msg-" + Date.now(),
                   role: "user",
-                  parts: [{ kind: "text", text: task }],
-                },
-              },
+                  parts: [{ kind: "text", text: task }]
+                }
+              }
             }),
-            signal: AbortSignal.timeout(180_000),
+            signal: AbortSignal.timeout(180_000), 
           });
+
           if (!resp.ok) throw new Error("Nullclaw A2A request failed");
           const res = await resp.json();
+          try {
+            fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Subagent Success: ${JSON.stringify(res)}\n`);
+          } catch (e) {}
           const replyText = res.result?.message?.parts?.[0]?.text || "The subagent completed your request.";
+
           return {
             action: plan.action,
             status: "executed",
@@ -1076,6 +994,9 @@ export async function executeAssistantAction(
             data: res,
           };
         } catch (e) {
+          try {
+            fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Subagent ERROR: ${e}\n`);
+          } catch (err) {}
           return {
             action: plan.action,
             status: "failed",
@@ -1104,7 +1025,7 @@ export async function executeAssistantAction(
             : plan.action.startsWith("calendar")
               ? "google-calendar"
               : plan.action.startsWith("music")
-                ? "elevenlabs"
+                ? "spotify"
                 : undefined,
     };
   }

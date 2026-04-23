@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { ENV } from "./env.js";
 import { getProviderConnection, upsertProviderConnection } from "../db.js";
+import { encryptToken, decryptToken } from "./crypto.js";
 
 type GoogleOAuthState = {
   provider: "google-calendar";
@@ -215,8 +216,8 @@ export async function connectGoogleCalendar(params: {
     status: "connected",
     externalAccountId: profile.id ?? profile.email ?? "google-calendar",
     externalAccountLabel: profile.email ?? profile.name ?? "Google Calendar",
-    accessToken: token.access_token,
-    refreshToken: token.refresh_token ?? null,
+    accessToken: encryptToken(token.access_token ?? null),
+    refreshToken: encryptToken(token.refresh_token ?? null),
     scope: token.scope ?? null,
     tokenType: token.token_type ?? "Bearer",
     expiresAtUnixMs: token.expires_in ? Date.now() + token.expires_in * 1000 : null,
@@ -247,24 +248,27 @@ export async function getGoogleCalendarAccessToken(userId: number) {
     throw new Error("Google Calendar is not connected for this user.");
   }
 
+  const accessToken = decryptToken(connection.accessToken);
+  const refreshToken = decryptToken(connection.refreshToken);
+
   const expiresAt = connection.expiresAtUnixMs ?? 0;
   if (expiresAt > Date.now() + 60_000) {
-    return connection.accessToken;
+    return accessToken!;
   }
 
-  if (!connection.refreshToken) {
+  if (!refreshToken) {
     throw new Error("Google Calendar needs to be reconnected because the refresh token is missing.");
   }
 
-  const refreshed = await refreshGoogleToken(connection.refreshToken);
+  const refreshed = await refreshGoogleToken(refreshToken);
   await upsertProviderConnection({
     userId,
     provider: "google-calendar",
     status: "connected",
     externalAccountId: connection.externalAccountId ?? null,
     externalAccountLabel: connection.externalAccountLabel ?? null,
-    accessToken: refreshed.access_token,
-    refreshToken: connection.refreshToken,
+    accessToken: encryptToken(refreshed.access_token ?? null),
+    refreshToken: encryptToken(refreshToken),
     scope: refreshed.scope ?? connection.scope ?? null,
     tokenType: refreshed.token_type ?? connection.tokenType ?? "Bearer",
     expiresAtUnixMs: refreshed.expires_in ? Date.now() + refreshed.expires_in * 1000 : null,
