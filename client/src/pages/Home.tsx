@@ -45,13 +45,16 @@ export default function Home() {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [currentStation, setCurrentStation] = useState('');
   // ElevenLabs voice: male = Callum, female = Rachel
-  const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(() => {
-    return (localStorage.getItem('voiceGender') as 'male' | 'female') || 'male';
-  });
   const VOICE_IDS = {
     male: 'N2lVS1wzUvBXUvBCW9ng',   // Callum — warm, energetic male
     female: '21m00Tcm4TlvDq8ikWAM',  // Rachel — calm, natural female
   };
+  const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(() => {
+    return (localStorage.getItem('voiceGender') as 'male' | 'female') || 'male';
+  });
+  // Use a ref so speakText always reads the latest voiceGender without stale closures
+  const voiceGenderRef = useRef<'male' | 'female'>(voiceGender);
+  useEffect(() => { voiceGenderRef.current = voiceGender; }, [voiceGender]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -158,7 +161,7 @@ export default function Home() {
     
     setIsSpeaking(true);
     // Use our new ElevenLabs endpoint
-    const audio = new Audio(`/api/speak?text=${encodeURIComponent(text)}&voiceId=${VOICE_IDS[voiceGender]}`);
+    const audio = new Audio(`/api/speak?text=${encodeURIComponent(text)}&voiceId=${VOICE_IDS[voiceGenderRef.current]}`);
     
     audio.onended = () => setIsSpeaking(false);
     audio.onerror = () => setIsSpeaking(false);
