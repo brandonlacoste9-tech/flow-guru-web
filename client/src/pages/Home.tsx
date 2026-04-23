@@ -44,10 +44,10 @@ export default function Home() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [currentStation, setCurrentStation] = useState('');
-  // ElevenLabs voice: male = Callum, female = Rachel
+  // ElevenLabs free default voices (no paid plan required)
   const VOICE_IDS = {
-    male: 'N2lVS1wzUvBXUvBCW9ng',   // Callum — warm, energetic male
-    female: '21m00Tcm4TlvDq8ikWAM',  // Rachel — calm, natural female
+    male: 'nPczCjzI2devNBz1zQrb',   // Brian — warm, natural, conversational male
+    female: 'EXAVITQu4vr4xnSDxMaL',  // Sarah — calm, natural female
   };
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(() => {
     return (localStorage.getItem('voiceGender') as 'male' | 'female') || 'male';
@@ -275,9 +275,9 @@ export default function Home() {
               const next = voiceGender === 'male' ? 'female' : 'male';
               setVoiceGender(next);
               localStorage.setItem('voiceGender', next);
-              toast.success(`Voice switched to ${next === 'male' ? 'Callum (male)' : 'Rachel (female)'}`);
+              toast.success(`Voice switched to ${next === 'male' ? 'Brian (male)' : 'Sarah (female)'}`);
             }}
-            title={`Voice: ${voiceGender === 'male' ? 'Male (Callum)' : 'Female (Rachel)'} — click to switch`}
+            title={`Voice: ${voiceGender === 'male' ? 'Male (Brian)' : 'Female (Sarah)'} — click to switch`}
             className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground"
           >
             {voiceGender === 'male' ? <User size={14} /> : <UserRound size={14} />}
