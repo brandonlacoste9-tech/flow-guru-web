@@ -229,6 +229,12 @@ export default function Home() {
             </button>
           )}
 
+          <button onClick={() => navigate("/calendar")}
+            title="Open Calendar"
+            className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
+            <Calendar size={14} />
+          </button>
+
           <button onClick={() => setSpeechEnabled(!speechEnabled)}
             className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">
             {speechEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
