@@ -79,8 +79,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       lastSignedIn: new Date(),
     });
 
+    // verifySession requires name to be a non-empty string — use email prefix or openId as fallback
+    const displayName = profile.name || (profile.email ? profile.email.split('@')[0] : openId);
     const sessionToken = await sdk.createSessionToken(openId, {
-      name: profile.name || "",
+      name: displayName,
       expiresInMs: ONE_YEAR_MS,
     });
 
