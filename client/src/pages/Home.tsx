@@ -13,6 +13,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { WeatherForecastModal } from "@/components/WeatherForecastModal";
 import { NewsModal } from "@/components/NewsModal";
 import { useReminders } from "@/hooks/useReminders";
+import { prewarmAudio } from "@/hooks/useAlarmSound";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -93,6 +94,15 @@ export default function Home() {
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Pre-warm AudioContext on first user interaction so alarm sounds can play without gesture
+  useEffect(() => {
+    const unlock = () => { prewarmAudio(); window.removeEventListener('click', unlock); window.removeEventListener('keydown', unlock); window.removeEventListener('touchstart', unlock); };
+    window.addEventListener('click', unlock);
+    window.addEventListener('keydown', unlock);
+    window.addEventListener('touchstart', unlock);
+    return () => { window.removeEventListener('click', unlock); window.removeEventListener('keydown', unlock); window.removeEventListener('touchstart', unlock); };
   }, []);
 
   // Auto-geolocation: fetch weather client-side if bootstrap didn't return any
