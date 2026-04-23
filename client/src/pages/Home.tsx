@@ -58,6 +58,11 @@ export default function Home() {
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [showNews, setShowNews] = useState(false);
   const [countryCode, setCountryCode] = useState<string>('us');
+  // Guest mode: track how many messages sent without an account
+  const [guestMessageCount, setGuestMessageCount] = useState<number>(() => {
+    return parseInt(localStorage.getItem('guest_msg_count') || '0', 10);
+  });
+  const [showSignInBanner, setShowSignInBanner] = useState(false);
   const [wakeUpTime, setWakeUpTime] = useState<string | null>(null);
   const [alarmDays, setAlarmDays] = useState<string>('0,1,2,3,4,5,6');
   const [alarmSound, setAlarmSound] = useState<import('@/hooks/useAlarmSound').AlarmSoundType>(() => {
@@ -226,6 +231,16 @@ export default function Home() {
 
   const handleSend = (text: string) => {
     if (!text.trim() || sendMutation.isPending) return;
+
+    // Track guest usage and show sign-in nudge after 5 messages
+    if (!user) {
+      const newCount = guestMessageCount + 1;
+      setGuestMessageCount(newCount);
+      localStorage.setItem('guest_msg_count', String(newCount));
+      if (newCount >= 5 && newCount % 5 === 0) {
+        setShowSignInBanner(true);
+      }
+    }
     
     // If starting from dashboard, trigger a new backend thread
     const startsFresh = view === 'dashboard';
@@ -404,10 +419,21 @@ export default function Home() {
             className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">
             {speechEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
           </button>
-          <button onClick={() => logout()}
-            className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-destructive/10 hover:border-destructive/30 transition-all text-muted-foreground hover:text-destructive shadow-sm">
-            <LogOut size={14} />
-          </button>
+          {user ? (
+            <button onClick={() => logout()}
+              title="Sign out"
+              className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-destructive/10 hover:border-destructive/30 transition-all text-muted-foreground hover:text-destructive shadow-sm">
+              <LogOut size={14} />
+            </button>
+          ) : (
+            <button
+              onClick={() => { window.location.href = '/api/auth/google'; }}
+              title="Sign in to save your history"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 transition-all text-primary text-xs font-semibold shadow-sm">
+              <User size={13} />
+              Sign in
+            </button>
+          )}
         </motion.div>
       </header>
 
@@ -725,6 +751,47 @@ export default function Home() {
           feelsLikeC={weather.feelsLikeC}
         />
       )}
+
+      {/* ── Guest Sign-In Nudge Banner ── */}
+      <AnimatePresence>
+        {showSignInBanner && !user && (
+          <motion.div
+            key="signin-banner"
+            initial={{ opacity: 0, y: 80 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 80 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+            className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4"
+          >
+            <div className="bg-card border border-border rounded-3xl shadow-2xl p-5 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Save your progress</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Sign in to keep your chat history, memory, and settings across devices.</p>
+                </div>
+                <button
+                  onClick={() => setShowSignInBanner(false)}
+                  className="text-muted-foreground hover:text-foreground text-lg leading-none shrink-0 mt-0.5"
+                >×</button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { window.location.href = '/api/auth/google'; }}
+                  className="flex-1 py-2.5 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm transition-colors"
+                >
+                  Sign in with Google
+                </button>
+                <button
+                  onClick={() => setShowSignInBanner(false)}
+                  className="px-4 py-2.5 rounded-2xl bg-muted hover:bg-muted/80 text-muted-foreground font-medium text-sm transition-colors"
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Alarm Overlay ── */}
       <AnimatePresence>

@@ -5,6 +5,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth.js";
+import { registerGoogleAuthRoutes } from "./googleAuth.js";
 import { registerProviderConnectionRoutes } from "./providerConnections.js";
 import { registerStorageProxy } from "./storageProxy.js";
 import { appRouter } from "../routers.js";
@@ -59,6 +60,7 @@ export async function createMainApp() {
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  registerGoogleAuthRoutes(app);
   registerProviderConnectionRoutes(app);
 
   // ElevenLabs TTS speak endpoint
