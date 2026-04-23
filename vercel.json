@@ -10,6 +10,8 @@
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist/public" } }
   ],
   "rewrites": [
+    { "source": "/api/integrations/google-calendar/start", "destination": "/api/google-calendar-start.ts" },
+    { "source": "/api/integrations/google-calendar/callback", "destination": "/api/google-calendar-callback.ts" },
     { "source": "/api/trpc/:path*", "destination": "/api/trpc.ts" },
     { "source": "/api/health", "destination": "/api/health.ts" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
