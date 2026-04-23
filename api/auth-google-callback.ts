@@ -3,12 +3,26 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "./lib/shared/const.js";
 import { ENV } from "./lib/_core/env.js";
 import { sdk } from "./lib/_core/sdk.js";
 import * as db from "./lib/db.js";
-import { getSessionCookieOptions } from "./lib/_core/cookies.js";
 
 function getCallbackUrl(req: VercelRequest): string {
   const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() || "https";
   const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "floguru.com";
   return `${proto}://${host}/api/auth/google/callback`;
+}
+
+function buildSetCookieHeader(name: string, value: string, maxAgeMs: number, secure: boolean): string {
+  const maxAgeSec = Math.floor(maxAgeMs / 1000);
+  const expires = new Date(Date.now() + maxAgeMs).toUTCString();
+  // Do NOT URL-encode the JWT value — the cookie `parse()` reader does not decode it
+  let cookie = `${name}=${value}; Max-Age=${maxAgeSec}; Expires=${expires}; Path=/; HttpOnly; SameSite=None`;
+  if (secure) cookie += "; Secure";
+  return cookie;
+}
+
+function isSecure(req: VercelRequest): boolean {
+  const forwarded = req.headers["x-forwarded-proto"] as string | undefined;
+  if (forwarded) return forwarded.split(",")[0].trim().toLowerCase() === "https";
+  return false;
 }
 
 async function exchangeGoogleCode(code: string, redirectUri: string): Promise<string> {
@@ -70,8 +84,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       expiresInMs: ONE_YEAR_MS,
     });
 
-    const cookieOptions = getSessionCookieOptions(req);
-    (res as any).cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+    // Use raw Set-Cookie header — Vercel serverless VercelResponse does not have .cookie()
+    const secure = isSecure(req);
+    const cookieHeader = buildSetCookieHeader(COOKIE_NAME, sessionToken, ONE_YEAR_MS, secure);
+    res.setHeader("Set-Cookie", cookieHeader);
 
     return res.redirect(302, "/");
   } catch (err) {
