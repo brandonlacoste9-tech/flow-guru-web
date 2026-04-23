@@ -263,15 +263,33 @@ export function Settings() {
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
                       <div className="bg-background border border-border rounded-2xl p-4 space-y-3">
                         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Add a memory</p>
-                        <input type="text" value={newFactKey} onChange={e => setNewFactKey(e.target.value)} placeholder="Key (e.g. favourite_food)"
-                          className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50" />
-                        <input type="text" value={newFactValue} onChange={e => setNewFactValue(e.target.value)} placeholder="Value (e.g. sushi)"
-                          className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50" />
-                        <button disabled={!newFactKey.trim() || !newFactValue.trim() || addFactMutation.isLoading}
-                          onClick={() => addFactMutation.mutate({ factKey: newFactKey.trim(), factValue: newFactValue.trim() })}
-                          className="w-full bg-primary text-primary-foreground py-2 rounded-xl text-sm font-bold disabled:opacity-50">
-                          {addFactMutation.isLoading ? 'Adding...' : 'Add Memory'}
-                        </button>
+                        <textarea
+                          rows={2}
+                          value={newFactValue}
+                          onChange={e => setNewFactValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey && newFactValue.trim()) {
+                              e.preventDefault();
+                              addFactMutation.mutate({ factKey: 'note', factValue: newFactValue.trim() });
+                            }
+                          }}
+                          placeholder="e.g. I prefer concise answers. My favourite food is sushi."
+                          className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setNewFactValue(''); setShowAddFact(false); }}
+                            className="flex-1 border border-border py-2 rounded-xl text-sm font-semibold text-muted-foreground hover:bg-accent/10 transition-colors">
+                            Cancel
+                          </button>
+                          <button
+                            disabled={!newFactValue.trim() || addFactMutation.isLoading}
+                            onClick={() => addFactMutation.mutate({ factKey: 'note', factValue: newFactValue.trim() })}
+                            className="flex-1 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+                            <Save size={13} />
+                            {addFactMutation.isLoading ? 'Saving...' : 'Save Memory'}
+                          </button>
+                        </div>
                       </div>
                     </motion.div>
                   )}
