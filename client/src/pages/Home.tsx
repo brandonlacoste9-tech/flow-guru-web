@@ -333,27 +333,21 @@ export default function Home() {
                       <button onClick={() => navigate("/calendar")} className="text-[10px] uppercase font-bold tracking-wider text-primary hover:underline">Open Calendar</button>
                     </div>
                     
-                    {isGoogleConnected ? (
-                      todayEvents.length > 0 ? (
-                        <div className="space-y-3 mt-2">
-                          {todayEvents.slice(0, 3).map((e, i) => (
-                            <div key={i} className="flex items-center justify-between group/event">
-                              <div className="flex items-center gap-3 overflow-hidden">
-                                <div className="w-1 h-1 rounded-full bg-primary/50" />
-                                <p className="text-sm font-medium truncate text-foreground group-hover/event:text-primary transition-colors">{e.title}</p>
-                              </div>
-                              <p className="text-xs text-muted-foreground shrink-0 font-medium">{formatEventTime(e.start, e.allDay)}</p>
+                    {todayEvents.length > 0 ? (
+                      <div className="space-y-3 mt-2">
+                        {todayEvents.slice(0, 3).map((e, i) => (
+                          <div key={i} className="flex items-center justify-between group/event">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              <div className="w-1 h-1 rounded-full bg-primary/50" />
+                              <p className="text-sm font-medium truncate text-foreground group-hover/event:text-primary transition-colors">{e.title}</p>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="h-14 flex flex-col justify-center">
-                          <p className="text-[15px] font-medium text-foreground">Schedule is clear.</p>
-                        </div>
-                      )
+                            <p className="text-xs text-muted-foreground shrink-0 font-medium">{formatEventTime(e.start, e.allDay)}</p>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <div className="h-14 flex flex-col justify-center">
-                        <p className="text-sm text-muted-foreground">Connect calendar for events.</p>
+                        <p className="text-[15px] font-medium text-foreground">Schedule is clear.</p>
                       </div>
                     )}
                   </motion.div>

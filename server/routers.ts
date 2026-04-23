@@ -581,16 +581,34 @@ export const appRouter = router({
       })();
 
       const calendarPromise = (async (): Promise<CalendarItem[]> => {
+        const now = new Date();
+        const startOfDay = new Date(now);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(now);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const results: CalendarItem[] = [];
+
+        try {
+          const localEvts = await listLocalEvents(userId, startOfDay, endOfDay);
+          for (const e of localEvts) {
+            results.push({ title: e.title, start: e.startAt ? e.startAt.toISOString() : null, allDay: e.allDay ?? false });
+          }
+        } catch { /* ignore */ }
+
         try {
           const { listGoogleCalendarEvents } = await import("./_core/googleCalendar");
           const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
-          if (!conn) return [];
-          const now = new Date();
-          const endOfDay = new Date(now);
-          endOfDay.setHours(23, 59, 59, 999);
-          const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
-          return (result?.items ?? []).map((e: any) => ({ title: e.summary || "Untitled event", start: e.start?.dateTime || e.start?.date || null, allDay: !e.start?.dateTime }));
-        } catch { return []; }
+          if (conn) {
+            const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
+            for (const e of result?.items ?? []) {
+              results.push({ title: (e as any).summary || "Untitled event", start: (e as any).start?.dateTime || (e as any).start?.date || null, allDay: !(e as any).start?.dateTime });
+            }
+          }
+        } catch { /* ignore */ }
+
+        results.sort((a, b) => (!a.start ? 1 : !b.start ? -1 : new Date(a.start).getTime() - new Date(b.start).getTime()));
+        return results;
       })();
 
       [weather, todayEvents] = await Promise.all([weatherPromise, calendarPromise]);
