@@ -8,6 +8,7 @@ import { ActionResultCard } from "@/components/ActionResultCard";
 import { motion, AnimatePresence } from "framer-motion";
 import { OrbVisualizer } from "@/components/OrbVisualizer";
 import { useLocation } from "wouter";
+import { MusicPlayer } from "@/components/MusicPlayer";
 
 interface Message {
   id: string | number;
@@ -40,6 +41,8 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [currentStation, setCurrentStation] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -360,7 +363,7 @@ export default function Home() {
 
                   {/* Memory Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors sm:col-span-2"
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.6 }}
@@ -385,6 +388,21 @@ export default function Home() {
                     ) : (
                       <p className="text-sm text-muted-foreground italic">No personal facts remembered yet.</p>
                     )}
+                  </motion.div>
+
+                  {/* Music Player Card */}
+                  <motion.div
+                    className="sm:col-span-1"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.7 }}
+                  >
+                    <MusicPlayer 
+                      onStateChange={(playing, label) => {
+                        setMusicPlaying(playing);
+                        setCurrentStation(label);
+                      }} 
+                    />
                   </motion.div>
                 </div>
 
