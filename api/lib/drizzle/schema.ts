@@ -26,6 +26,7 @@ export const userMemoryProfiles = pgTable("fg_profiles", {
   dailyRoutine: text("dailyRoutine"),
   preferencesSummary: text("preferencesSummary"),
   recurringEventsSummary: text("recurringEventsSummary"),
+  alarmSound: varchar("alarmSound", { length: 64 }).default("chime"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

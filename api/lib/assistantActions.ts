@@ -828,7 +828,7 @@ async function executeCalendarCreateAction(
   const localEventId = await createLocalEvent({
     userId: options.userId,
     title: eventTitle,
-    description: plan.calendar?.description ?? null,
+    description: plan.calendar?.startDescription ?? null,
     startAt: startDate,
     endAt: endDate,
     location: null,
