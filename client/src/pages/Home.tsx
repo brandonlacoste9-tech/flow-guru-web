@@ -329,6 +329,12 @@ export default function Home() {
             {voiceGender === 'male' ? <User size={14} /> : <UserRound size={14} />}
           </button>
 
+          <button onClick={() => navigate('/settings')}
+            title="AI Settings"
+            className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
+            <Settings size={14} />
+          </button>
+
           <button onClick={() => setSpeechEnabled(!speechEnabled)}
             className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">
             {speechEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}

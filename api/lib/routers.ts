@@ -625,11 +625,21 @@ export const appRouter = router({
       const isGoogleConnected = (await listProviderConnections(userId)).some(c => c.provider === "google-calendar" && c.status === "connected");
       const isSpotifyConnected = (await listProviderConnections(userId)).some(c => c.provider === "spotify" && c.status === "connected");
 
+      // Load custom instructions from memory facts
+      const customInstructionsFact = memoryFacts.find(f => f.factKey === 'custom_instructions');
+      const customInstructions = customInstructionsFact?.factValue?.trim() || '';
+
       const systemPrompt = [
         `You are ${assistantName}, ${userName}'s personal Flow Guru and loyal buddy.`,
         `Current Time: ${timeStr} on ${dateStr}`,
         `User Timezone: ${input.timeZone || "UTC"}`,
         `Integrations: Google Calendar: ${isGoogleConnected ? 'CONNECTED' : 'NOT CONNECTED'}, Spotify: ${isSpotifyConnected ? 'CONNECTED' : 'NOT CONNECTED'}`,
+        "",
+        "HONESTY & ACCURACY (NON-NEGOTIABLE):",
+        "- NEVER lie, fabricate facts, invent statistics, or make up information.",
+        "- NEVER return mock data, placeholder values, or fake examples as if they were real.",
+        "- If you don't know something, say so clearly. Do not guess and present it as fact.",
+        "- Only state things you are confident are true. Uncertainty must be expressed explicitly.",
         "",
         "PERSONALITY & TONE:",
         "- Be encouraging, high-energy, and effortlessly smooth. You're here to keep them in the zone.",
@@ -643,6 +653,7 @@ export const appRouter = router({
         "- Reply in 1-2 sentences max. Extreme brevity is key.",
         "- NEVER say 'I can help with...' or 'As an AI...'. Just do the work.",
         "- When you book or check something, confirm with enthusiasm: 'Done! Physio with Rick is in for 9:30 AM tomorrow. You got this!'",
+        ...(customInstructions ? ["", "USER'S CUSTOM INSTRUCTIONS (follow these carefully):", customInstructions] : []),
         "",
         "THINGS YOU CAN DO (but never mention these to the user):",
         "- Book events on Google Calendar",
@@ -860,6 +871,97 @@ export const appRouter = router({
         return {
           audioDataUri: `data:audio/mpeg;base64,${buffer.toString("base64")}`,
         };
+      }),
+  }),
+  settings: router({
+    // Get all memory facts for the settings page
+    getMemoryFacts: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const facts = await listUserMemoryFacts(userId);
+      return { facts };
+    }),
+    // Delete a specific memory fact by id
+    deleteMemoryFact: publicProcedure
+      .input(z.object({ factId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const db = await import('./db.js').then(m => m.getDb());
+        if (!db) throw new Error('Database unavailable');
+        const { userMemoryFacts } = await import('./drizzle/schema.js');
+        const { eq, and } = await import('drizzle-orm');
+        await db.delete(userMemoryFacts).where(and(eq(userMemoryFacts.id, input.factId), eq(userMemoryFacts.userId, userId)));
+        return { success: true };
+      }),
+    // Add a memory fact manually
+    addMemoryFact: publicProcedure
+      .input(z.object({
+        factKey: z.string().min(1).max(128),
+        factValue: z.string().min(1),
+        category: z.string().optional().default('general'),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await createUserMemoryFacts(userId, [{
+          factKey: input.factKey,
+          factValue: input.factValue,
+          category: input.category,
+          confidence: 100,
+        }]);
+        return { success: true };
+      }),
+    // Get profile (custom instructions + personal profile fields)
+    getProfile: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const profile = await getUserMemoryProfile(userId);
+      const facts = await listUserMemoryFacts(userId);
+      const customInstructions = facts.find(f => f.factKey === 'custom_instructions')?.factValue ?? '';
+      return {
+        wakeUpTime: profile?.wakeUpTime ?? '',
+        dailyRoutine: profile?.dailyRoutine ?? '',
+        preferencesSummary: profile?.preferencesSummary ?? '',
+        customInstructions,
+      };
+    }),
+    // Save profile fields
+    saveProfile: publicProcedure
+      .input(z.object({
+        wakeUpTime: z.string().optional(),
+        dailyRoutine: z.string().optional(),
+        preferencesSummary: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await upsertUserMemoryProfile(userId, {
+          wakeUpTime: input.wakeUpTime ?? null,
+          dailyRoutine: input.dailyRoutine ?? null,
+          preferencesSummary: input.preferencesSummary ?? null,
+        });
+        return { success: true };
+      }),
+    // Save custom instructions
+    saveCustomInstructions: publicProcedure
+      .input(z.object({ instructions: z.string().max(2000) }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const facts = await listUserMemoryFacts(userId);
+        const existing = facts.find(f => f.factKey === 'custom_instructions');
+        const db = await import('./db.js').then(m => m.getDb());
+        if (!db) throw new Error('Database unavailable');
+        const { userMemoryFacts } = await import('./drizzle/schema.js');
+        const { eq, and } = await import('drizzle-orm');
+        if (existing) {
+          await db.update(userMemoryFacts)
+            .set({ factValue: input.instructions, updatedAt: new Date() })
+            .where(and(eq(userMemoryFacts.id, existing.id), eq(userMemoryFacts.userId, userId)));
+        } else {
+          await createUserMemoryFacts(userId, [{
+            factKey: 'custom_instructions',
+            factValue: input.instructions,
+            category: 'preference',
+            confidence: 100,
+          }]);
+        }
+        return { success: true };
       }),
   }),
   news: router({
