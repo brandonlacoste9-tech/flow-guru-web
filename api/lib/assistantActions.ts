@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getProviderConnection } from "./db.js";
+import { getProviderConnection, createLocalEvent } from "./db.js";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
@@ -744,22 +744,13 @@ async function executeCalendarCreateAction(
   plan: AssistantActionPlan,
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
-  const connection = await getProviderConnection(options.userId, "google-calendar");
-  if (!connection || (connection as any).status !== "connected") {
-    return connectionRequiredResult(
-      plan.action,
-      "google-calendar",
-      "Google Calendar needs to be connected before I can book that for you.",
-    );
-  }
-
   if (!normalizeText(plan.calendar?.title) || !normalizeText(plan.calendar?.startDescription)) {
     return {
       action: plan.action,
       status: "needs_input",
       title: "Calendar details needed",
       summary: "I can book that as soon as I know the event title and when it should start.",
-      provider: "google-calendar",
+      provider: "local",
     };
   }
 
@@ -777,50 +768,87 @@ async function executeCalendarCreateAction(
       action: plan.action,
       status: "needs_input",
       title: "Timing still needed",
-      summary: "I’m close, but I still need a clearer time for that booking before I add it to Google Calendar.",
-      provider: "google-calendar",
+      summary: "I need a clearer time for that before I can add it to your calendar.",
+      provider: "local",
     };
   }
 
   const endIso =
     resolved.endIso ?? new Date(new Date(resolved.startIso).getTime() + 1000 * 60 * 60).toISOString();
 
-  const created = await createGoogleCalendarEvent({
+  // Try Google Calendar first if connected, otherwise fall back to local calendar
+  const connection = await getProviderConnection(options.userId, "google-calendar");
+  const useGoogle = connection && (connection as any).status === "connected";
+
+  if (useGoogle) {
+    try {
+      const created = await createGoogleCalendarEvent({
+        userId: options.userId,
+        title: eventTitle,
+        startIso: resolved.startIso,
+        endIso,
+        timeZone: options.timeZone ?? null,
+      });
+
+      const confirmedStart = created.start?.dateTime ?? resolved.startIso;
+      const confirmedEnd = created.end?.dateTime ?? endIso;
+      const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
+      const formattedTime = formatCalendarEventDateTime(confirmedStart, confirmedTimeZone);
+
+      try {
+        const { notifyOwner } = await import("./_core/notification.js");
+        await notifyOwner({
+          title: `📅 Booked: ${created.summary ?? eventTitle}`,
+          content: `${formattedTime}. You'll get a reminder before it starts.`,
+        });
+      } catch {}
+
+      return {
+        action: plan.action,
+        status: "executed",
+        title: `Booked: ${created.summary ?? eventTitle}`,
+        summary: `Done — ${eventTitle} is on your Google Calendar for ${formattedTime}. I'll remind you before it starts.`,
+        provider: "google-calendar",
+        data: {
+          id: created.id ?? null,
+          title: created.summary ?? eventTitle,
+          start: confirmedStart,
+          end: confirmedEnd,
+          link: created.htmlLink ?? null,
+        },
+      };
+    } catch (googleErr) {
+      console.warn("[Flow Guru] Google Calendar create failed, falling back to local:", googleErr);
+    }
+  }
+
+  // ── Local calendar fallback (always works) ──
+  const startDate = new Date(resolved.startIso);
+  const endDate = new Date(endIso);
+  const localEventId = await createLocalEvent({
     userId: options.userId,
     title: eventTitle,
-    startIso: resolved.startIso,
-    endIso,
-    timeZone: options.timeZone ?? null,
+    description: plan.calendar?.description ?? null,
+    startAt: startDate,
+    endAt: endDate,
+    location: null,
+    allDay: 0,
   });
 
-  const confirmedStart = created.start?.dateTime ?? resolved.startIso;
-  const confirmedEnd = created.end?.dateTime ?? endIso;
-  const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
-  const formattedTime = formatCalendarEventDateTime(confirmedStart, confirmedTimeZone);
-
-  // Fire a push notification confirming the booking
-  try {
-    const { notifyOwner } = await import("./_core/notification.js");
-    await notifyOwner({
-      title: `📅 Booked: ${created.summary ?? eventTitle}`,
-      content: `${formattedTime}. You'll get a reminder from Google Calendar before it starts.`,
-    });
-  } catch (notifError) {
-    console.warn("[Flow Guru] Notification dispatch failed (non-blocking):", notifError);
-  }
+  const formattedTime = formatCalendarEventDateTime(resolved.startIso, options.timeZone ?? null);
 
   return {
     action: plan.action,
     status: "executed",
-    title: `Booked: ${created.summary ?? eventTitle}`,
-    summary: `Done — ${eventTitle} is on your calendar for ${formattedTime}. I'll remind you before it starts.`,
-    provider: "google-calendar",
+    title: `Added: ${eventTitle}`,
+    summary: `Done — I've added "${eventTitle}" to your calendar for ${formattedTime}. I'll remind you before it starts.`,
+    provider: "local",
     data: {
-      id: created.id ?? null,
-      title: created.summary ?? eventTitle,
-      start: confirmedStart,
-      end: confirmedEnd,
-      link: created.htmlLink ?? null,
+      id: localEventId,
+      title: eventTitle,
+      start: resolved.startIso,
+      end: endIso,
+      link: null,
     },
   };
 }
