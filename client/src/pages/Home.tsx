@@ -81,13 +81,17 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const geoFetchedRef = useRef(false);
 
-  // Load wake-up time from profile for reminders
-  trpc.settings.getProfile.useQuery(undefined, {
-    onSuccess: (data: any) => {
-      if (data?.wakeUpTime) setWakeUpTime(data.wakeUpTime);
-      if (data?.alarmSound) { setAlarmSound(data.alarmSound); localStorage.setItem('alarmSound', data.alarmSound); }
-    },
-  });
+  // Load wake-up time and alarm sound from profile for reminders
+  const profileQuery = trpc.settings.getProfile.useQuery(undefined);
+  useEffect(() => {
+    const data = profileQuery.data as any;
+    if (!data) return;
+    if (data.wakeUpTime) setWakeUpTime(data.wakeUpTime);
+    if (data.alarmSound) {
+      setAlarmSound(data.alarmSound as import('@/hooks/useAlarmSound').AlarmSoundType);
+      localStorage.setItem('alarmSound', data.alarmSound);
+    }
+  }, [profileQuery.data]);
 
   const bootstrap = trpc.assistant.bootstrap.useQuery(undefined, { enabled: true });
 
