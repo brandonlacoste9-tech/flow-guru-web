@@ -77,11 +77,13 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   ({ onStateChange }, ref) => {
   const [activeId, setActiveId] = useState<StationId>("focus");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlIndexRef = useRef(0);
   const activeIdRef = useRef<StationId>("focus");
+  const prevVolumeRef = useRef(0.8);
 
   const station = STATIONS.find((s) => s.id === activeId)!;
 
@@ -104,6 +106,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
 
     const currentStation = STATIONS.find((s) => s.id === activeIdRef.current)!;
     const audio = new Audio(urls[urlIdx]);
+    audio.volume = isMuted ? 0 : volume;
     audio.muted = isMuted;
 
     audio.addEventListener("playing", () => {
@@ -141,11 +144,37 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
     }
   };
 
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setVolume(val);
+    if (val === 0) {
+      setIsMuted(true);
+      if (audioRef.current) audioRef.current.muted = true;
+    } else {
+      setIsMuted(false);
+      if (audioRef.current) {
+        audioRef.current.muted = false;
+        audioRef.current.volume = val;
+      }
+    }
+    prevVolumeRef.current = val > 0 ? val : prevVolumeRef.current;
+  };
+
   const toggleMute = () => {
-    setIsMuted((m) => {
-      if (audioRef.current) audioRef.current.muted = !m;
-      return !m;
-    });
+    if (isMuted) {
+      const restored = prevVolumeRef.current || 0.8;
+      setIsMuted(false);
+      setVolume(restored);
+      if (audioRef.current) {
+        audioRef.current.muted = false;
+        audioRef.current.volume = restored;
+      }
+    } else {
+      prevVolumeRef.current = volume;
+      setIsMuted(true);
+      setVolume(0);
+      if (audioRef.current) audioRef.current.muted = true;
+    }
   };
 
   useImperativeHandle(ref, () => ({
@@ -238,17 +267,31 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
           )}
         </AnimatePresence>
 
-        {/* Mute */}
-        <button
-          onClick={toggleMute}
-          className="w-7 h-7 rounded-full bg-secondary/50 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {isMuted ? (
-            <VolumeX className="w-3.5 h-3.5" />
-          ) : (
-            <Volume2 className="w-3.5 h-3.5" />
-          )}
-        </button>
+        {/* Volume control */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={toggleMute}
+            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {isMuted || volume === 0 ? (
+              <VolumeX className="w-3.5 h-3.5" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5" />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.02}
+            value={isMuted ? 0 : volume}
+            onChange={handleVolumeChange}
+            className="w-16 h-1 accent-primary cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary"
+            style={{
+              background: `linear-gradient(to right, hsl(var(--primary)) ${(isMuted ? 0 : volume) * 100}%, hsl(var(--secondary)) ${(isMuted ? 0 : volume) * 100}%)`,
+            }}
+          />
+        </div>
       </div>
 
       {/* Footer */}
