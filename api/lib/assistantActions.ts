@@ -375,9 +375,12 @@ export async function planAssistantAction(params: {
   console.log("[Flow Guru] Planner output:", extractTextContent(response.choices[0]?.message.content ?? ""));
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
   
+  // Strip markdown code fences if present (e.g. ```json ... ```)
+  const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+
   // Robust JSON Extraction (The Lasso Pattern)
-  let jsonString = raw;
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  let jsonString = stripped;
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     jsonString = jsonMatch[0];
   }
@@ -386,7 +389,7 @@ export async function planAssistantAction(params: {
     const parsed = plannerSchema.parse(JSON.parse(jsonString));
     return parsed;
   } catch (e) {
-    console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw:", raw);
+    console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw response:", raw);
     throw new Error(`Failed to parse AI plan: ${(e as Error).message}`);
   }
 }
@@ -460,7 +463,20 @@ async function resolveCalendarDetails(params: {
   });
 
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
+  
+  // Strip markdown code fences if present
+  const strippedRaw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  const jsonMatchRaw = strippedRaw.match(/\{[\s\S]*\}/);
+  const jsonStringRaw = jsonMatchRaw ? jsonMatchRaw[0] : strippedRaw;
+  
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(jsonStringRaw || "{}");
+  } catch (e) {
+    console.error("[Flow Guru] Calendar resolution JSON parse error:", e, "Raw:", raw);
+    throw new Error(`Calendar resolution JSON parse failed: ${(e as Error).message}`);
+  }
+  const parsed = calendarResolutionSchema.safeParse(parsedJson);
   if (!parsed.success) {
     throw new Error(`Calendar resolution did not match schema: ${parsed.error.message}`);
   }

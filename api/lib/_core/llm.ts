@@ -359,38 +359,14 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         continue;
       }
 
-      // No more providers, return the error
-      return {
-        id: "error-fallback-" + Date.now(),
-        created: Math.floor(Date.now() / 1000),
-        model: "error-fallback",
-        choices: [{
-          index: 0,
-          message: {
-            role: "assistant",
-            content: `I hit a snag connecting to my brain using ${provider.name} (HTTP ${response.status})! Details: ${errorText.slice(0, 100)}...`,
-          },
-          finish_reason: "error",
-        }],
-      };
+      // No more providers — throw so the caller can handle it properly
+      throw new Error(`LLM API error ${response.status} from ${provider.name}: ${errorText.slice(0, 200)}`);
     } catch (err) {
       console.error(`[Flow Guru] Critical error with provider ${provider.name}:`, err);
       lastError = err;
     }
   }
 
-  // If we get here, all providers failed
-  return {
-    id: "error-fallback-" + Date.now(),
-    created: Math.floor(Date.now() / 1000),
-    model: "error-fallback",
-    choices: [{
-      index: 0,
-      message: {
-        role: "assistant",
-        content: `I couldn't reach any of my thinking services. Please check your internet connection or API keys.`,
-      },
-      finish_reason: "error",
-    }],
-  };
+  // If we get here, all providers failed with exceptions
+  throw lastError ?? new Error("All LLM providers failed with no error details.");
 }
