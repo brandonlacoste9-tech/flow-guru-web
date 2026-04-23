@@ -93,10 +93,12 @@ CREATE TABLE IF NOT EXISTS fg_local_events (
     location TEXT,
     "allDay" INTEGER DEFAULT 0 NOT NULL,
     "color" VARCHAR(32) DEFAULT 'blue',
+    "reminderMinutes" TEXT DEFAULT '30,15,5',
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
 ALTER TABLE fg_local_events ADD COLUMN IF NOT EXISTS "color" VARCHAR(32) DEFAULT 'blue';
+ALTER TABLE fg_local_events ADD COLUMN IF NOT EXISTS "reminderMinutes" TEXT DEFAULT '30,15,5';
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "alarmSound" VARCHAR(64) DEFAULT 'chime';
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "alarmDays" VARCHAR(32) DEFAULT '0,1,2,3,4,5,6';
 `;
@@ -415,7 +417,7 @@ export async function listLocalEvents(userId: number, startAfter?: Date, endBefo
 }
 
 export async function updateLocalEvent(userId: number, eventId: number, data: Partial<{
-  title: string; description: string | null; startAt: Date; endAt: Date; location: string | null; allDay: number;
+  title: string; description: string | null; startAt: Date; endAt: Date; location: string | null; allDay: number; reminderMinutes: string | null;
 }>): Promise<void> {
     try {
       const db = await getDb();

@@ -280,6 +280,33 @@ export default function Home() {
     } catch { return ""; }
   };
 
+  // Live query for today's local events (refreshes when calendar changes)
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+  const todayLocalEventsQuery = trpc.calendar.list.useQuery(
+    { startAt: todayStart.toISOString(), endAt: todayEnd.toISOString() },
+    { refetchInterval: 60000, staleTime: 30000 }
+  );
+  // Merge bootstrap todayEvents (includes Google Calendar) with live local events
+  const liveLocalEvents = (todayLocalEventsQuery.data ?? []).map((e: any) => ({
+    title: e.title,
+    start: e.startAt ? new Date(e.startAt).toISOString() : null,
+    allDay: Boolean(e.allDay),
+    color: e.color ?? 'blue',
+  }));
+  // Combine: live local events + Google Calendar events from bootstrap, deduplicate by title+start
+  const googleEvents = todayEvents.filter((e: any) => !liveLocalEvents.some((l: any) => l.title === e.title && l.start === e.start));
+  const allTodayEvents = [...liveLocalEvents, ...googleEvents].sort((a: any, b: any) => {
+    if (!a.start) return 1; if (!b.start) return -1;
+    return new Date(a.start).getTime() - new Date(b.start).getTime();
+  });
+
+  const EVENT_COLOR_MAP: Record<string, string> = {
+    blue: 'bg-blue-500', green: 'bg-emerald-500', red: 'bg-red-500',
+    yellow: 'bg-yellow-400', purple: 'bg-purple-500', pink: 'bg-pink-400',
+    orange: 'bg-orange-400', teal: 'bg-teal-500',
+  };
+
   const greeting = currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening";
   const userName = user?.name?.split(' ')[0] || "Brandon";
 
@@ -482,21 +509,25 @@ export default function Home() {
                       <span className="text-[10px] uppercase font-bold tracking-wider text-primary">Open Calendar</span>
                     </div>
                     
-                    {todayEvents.length > 0 ? (
-                      <div className="space-y-3 mt-2">
-                        {todayEvents.slice(0, 3).map((e, i) => (
+                    {allTodayEvents.length > 0 ? (
+                      <div className="space-y-2.5 mt-2">
+                        {allTodayEvents.slice(0, 5).map((e: any, i: number) => (
                           <div key={i} className="flex items-center justify-between group/event">
-                            <div className="flex items-center gap-3 overflow-hidden">
-                              <div className="w-1 h-1 rounded-full bg-primary/50" />
+                            <div className="flex items-center gap-2.5 overflow-hidden">
+                              <div className={cn("w-2 h-2 rounded-full shrink-0", EVENT_COLOR_MAP[e.color] ?? 'bg-primary/50')} />
                               <p className="text-sm font-medium truncate text-foreground group-hover/event:text-primary transition-colors">{e.title}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground shrink-0 font-medium">{formatEventTime(e.start, e.allDay)}</p>
+                            <p className="text-xs text-muted-foreground shrink-0 font-medium ml-2">{formatEventTime(e.start, e.allDay)}</p>
                           </div>
                         ))}
+                        {allTodayEvents.length > 5 && (
+                          <p className="text-xs text-muted-foreground pt-1">+{allTodayEvents.length - 5} more</p>
+                        )}
                       </div>
                     ) : (
                       <div className="h-14 flex flex-col justify-center">
                         <p className="text-[15px] font-medium text-foreground">Schedule is clear.</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">No events today</p>
                       </div>
                     )}
                   </motion.div>

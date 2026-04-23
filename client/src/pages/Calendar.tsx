@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, X, MapPin, Clock, Trash2,
-  ArrowLeft, Calendar as CalendarIcon, AlignLeft, Search, RefreshCw
+  ArrowLeft, Calendar as CalendarIcon, AlignLeft, Search, RefreshCw, Bell
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,7 @@ type EventForm = {
   allDay: boolean;
   color: string;
   recurrence: RecurrenceType;
+  reminderMinutes: string; // comma-separated, e.g. '30,15,5'
 };
 
 const blankForm = (day: Date): EventForm => {
@@ -62,7 +63,7 @@ const blankForm = (day: Date): EventForm => {
   start.setHours(9, 0, 0, 0);
   const end = new Date(start);
   end.setHours(10, 0, 0, 0);
-  return { title: "", description: "", startAt: formatDatetimeLocal(start), endAt: formatDatetimeLocal(end), location: "", allDay: false, color: "blue", recurrence: "none" };
+  return { title: "", description: "", startAt: formatDatetimeLocal(start), endAt: formatDatetimeLocal(end), location: "", allDay: false, color: "blue", recurrence: "none", reminderMinutes: "30,15,5" };
 };
 
 // ─── Mini Calendar (sidebar) ──────────────────────────────────────────────────
@@ -260,6 +261,25 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
                 <option value="weekly">Every week</option>
                 <option value="monthly">Every month</option>
                 <option value="yearly">Every year</option>
+              </select>
+            </div>
+
+            {/* Reminder time */}
+            <div className="flex items-center gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2">
+              <Bell size={14} className="text-muted-foreground shrink-0"/>
+              <select value={form.reminderMinutes} onChange={e => setForm({...form, reminderMinutes: e.target.value})}
+                className="flex-1 bg-transparent text-sm outline-none text-foreground">
+                <option value="">No reminder</option>
+                <option value="5">5 minutes before</option>
+                <option value="10">10 minutes before</option>
+                <option value="15">15 minutes before</option>
+                <option value="30">30 minutes before</option>
+                <option value="30,15">30 and 15 minutes before</option>
+                <option value="30,15,5">30, 15, and 5 minutes before</option>
+                <option value="60">1 hour before</option>
+                <option value="60,30">1 hour and 30 minutes before</option>
+                <option value="60,30,15,5">1 hour, 30, 15, and 5 min before</option>
+                <option value="1440">1 day before</option>
               </select>
             </div>
 
@@ -635,6 +655,7 @@ export default function Calendar() {
           location: form.location || undefined,
           allDay: form.allDay,
           color: form.color,
+          reminderMinutes: form.reminderMinutes || undefined,
         });
       }
       eventsQuery.refetch();

@@ -112,6 +112,8 @@ export const localEvents = pgTable(
     endAt: timestamp("endAt").notNull(),
     location: text("location"),
     allDay: integer("allDay").default(0).notNull(),
+    color: varchar("color", { length: 32 }).default("blue"),
+    reminderMinutes: text("reminderMinutes").default("30,15,5"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },

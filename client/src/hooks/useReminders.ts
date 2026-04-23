@@ -182,32 +182,46 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
         if (!event.startAt) continue;
         const eventStart = new Date(event.startAt);
         const diffMins = Math.round((eventStart.getTime() - now.getTime()) / 60000);
+        const timeStr = eventStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
-        // 15 minutes before
-        if (diffMins >= 14 && diffMins <= 16) {
-          const key = `event-15-${event.id}-${todayKey}`;
-          if (!firedReminders.has(key)) {
-            firedReminders.add(key);
-            const timeStr = eventStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-            const msg = `Hey ${currentUserName}, heads up — ${event.title} starts in 15 minutes at ${timeStr}. Get ready!`;
-            toast.info(`⏰ ${event.title}`, { description: `Starts in 15 minutes at ${timeStr}` });
-            fireAlarm(`${event.title} — in 15 minutes`, currentAlarmSound, msg);
+        // Parse per-event reminder minutes (default: 30,15,5 if not set)
+        const rawReminder = (event as any).reminderMinutes ?? '30,15,5';
+        const reminderList: number[] = rawReminder
+          ? rawReminder.split(',').map(Number).filter((n: number) => !isNaN(n) && n > 0)
+          : [];
+
+        // Fire each configured reminder
+        for (const mins of reminderList) {
+          if (diffMins >= mins - 1 && diffMins <= mins + 1) {
+            const key = `event-${mins}-${event.id}-${todayKey}`;
+            if (!firedReminders.has(key)) {
+              firedReminders.add(key);
+              let label: string;
+              let msg: string;
+              if (mins >= 60) {
+                const hrs = Math.round(mins / 60);
+                label = `${event.title} — in ${hrs} hour${hrs > 1 ? 's' : ''}`;
+                msg = `Hey ${currentUserName}, heads up — ${event.title} starts in ${hrs} hour${hrs > 1 ? 's' : ''} at ${timeStr}. Plan ahead!`;
+                toast.info(`⏰ ${event.title}`, { description: `Starts in ${hrs} hour${hrs > 1 ? 's' : ''} at ${timeStr}` });
+              } else if (mins >= 30) {
+                label = `${event.title} — in 30 minutes`;
+                msg = `Hey ${currentUserName}, just a heads up — ${event.title} starts in 30 minutes at ${timeStr}. Get ready!`;
+                toast.info(`⏰ ${event.title}`, { description: `Starts in 30 minutes at ${timeStr}` });
+              } else if (mins >= 15) {
+                label = `${event.title} — in 15 minutes`;
+                msg = `Hey ${currentUserName}, ${event.title} starts in 15 minutes at ${timeStr}. Almost time!`;
+                toast.info(`⏰ ${event.title}`, { description: `Starts in 15 minutes at ${timeStr}` });
+              } else {
+                label = `${event.title} — in ${mins} minutes`;
+                msg = `${currentUserName}, ${event.title} is starting in just ${mins} minutes. You're on!`;
+                toast.warning(`🔔 ${event.title}`, { description: `Starting in ${mins} minutes!` });
+              }
+              fireAlarm(label, currentAlarmSound, msg);
+            }
           }
         }
 
-        // 5 minutes before
-        if (diffMins >= 4 && diffMins <= 6) {
-          const key = `event-5-${event.id}-${todayKey}`;
-          if (!firedReminders.has(key)) {
-            firedReminders.add(key);
-            const timeStr = eventStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-            const msg = `${currentUserName}, ${event.title} is starting in just 5 minutes. You're on!`;
-            toast.warning(`🔔 ${event.title}`, { description: `Starting in 5 minutes!` });
-            fireAlarm(`${event.title} — in 5 minutes`, currentAlarmSound, msg);
-          }
-        }
-
-        // Exact start time (within 1 minute window)
+        // Exact start time (within 1 minute window) — always fires regardless of reminderList
         if (diffMins >= -1 && diffMins <= 1) {
           const key = `event-now-${event.id}-${todayKey}`;
           if (!firedReminders.has(key)) {
