@@ -1,10 +1,29 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import bcrypt from "bcryptjs";
-import crypto from "crypto";
+import { randomBytes, scrypt, timingSafeEqual } from "crypto";
+import { promisify } from "util";
 import { COOKIE_NAME, ONE_YEAR_MS } from "./lib/shared/const.js";
 import { ENV } from "./lib/_core/env.js";
 import { sdk } from "./lib/_core/sdk.js";
 import * as db from "./lib/db.js";
+
+const scryptAsync = promisify(scrypt);
+
+// Hash a password using Node.js built-in scrypt (no external deps)
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${salt}:${derivedKey.toString("hex")}`;
+}
+
+// Verify a password against a stored hash
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  const storedBuffer = Buffer.from(hash, "hex");
+  if (derivedKey.length !== storedBuffer.length) return false;
+  return timingSafeEqual(derivedKey, storedBuffer);
+}
 
 function buildSetCookieHeader(name: string, value: string, maxAgeMs: number, secure: boolean): string {
   const maxAgeSec = Math.floor(maxAgeMs / 1000);
@@ -48,8 +67,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (existing) {
         return json(res, 409, { error: "An account with this email already exists." });
       }
-      const passwordHash = await bcrypt.hash(password, 12);
-      const openId = `email_${crypto.randomBytes(12).toString("hex")}`;
+      const passwordHash = await hashPassword(password);
+      const openId = `email_${randomBytes(12).toString("hex")}`;
       await db.upsertUser({
         openId,
         name: name.trim(),
@@ -80,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!user || !user.passwordHash) {
         return json(res, 401, { error: "Invalid email or password." });
       }
-      const valid = await bcrypt.compare(password, user.passwordHash);
+      const valid = await verifyPassword(password, user.passwordHash);
       if (!valid) {
         return json(res, 401, { error: "Invalid email or password." });
       }
@@ -102,12 +121,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Always return success to prevent email enumeration
       if (!user) return json(res, 200, { ok: true });
 
-      const resetToken = crypto.randomBytes(32).toString("hex");
+      const resetToken = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
       await db.upsertUser({ ...user, resetToken, resetTokenExpiresAt: expiresAt });
 
       // TODO: Send email with reset link
-      // For now, return the token in dev mode or log it
       const resetUrl = `https://floguru.com/?reset_token=${resetToken}`;
       console.log(`[Auth] Password reset for ${email}: ${resetUrl}`);
 
@@ -122,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const user = await db.getUserByResetToken(token);
       if (!user) return json(res, 400, { error: "Invalid or expired reset link." });
 
-      const passwordHash = await bcrypt.hash(password, 12);
+      const passwordHash = await hashPassword(password);
       await db.upsertUser({ ...user, passwordHash, resetToken: null, resetTokenExpiresAt: null });
 
       return json(res, 200, { ok: true });
@@ -131,6 +149,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return json(res, 400, { error: "Unknown action." });
   } catch (err: any) {
     console.error("[EmailAuth] Error:", err);
-    return json(res, 500, { error: "Internal server error." });
+    return json(res, 500, { error: "Internal server error.", detail: String(err?.message || err) });
   }
 }
