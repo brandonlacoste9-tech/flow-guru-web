@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc-client";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import { useLocation } from "wouter";
 import { MusicPlayer } from "@/components/MusicPlayer";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { WeatherForecastModal } from "@/components/WeatherForecastModal";
+import { NewsModal } from "@/components/NewsModal";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -55,6 +56,7 @@ export default function Home() {
   const [currentStation, setCurrentStation] = useState('');
   const [showForecast, setShowForecast] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [showNews, setShowNews] = useState(false);
   // ElevenLabs free default voices (no paid plan required)
   const VOICE_IDS = {
     male: 'nPczCjzI2devNBz1zQrb',   // Brian — warm, natural, conversational male
@@ -450,33 +452,22 @@ export default function Home() {
                     )}
                   </motion.div>
 
-                  {/* Memory Card */}
+                  {/* News Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors"
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.6 }}
+                    onClick={() => setShowNews(true)}
                   >
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all" />
                     <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="w-4 h-4 text-primary" />
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Saved Memory</span>
+                      <Newspaper className="w-4 h-4 text-primary" />
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Top News</span>
                     </div>
-                    {memoryFacts.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {memoryFacts.slice(0, 8).map((f, i) => (
-                          <motion.span 
-                            key={i} 
-                            whileHover={{ scale: 1.05 }}
-                            className="px-2.5 py-1 rounded-full border border-border bg-secondary text-[10px] font-bold uppercase tracking-wider whitespace-nowrap text-muted-foreground"
-                          >
-                            {f.factValue}
-                          </motion.span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">No personal facts remembered yet.</p>
-                    )}
+                    <p className="text-sm font-semibold text-foreground">Today's Headlines</p>
+                    <p className="text-xs text-muted-foreground mt-1">General · Tech · Business</p>
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-primary mt-3">Tap to read →</p>
                   </motion.div>
 
                   {/* Music Player Card */}
@@ -639,6 +630,9 @@ export default function Home() {
           </AnimatePresence>
         </motion.div>
       </footer>
+
+      {/* News Modal */}
+      <NewsModal open={showNews} onClose={() => setShowNews(false)} />
 
       {/* Weather Forecast Modal */}
       {coords && weather && (

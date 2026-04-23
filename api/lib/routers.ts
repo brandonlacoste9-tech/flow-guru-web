@@ -862,6 +862,39 @@ export const appRouter = router({
         };
       }),
   }),
+  news: router({
+    topHeadlines: publicProcedure
+      .input(z.object({
+        locale: z.string().optional().default("us"),
+        categories: z.string().optional().default("general,technology,business"),
+        limit: z.number().min(1).max(20).optional().default(10),
+      }))
+      .query(async ({ input }) => {
+        const { ENV } = await import("./_core/env.js");
+        const key = ENV.theNewsApiKey;
+        if (!key) throw new Error("TheNewsAPI key not configured");
+        const url = new URL("https://api.thenewsapi.com/v1/news/top");
+        url.searchParams.set("api_token", key);
+        url.searchParams.set("locale", input.locale);
+        url.searchParams.set("categories", input.categories);
+        url.searchParams.set("limit", String(input.limit));
+        const res = await fetch(url.toString());
+        if (!res.ok) throw new Error(`TheNewsAPI error: ${res.status}`);
+        const data = await res.json();
+        return {
+          articles: (data.data ?? []).map((a: any) => ({
+            uuid: a.uuid,
+            title: a.title,
+            description: a.description ?? "",
+            url: a.url,
+            imageUrl: a.image_url ?? null,
+            source: a.source ?? "",
+            publishedAt: a.published_at ?? "",
+            categories: a.categories ?? [],
+          })),
+        };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
