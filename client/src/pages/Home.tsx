@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { OrbVisualizer } from "@/components/OrbVisualizer";
 import { useLocation } from "wouter";
 import { MusicPlayer } from "@/components/MusicPlayer";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface Message {
   id: string | number;
@@ -237,6 +238,8 @@ export default function Home() {
             className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
             <Calendar size={14} />
           </button>
+
+          <ThemeToggle />
 
           <button onClick={() => setSpeechEnabled(!speechEnabled)}
             className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">
