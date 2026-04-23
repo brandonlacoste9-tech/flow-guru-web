@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { usePushNotifications } from './usePushNotifications';
+import { playAlarmSound, type AlarmSoundType } from './useAlarmSound';
 
 interface UseRemindersOptions {
   enabled: boolean;
@@ -9,6 +10,7 @@ interface UseRemindersOptions {
   wakeUpTime?: string | null; // "HH:MM" format
   speakText: (text: string) => void;
   voiceGender: 'male' | 'female';
+  alarmSound?: AlarmSoundType;
 }
 
 // Track which reminders have already fired this session to avoid repeats
@@ -23,7 +25,9 @@ function getMinutesUntil(targetHour: number, targetMin: number, now: Date): numb
   return Math.round((target.getTime() - now.getTime()) / 60000);
 }
 
-export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender }: UseRemindersOptions) {
+export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender, alarmSound = 'chime' }: UseRemindersOptions) {
+  const alarmSoundRef = useRef(alarmSound);
+  alarmSoundRef.current = alarmSound;
   const utils = trpc.useUtils();
   const speakRef = useRef(speakText);
   speakRef.current = speakText;
@@ -134,7 +138,8 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
           firedReminders.add(key);
           const msg = `Good morning, ${userName}! It's ${wakeUpTime} — time to rise and shine. Let's make today incredible!`;
           toast.success('Good morning! ☀️', { description: `Wake-up reminder — ${wakeUpTime}` });
-          speakRef.current(msg);
+          playAlarmSound(alarmSoundRef.current, 30000);
+          setTimeout(() => speakRef.current(msg), alarmSoundRef.current === 'chime' ? 3500 : 1000);
         }
       }
     }
@@ -164,7 +169,8 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             const timeStr = eventStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
             const msg = `Hey ${userName}, heads up — ${event.title} starts in 15 minutes at ${timeStr}. Get ready!`;
             toast.info(`⏰ ${event.title}`, { description: `Starts in 15 minutes at ${timeStr}` });
-            speakRef.current(msg);
+            playAlarmSound(alarmSoundRef.current, 8000);
+            setTimeout(() => speakRef.current(msg), alarmSoundRef.current === 'chime' ? 3500 : 1000);
           }
         }
 
@@ -176,7 +182,8 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             const timeStr = eventStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
             const msg = `${userName}, ${event.title} is starting in just 5 minutes. You're on!`;
             toast.warning(`🔔 ${event.title}`, { description: `Starting in 5 minutes!` });
-            speakRef.current(msg);
+            playAlarmSound(alarmSoundRef.current, 8000);
+            setTimeout(() => speakRef.current(msg), alarmSoundRef.current === 'chime' ? 3500 : 1000);
           }
         }
 
@@ -187,7 +194,8 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             firedReminders.add(key);
             const msg = `${userName}, it's time — ${event.title} is starting right now. Go get it!`;
             toast.error(`🚀 ${event.title}`, { description: `Starting now!` });
-            speakRef.current(msg);
+            playAlarmSound(alarmSoundRef.current, 30000);
+            setTimeout(() => speakRef.current(msg), alarmSoundRef.current === 'chime' ? 3500 : 1000);
           }
         }
       }

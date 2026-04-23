@@ -60,6 +60,9 @@ export default function Home() {
   const [showNews, setShowNews] = useState(false);
   const [countryCode, setCountryCode] = useState<string>('us');
   const [wakeUpTime, setWakeUpTime] = useState<string | null>(null);
+  const [alarmSound, setAlarmSound] = useState<import('@/hooks/useAlarmSound').AlarmSoundType>(() => {
+    return (localStorage.getItem('alarmSound') as import('@/hooks/useAlarmSound').AlarmSoundType) || 'chime';
+  });
   // ElevenLabs free default voices (no paid plan required)
   const VOICE_IDS = {
     male: 'nPczCjzI2devNBz1zQrb',   // Brian — warm, natural, conversational male
@@ -81,6 +84,7 @@ export default function Home() {
   trpc.settings.getProfile.useQuery(undefined, {
     onSuccess: (data: any) => {
       if (data?.wakeUpTime) setWakeUpTime(data.wakeUpTime);
+      if (data?.alarmSound) { setAlarmSound(data.alarmSound); localStorage.setItem('alarmSound', data.alarmSound); }
     },
   });
 
@@ -270,6 +274,7 @@ export default function Home() {
     wakeUpTime,
     speakText,
     voiceGender,
+    alarmSound,
   });
 
   const handleConnectCalendar = () => {

@@ -922,6 +922,7 @@ export const appRouter = router({
         dailyRoutine: profile?.dailyRoutine ?? '',
         preferencesSummary: profile?.preferencesSummary ?? '',
         customInstructions,
+        alarmSound: profile?.alarmSound ?? 'chime',
       };
     }),
     // Save profile fields
@@ -930,6 +931,7 @@ export const appRouter = router({
         wakeUpTime: z.string().optional(),
         dailyRoutine: z.string().optional(),
         preferencesSummary: z.string().optional(),
+        alarmSound: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -937,6 +939,7 @@ export const appRouter = router({
           wakeUpTime: input.wakeUpTime ?? null,
           dailyRoutine: input.dailyRoutine ?? null,
           preferencesSummary: input.preferencesSummary ?? null,
+          alarmSound: input.alarmSound ?? null,
         });
         return { success: true };
       }),

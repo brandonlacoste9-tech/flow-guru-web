@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS fg_profiles (
     "dailyRoutine" TEXT,
     "preferencesSummary" TEXT,
     "recurringEventsSummary" TEXT,
+    "alarmSound" VARCHAR(64) DEFAULT 'chime',
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
@@ -95,6 +96,7 @@ CREATE TABLE IF NOT EXISTS fg_local_events (
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
 ALTER TABLE fg_local_events ADD COLUMN IF NOT EXISTS "color" VARCHAR(32) DEFAULT 'blue';
+ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "alarmSound" VARCHAR(64) DEFAULT 'chime';
 `;
 
 async function ensureSchemaOnce(): Promise<void> {

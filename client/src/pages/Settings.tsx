@@ -13,6 +13,7 @@ export function Settings() {
   const [activeTab, setActiveTab] = useState<Tab>('profile');
 
   const [wakeUpTime, setWakeUpTime] = useState('');
+  const [alarmSound, setAlarmSound] = useState<string>('chime');
   const [dailyRoutine, setDailyRoutine] = useState('');
   const [preferencesSummary, setPreferencesSummary] = useState('');
   const [profileDirty, setProfileDirty] = useState(false);
@@ -27,6 +28,7 @@ export function Settings() {
   const profileQuery = trpc.settings.getProfile.useQuery(undefined, {
     onSuccess: (data: any) => {
       setWakeUpTime(data.wakeUpTime ?? '');
+      setAlarmSound(data.alarmSound ?? 'chime');
       setDailyRoutine(data.dailyRoutine ?? '');
       setPreferencesSummary(data.preferencesSummary ?? '');
       setInstructions(data.customInstructions ?? '');
@@ -121,8 +123,21 @@ export function Settings() {
                     placeholder="e.g. I love hip-hop, tech, fitness. I prefer concise answers. I'm building a SaaS startup..."
                     className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
                 </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Sound</label>
+                  <select value={alarmSound} onChange={e => { setAlarmSound(e.target.value); setProfileDirty(true); }}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors">
+                    <option value="chime">🔔 Chime (default)</option>
+                    <option value="none">🔇 Silent (voice only)</option>
+                    <option value="radio-focus">🎵 Radio — Focus (Groove Salad)</option>
+                    <option value="radio-chill">🎵 Radio — Chill (Lush)</option>
+                    <option value="radio-energy">🎵 Radio — Energy (Beat Blender)</option>
+                    <option value="radio-sleep">🎵 Radio — Sleep (Sleep Bot)</option>
+                    <option value="radio-space">🎵 Radio — Space (Deep Space One)</option>
+                  </select>
+                </div>
                 <button disabled={!profileDirty || saveProfileMutation.isLoading}
-                  onClick={() => saveProfileMutation.mutate({ wakeUpTime, dailyRoutine, preferencesSummary })}
+                  onClick={() => saveProfileMutation.mutate({ wakeUpTime, dailyRoutine, preferencesSummary, alarmSound } as any)}
                   className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
                     profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
                   <Save size={14} />{saveProfileMutation.isLoading ? 'Saving...' : 'Save Profile'}
