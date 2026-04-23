@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, CheckCircle2, MessageSquarePlus, Music, Navigation, Newspaper, AlarmClock, ChevronRight, Pause, Play, MapPin } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, CheckCircle2, MessageSquarePlus, Music, Navigation, Newspaper, AlarmClock, ChevronRight } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { ActionResultCard } from "@/components/ActionResultCard";
+import { MusicPlayer, type MusicPlayerHandle } from "@/components/MusicPlayer";
 import { motion, AnimatePresence } from "framer-motion";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
@@ -52,10 +53,8 @@ export default function Home() {
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
   const [briefingScript, setBriefingScript] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
-  const [nowPlaying, setNowPlaying] = useState<{ label: string; uri: string } | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const nowPlayingAudioRef = useRef<HTMLAudioElement | null>(null);
   const geoFetchedRef = useRef(false);
+  const musicPlayerRef = useRef<MusicPlayerHandle>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -152,32 +151,6 @@ export default function Home() {
     },
     onError: () => setBriefingLoading(false),
   });
-
-  const quickSoundMutation = trpc.assistant.quickSound.useMutation({
-    onSuccess: (result) => {
-      // Stop previous track
-      if (nowPlayingAudioRef.current) {
-        nowPlayingAudioRef.current.pause();
-        nowPlayingAudioRef.current = null;
-      }
-      const audio = new Audio(result.audioDataUri);
-      audio.onended = () => { setIsPlaying(false); setNowPlaying(null); };
-      audio.onpause = () => setIsPlaying(false);
-      audio.onplay = () => setIsPlaying(true);
-      nowPlayingAudioRef.current = audio;
-      audio.play().catch(() => {});
-      setNowPlaying({ label: result.label, uri: result.audioDataUri });
-      setIsPlaying(true);
-    },
-    onError: () => toast.error("Couldn't load audio right now."),
-  });
-
-  const toggleNowPlaying = () => {
-    const audio = nowPlayingAudioRef.current;
-    if (!audio) return;
-    if (isPlaying) audio.pause();
-    else audio.play().catch(() => {});
-  };
 
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
@@ -283,39 +256,29 @@ export default function Home() {
   type QuickAction = {
     icon: React.ElementType;
     label: string;
-    sound?: "focus" | "relax" | "wake_up" | "wind_down" | "rain" | "nature";
-    msg?: string;
-    loading?: boolean;
+    action: () => void;
   };
 
   const quickActions: QuickAction[] = hour < 12
     ? [
-        { icon: Music, label: "Focus music", sound: "focus" },
-        { icon: Navigation, label: "Traffic", msg: "how's traffic to work?" },
-        { icon: Newspaper, label: "Top news", msg: "what's in the news?" },
-        { icon: Calendar, label: "My day", msg: "what's on my calendar today?" },
+        { icon: Music, label: "Focus music", action: () => musicPlayerRef.current?.play("focus") },
+        { icon: Navigation, label: "Traffic", action: () => handleSend("how's traffic to work?") },
+        { icon: Newspaper, label: "Top news", action: () => handleSend("what's in the news?") },
+        { icon: Calendar, label: "My day", action: () => handleSend("what's on my calendar today?") },
       ]
     : hour < 17
     ? [
-        { icon: Navigation, label: "Traffic home", msg: "how's traffic home?" },
-        { icon: Calendar, label: "This afternoon", msg: "what do I have this afternoon?" },
-        { icon: Newspaper, label: "Top news", msg: "what's happening in the news?" },
-        { icon: Music, label: "Focus music", sound: "focus" },
+        { icon: Navigation, label: "Traffic home", action: () => handleSend("how's traffic home?") },
+        { icon: Calendar, label: "This afternoon", action: () => handleSend("what do I have this afternoon?") },
+        { icon: Newspaper, label: "Top news", action: () => handleSend("what's happening in the news?") },
+        { icon: Music, label: "Focus music", action: () => musicPlayerRef.current?.play("focus") },
       ]
     : [
-        { icon: Music, label: "Wind down", sound: "wind_down" },
-        { icon: Calendar, label: "Tomorrow", msg: "what's on my calendar tomorrow?" },
-        { icon: Newspaper, label: "Top news", msg: "what's in the news tonight?" },
-        { icon: AlarmClock, label: "Set reminder", msg: "set a reminder for me" },
+        { icon: Music, label: "Wind down", action: () => musicPlayerRef.current?.play("sleep") },
+        { icon: Calendar, label: "Tomorrow", action: () => handleSend("what's on my calendar tomorrow?") },
+        { icon: Newspaper, label: "Top news", action: () => handleSend("what's in the news tonight?") },
+        { icon: AlarmClock, label: "Set reminder", action: () => handleSend("set a reminder for me") },
       ];
-
-  const handleQuickAction = (action: QuickAction) => {
-    if (action.sound) {
-      quickSoundMutation.mutate({ type: action.sound });
-    } else if (action.msg) {
-      handleSend(action.msg);
-    }
-  };
 
   return (
     <div className="flex flex-col h-screen bg-black text-white font-['Outfit'] selection:bg-blue-500/30 overflow-hidden">
@@ -511,58 +474,38 @@ export default function Home() {
                   </div>
                 </motion.div>
 
-                {/* Now Playing bar */}
-                <AnimatePresence>
-                  {nowPlaying && (
-                    <motion.div
-                      className="mb-3 flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-3"
-                      initial={{ opacity: 0, y: -8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -8 }}
-                    >
-                      <div className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
-                        <Music className="w-3.5 h-3.5 text-blue-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-white truncate">{nowPlaying.label}</p>
-                        <p className="text-[11px] text-zinc-500">Now playing</p>
-                      </div>
-                      <button
-                        onClick={toggleNowPlaying}
-                        className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
-                      >
-                        {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* Music player */}
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.42 }}
+                  className="mb-5"
+                >
+                  <MusicPlayer ref={musicPlayerRef} />
+                </motion.div>
 
                 {/* Quick-action chips */}
                 <motion.div
                   className="grid grid-cols-2 gap-2.5"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.45 }}
+                  transition={{ delay: 0.52 }}
                 >
                   {quickActions.map((action, idx) => {
                     const Icon = action.icon;
-                    const isLoadingThis = action.sound != null && quickSoundMutation.isPending;
                     return (
                       <motion.button
                         key={action.label}
-                        onClick={() => handleQuickAction(action)}
-                        disabled={isLoadingThis}
+                        onClick={action.action}
                         initial={{ opacity: 0, scale: 0.92 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.5 + idx * 0.07 }}
+                        transition={{ delay: 0.56 + idx * 0.07 }}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.97 }}
-                        className="flex items-center gap-3 bg-white/4 hover:bg-white/8 border border-white/5 hover:border-white/10 rounded-2xl px-4 py-3.5 text-left transition-all group disabled:opacity-60"
+                        className="flex items-center gap-3 bg-white/4 hover:bg-white/8 border border-white/5 hover:border-white/10 rounded-2xl px-4 py-3.5 text-left transition-all group"
                       >
                         <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
-                          {isLoadingThis
-                            ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                            : <Icon className="w-4 h-4 text-zinc-300" />}
+                          <Icon className="w-4 h-4 text-zinc-300" />
                         </div>
                         <span className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors">{action.label}</span>
                         <ChevronRight className="w-3.5 h-3.5 text-zinc-600 ml-auto group-hover:text-zinc-400 transition-colors" />
