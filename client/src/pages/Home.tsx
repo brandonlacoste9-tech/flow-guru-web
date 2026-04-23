@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, CheckCircle2, MessageSquarePlus, Music, Navigation, Newspaper, AlarmClock, ChevronRight } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, CheckCircle2, MessageSquarePlus, Music, Navigation, Newspaper, AlarmClock, ChevronRight, Pause, ArrowLeft } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -53,6 +53,7 @@ export default function Home() {
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
   const [briefingScript, setBriefingScript] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
+  const [nowPlayingLabel, setNowPlayingLabel] = useState<string | null>(null);
   const geoFetchedRef = useRef(false);
   const musicPlayerRef = useRef<MusicPlayerHandle>(null);
 
@@ -192,20 +193,11 @@ export default function Home() {
 
   const handleSend = (text: string) => {
     if (!text.trim() || sendMutation.isPending) return;
-    
-    // If starting from dashboard, trigger a new backend thread
-    const startsFresh = view === 'dashboard';
-
     setInputValue('');
     setView('chat');
-
-    if (startsFresh) {
-      setMessages([]);
-    }
-
     sendMutation.mutate({
       message: text,
-      threadId: startsFresh ? undefined : currentThreadId,
+      threadId: currentThreadId,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
     });
   };
@@ -327,13 +319,22 @@ export default function Home() {
           )}
 
           {view === 'chat' && (
-            <button 
-              onClick={() => startFreshMutation.mutate()}
-              title="Start New Session"
-              className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center bg-black/50 backdrop-blur-md hover:bg-white/10 transition-all shadow-sm text-zinc-300 hover:text-white"
-            >
-              {startFreshMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <MessageSquarePlus size={14} />}
-            </button>
+            <>
+              <button
+                onClick={() => setView('dashboard')}
+                title="Back to Home"
+                className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center bg-black/50 backdrop-blur-md hover:bg-white/10 transition-all shadow-sm text-zinc-300 hover:text-white"
+              >
+                <ArrowLeft size={14} />
+              </button>
+              <button
+                onClick={() => startFreshMutation.mutate()}
+                title="New Chat"
+                className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center bg-black/50 backdrop-blur-md hover:bg-white/10 transition-all shadow-sm text-zinc-300 hover:text-white"
+              >
+                {startFreshMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <MessageSquarePlus size={14} />}
+              </button>
+            </>
           )}
 
           <button onClick={() => setSpeechEnabled(!speechEnabled)}
@@ -481,7 +482,10 @@ export default function Home() {
                   transition={{ delay: 0.42 }}
                   className="mb-5"
                 >
-                  <MusicPlayer ref={musicPlayerRef} />
+                  <MusicPlayer
+                    ref={musicPlayerRef}
+                    onStateChange={(playing, label) => setNowPlayingLabel(playing ? label : null)}
+                  />
                 </motion.div>
 
                 {/* Quick-action chips */}
@@ -575,7 +579,46 @@ export default function Home() {
 
       {/* Input bar */}
       <footer className="p-4 pb-6 bg-gradient-to-t from-black via-black/95 to-transparent absolute bottom-0 left-0 right-0 z-50">
-        <motion.div 
+        {/* Mini music player — visible in chat mode when something is playing */}
+        <AnimatePresence>
+          {nowPlayingLabel && view === 'chat' && (
+            <motion.div
+              className="max-w-2xl mx-auto mb-2 flex items-center gap-3 bg-zinc-900/80 backdrop-blur-xl border border-white/8 rounded-2xl px-4 py-2.5"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+            >
+              <div className="flex gap-[3px] items-end h-3 shrink-0">
+                {[0, 0.12, 0.24].map((delay, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-[3px] bg-blue-400 rounded-full"
+                    style={{ height: 3 }}
+                    animate={{ height: [3, 10, 3] }}
+                    transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }}
+                  />
+                ))}
+              </div>
+              <Music size={12} className="text-blue-400 shrink-0" />
+              <span className="text-xs text-zinc-400 flex-1 truncate font-medium">{nowPlayingLabel} · SomaFM</span>
+              <button
+                onClick={() => musicPlayerRef.current?.pause()}
+                className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/20 transition-colors shrink-0"
+                title="Stop music"
+              >
+                <Pause size={10} />
+              </button>
+              <button
+                onClick={() => setView('dashboard')}
+                className="text-[11px] text-blue-400 hover:text-blue-300 font-medium transition-colors whitespace-nowrap shrink-0"
+              >
+                Open player →
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.div
           className="max-w-2xl mx-auto flex items-end gap-3"
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

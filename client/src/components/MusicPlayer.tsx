@@ -69,13 +69,19 @@ export type MusicPlayerHandle = {
   pause: () => void;
 };
 
-export const MusicPlayer = forwardRef<MusicPlayerHandle>((_props, ref) => {
+interface MusicPlayerProps {
+  onStateChange?: (playing: boolean, stationLabel: string) => void;
+}
+
+export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
+  ({ onStateChange }, ref) => {
   const [activeId, setActiveId] = useState<StationId>("focus");
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlIndexRef = useRef(0);
+  const activeIdRef = useRef<StationId>("focus");
 
   const station = STATIONS.find((s) => s.id === activeId)!;
 
@@ -87,6 +93,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle>((_props, ref) => {
     }
     setIsPlaying(false);
     setBuffering(false);
+    onStateChange?.(false, "");
   };
 
   const startAudio = (urls: string[], urlIdx = 0) => {
@@ -95,17 +102,18 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle>((_props, ref) => {
     urlIndexRef.current = urlIdx;
     setBuffering(true);
 
+    const currentStation = STATIONS.find((s) => s.id === activeIdRef.current)!;
     const audio = new Audio(urls[urlIdx]);
     audio.muted = isMuted;
 
     audio.addEventListener("playing", () => {
       setIsPlaying(true);
       setBuffering(false);
+      onStateChange?.(true, currentStation.label);
     });
     audio.addEventListener("waiting", () => setBuffering(true));
     audio.addEventListener("canplay", () => setBuffering(false));
     audio.addEventListener("error", () => {
-      // Try next fallback server
       startAudio(urls, urlIdx + 1);
     });
 
@@ -124,6 +132,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle>((_props, ref) => {
   const switchStation = (id: StationId) => {
     const wasActive = isPlaying || buffering;
     setActiveId(id);
+    activeIdRef.current = id;
     const s = STATIONS.find((st) => st.id === id)!;
     if (wasActive) {
       startAudio(s.urls);
@@ -143,7 +152,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle>((_props, ref) => {
     play: (stationId) => {
       const id = stationId ?? activeId;
       const s = STATIONS.find((st) => st.id === id)!;
-      if (id !== activeId) setActiveId(id);
+      if (id !== activeId) { setActiveId(id); activeIdRef.current = id; }
       startAudio(s.urls);
     },
     pause: stopAudio,
