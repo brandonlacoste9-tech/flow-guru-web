@@ -475,7 +475,7 @@ export const appRouter = router({
             results.push({
               title: e.title,
               start: e.startAt ? e.startAt.toISOString() : null,
-              allDay: e.allDay ?? false,
+              allDay: Boolean(e.allDay ?? false),
             });
           }
         } catch { /* ignore */ }

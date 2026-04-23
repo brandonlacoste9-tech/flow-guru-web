@@ -387,7 +387,6 @@ export async function planAssistantAction(params: {
     return parsed;
   } catch (e) {
     console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw:", raw);
-    fs.appendFileSync("debug_logs.txt", `[${new Date().toISOString()}] Parse Error: ${e}\nRaw: ${raw}\n`);
     throw new Error(`Failed to parse AI plan: ${(e as Error).message}`);
   }
 }
@@ -856,7 +855,7 @@ async function executeMusicAction(
           action: "music.play",
           status: "executed",
           title: "Spotify device needed",
-          summary: result.message,
+          summary: result.message ?? "Open Spotify on any device to start playback.",
           provider: "spotify",
           data: result,
         };
@@ -1087,9 +1086,6 @@ export async function executeAssistantAction(
       }
       case "system.subagent": {
         const task = plan.subagent?.task;
-        try {
-          fs.appendFileSync("debug_logs.txt", `[${new Date().toISOString()}] Executing subagent: ${task}\n`);
-        } catch (e) {}
         console.log("[Flow Guru] Executing subagent task:", task);
         if (!task) {
           return {
