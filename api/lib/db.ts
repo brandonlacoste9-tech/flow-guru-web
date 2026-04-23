@@ -132,9 +132,10 @@ async function ensureSchemaOnce(): Promise<void> {
 export async function getDb() {
   if (_db) return _db;
 
-  // Try multiple env var names — Vercel-Neon integration sets POSTGRES_URL,
-  // while manual setup uses DATABASE_URL. Prefer the non-SSL pooled URL for postgres.js.
+  // FG_DATABASE_URL is our own clean URL (no channel_binding) set directly in Vercel.
+  // Fall back to other standard env vars if not set.
   const rawUrl =
+    process.env.FG_DATABASE_URL ||
     process.env.POSTGRES_URL_NO_SSL ||
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
