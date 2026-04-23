@@ -1111,53 +1111,55 @@ export async function executeAssistantAction(
           };
         }
 
-        try {
-          console.log("[Flow Guru] DuckDuckGo web search for:", task);
+        const braveKey = ENV.braveApiKey;
+        if (!braveKey) {
+          return {
+            action: plan.action,
+            status: "failed",
+            title: "Web Search Unavailable",
+            summary: "Web search is not configured (missing BRAVE_API_KEY).",
+          };
+        }
 
-          // Search using DuckDuckGo HTML endpoint (no API key required)
-          const query = encodeURIComponent(task);
-          const ddgResp = await fetch(`https://html.duckduckgo.com/html/?q=${query}`, {
+        try {
+          console.log("[Flow Guru] Brave web search for:", task);
+
+          const braveUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(task)}&count=5`;
+          const braveResp = await fetch(braveUrl, {
+            method: "GET",
             headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              "Accept": "text/html",
+              "Accept": "application/json",
+              "Accept-Encoding": "gzip",
+              "X-Subscription-Token": braveKey,
             },
-            signal: AbortSignal.timeout(12_000),
+            signal: AbortSignal.timeout(15_000),
           });
 
-          if (!ddgResp.ok) throw new Error(`DuckDuckGo search failed: ${ddgResp.status}`);
-          const html = await ddgResp.text();
+          if (!braveResp.ok) throw new Error(`Brave search failed: ${braveResp.status}`);
+          const braveData = await braveResp.json() as any;
 
-          // Extract result snippets from HTML using regex (no DOM parser in edge runtime)
-          const snippetMatches = html.matchAll(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g);
-          const snippets: string[] = [];
-          for (const match of snippetMatches) {
-            const text = match[1].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-            if (text.length > 20) snippets.push(text);
-            if (snippets.length >= 4) break;
-          }
+          const results = braveData.web?.results || [];
+          const snippets = results.slice(0, 5).map((r: any) => `${r.title}: ${r.description || r.snippet || ""}`).join("\n\n");
+          const searchContext = snippets || "No results found.";
 
-          const searchContext = snippets.length > 0
-            ? snippets.join("\n\n")
-            : "No results found for that query.";
-
-          console.log("[Flow Guru] DuckDuckGo results:", snippets.length, "snippets");
+          console.log("[Flow Guru] Brave search results:", searchContext?.slice(0, 150));
 
           return {
             action: plan.action,
             status: "executed",
             title: "Web Search Complete",
             summary: searchContext,
-            provider: "duckduckgo",
+            provider: "brave",
           };
 
         } catch (error) {
-          console.error("[Flow Guru] DuckDuckGo web search error:", error);
+          console.error("[Flow Guru] Brave web search error:", error);
           return {
             action: plan.action,
             status: "failed",
             title: "Web Search Failed",
             summary: "I tried to search the web but ran into an error. Please try again.",
-            provider: "duckduckgo",
+            provider: "brave",
           };
         }
       }
