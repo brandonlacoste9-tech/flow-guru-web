@@ -90,9 +90,11 @@ CREATE TABLE IF NOT EXISTS fg_local_events (
     "endAt" TIMESTAMP NOT NULL,
     location TEXT,
     "allDay" INTEGER DEFAULT 0 NOT NULL,
+    "color" VARCHAR(32) DEFAULT 'blue',
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
+ALTER TABLE fg_local_events ADD COLUMN IF NOT EXISTS "color" VARCHAR(32) DEFAULT 'blue';
 `;
 
 async function ensureSchemaOnce(): Promise<void> {

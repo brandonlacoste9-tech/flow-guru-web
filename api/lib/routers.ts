@@ -337,6 +337,7 @@ export const appRouter = router({
         endAt: z.string(),
         location: z.string().optional(),
         allDay: z.boolean().default(false),
+        color: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -348,6 +349,7 @@ export const appRouter = router({
           endAt: new Date(input.endAt),
           location: input.location ?? null,
           allDay: input.allDay ? 1 : 0,
+          color: input.color ?? 'blue',
         });
         return { id };
       }),
