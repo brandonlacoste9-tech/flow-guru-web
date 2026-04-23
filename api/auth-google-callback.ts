@@ -92,8 +92,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Set-Cookie", cookieHeader);
 
     return res.redirect(302, "/");
-  } catch (err) {
+  } catch (err: any) {
+    const errMsg = encodeURIComponent((err?.message || String(err)).slice(0, 200));
     console.error("[GoogleAuth] Callback failed", err);
-    return res.redirect(302, "/?auth_error=callback_failed");
+    return res.redirect(302, `/?auth_error=callback_failed&detail=${errMsg}`);
   }
 }
