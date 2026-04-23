@@ -10,6 +10,7 @@ import { OrbVisualizer } from "@/components/OrbVisualizer";
 import { useLocation } from "wouter";
 import { MusicPlayer } from "@/components/MusicPlayer";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { WeatherForecastModal } from "@/components/WeatherForecastModal";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -52,6 +53,8 @@ export default function Home() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [currentStation, setCurrentStation] = useState('');
+  const [showForecast, setShowForecast] = useState(false);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   // ElevenLabs free default voices (no paid plan required)
   const VOICE_IDS = {
     male: 'nPczCjzI2devNBz1zQrb',   // Brian — warm, natural, conversational male
@@ -85,6 +88,7 @@ export default function Home() {
     geoFetchedRef.current = true;
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
+      setCoords({ lat: latitude, lon: longitude });
       try {
         const [cityRes, wxRes] = await Promise.all([
           fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`),
@@ -374,7 +378,8 @@ export default function Home() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                   {/* Weather Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors"
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer"
+                    onClick={() => weather && coords && setShowForecast(true)}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
@@ -390,6 +395,7 @@ export default function Home() {
                           <p className="text-4xl font-bold tracking-tight">{weather.tempC}°</p>
                         </div>
                         <p className="text-sm text-muted-foreground capitalize mt-1 font-medium">{weather.label} <span className="text-border">•</span> Feels like {weather.feelsLikeC}°</p>
+                        {coords && <p className="text-[10px] uppercase font-bold tracking-wider text-primary mt-2">Tap for forecast →</p>}
                       </>
                     ) : (
                       <div className="h-16 flex flex-col justify-center">
@@ -633,6 +639,20 @@ export default function Home() {
           </AnimatePresence>
         </motion.div>
       </footer>
+
+      {/* Weather Forecast Modal */}
+      {coords && weather && (
+        <WeatherForecastModal
+          open={showForecast}
+          onClose={() => setShowForecast(false)}
+          lat={coords.lat}
+          lon={coords.lon}
+          locationName={weather.locationName}
+          currentTempC={weather.tempC}
+          currentLabel={weather.label}
+          feelsLikeC={weather.feelsLikeC}
+        />
+      )}
     </div>
   );
 }
