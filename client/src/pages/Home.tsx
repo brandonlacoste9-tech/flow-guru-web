@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, CheckCircle2, MessageSquarePlus, Music, Navigation, Newspaper, AlarmClock, ChevronRight } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -14,12 +14,20 @@ interface Message {
   actionResult?: any;
 }
 
-const SUGGESTIONS = [
-  "What's on my calendar today?",
-  "What's the weather?",
-  "Book lunch at noon tomorrow",
-  "Remind me to call Mom at 5pm",
-];
+function formatCountdown(targetIso: string): string {
+  const diff = new Date(targetIso).getTime() - Date.now();
+  if (diff <= 0) return "now";
+  const mins = Math.round(diff / 60000);
+  if (mins < 60) return `in ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem > 0 ? `in ${hrs}h ${rem}m` : `in ${hrs}h`;
+}
+
+function getTodayKey() {
+  const d = new Date();
+  return `flow_guru_briefed_${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
 
 export default function Home() {
   const { user, logout } = useAuth({ redirectOnUnauthenticated: false });
@@ -34,6 +42,8 @@ export default function Home() {
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
+  const [briefingScript, setBriefingScript] = useState<string | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -60,6 +70,18 @@ export default function Home() {
     }
   }, [bootstrap.data]);
 
+  // Auto-trigger morning briefing once per day on load
+  useEffect(() => {
+    if (!bootstrap.data) return;
+    const hour = new Date().getHours();
+    const isMorning = hour >= 5 && hour < 12;
+    const alreadyBriefed = localStorage.getItem(getTodayKey()) === "1";
+    if (isMorning && !alreadyBriefed && !briefingMutation.isPending) {
+      setBriefingLoading(true);
+      briefingMutation.mutate();
+    }
+  }, [bootstrap.data]);
+
   const startFreshMutation = trpc.assistant.startFresh.useMutation({
     onSuccess: (result) => {
       setMessages([]);
@@ -74,6 +96,19 @@ export default function Home() {
       const audio = new Audio(result.audioDataUri);
       audio.play().catch(() => {});
     },
+  });
+
+  const briefingMutation = trpc.assistant.briefing.useMutation({
+    onSuccess: (result) => {
+      setBriefingScript(result.script ?? null);
+      setBriefingLoading(false);
+      if (result.audioDataUri) {
+        const audio = new Audio(result.audioDataUri);
+        audio.play().catch(() => {});
+      }
+      localStorage.setItem(getTodayKey(), "1");
+    },
+    onError: () => setBriefingLoading(false),
   });
 
   const sendMutation = trpc.assistant.send.useMutation({
@@ -166,13 +201,38 @@ export default function Home() {
     } catch { return ""; }
   };
 
-  const greeting = currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening";
+  const hour = currentTime.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const userName = user?.name?.split(' ')[0] || "there";
-  const hasContext = messages.length > 0;
 
   const handleConnectCalendar = () => {
     window.location.href = '/api/integrations/google-calendar/start';
   };
+
+  // Next upcoming event (first event with a future start time)
+  const nextEvent = todayEvents.find(e => e.start && new Date(e.start).getTime() > Date.now());
+
+  // Context-aware quick actions
+  const quickActions = hour < 12
+    ? [
+        { icon: Music, label: "Focus music", msg: "play some focus music" },
+        { icon: Navigation, label: "Traffic", msg: "how's traffic to work?" },
+        { icon: Newspaper, label: "Top news", msg: "what's in the news?" },
+        { icon: Calendar, label: "My day", msg: "what's on my calendar today?" },
+      ]
+    : hour < 17
+    ? [
+        { icon: Navigation, label: "Traffic home", msg: "how's traffic home?" },
+        { icon: Calendar, label: "This afternoon", msg: "what do I have this afternoon?" },
+        { icon: Newspaper, label: "Top news", msg: "what's happening in the news?" },
+        { icon: Music, label: "Focus music", msg: "play some focus music" },
+      ]
+    : [
+        { icon: Music, label: "Wind down", msg: "play something relaxing" },
+        { icon: Calendar, label: "Tomorrow", msg: "what's on my calendar tomorrow?" },
+        { icon: Newspaper, label: "Top news", msg: "what's in the news tonight?" },
+        { icon: AlarmClock, label: "Set reminder", msg: "set a reminder for me" },
+      ];
 
   return (
     <div className="flex flex-col h-screen bg-black text-white font-['Outfit'] selection:bg-blue-500/30 overflow-hidden">
@@ -252,131 +312,145 @@ export default function Home() {
       <main className="flex-1 overflow-y-auto px-5 scrollbar-hide z-10">
         <div className="max-w-2xl mx-auto pb-36">
 
-          {/* Dashboard — only when no messages */}
+          {/* Dashboard */}
           <AnimatePresence>
             {view === 'dashboard' && (
-              <motion.div 
+              <motion.div
                 className="pt-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
               >
                 {/* Time & Greeting */}
-                <div className="mb-8">
-                  <motion.h3 
-                    className="text-[4rem] font-bold tracking-tighter leading-none mb-2 tabular-nums mix-blend-plus-lighter"
-                    initial={{ opacity: 0, filter: "blur(10px)" }}
+                <div className="mb-7">
+                  <motion.p
+                    className="text-[4rem] font-bold tracking-tighter leading-none mb-1 tabular-nums"
+                    initial={{ opacity: 0, filter: "blur(8px)" }}
                     animate={{ opacity: 1, filter: "blur(0px)" }}
-                    transition={{ delay: 0.1, duration: 0.8 }}
+                    transition={{ delay: 0.1, duration: 0.7 }}
                   >
                     {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </motion.h3>
-                  <motion.h2 
-                    className="text-2xl font-semibold tracking-tight text-zinc-300 ml-1"
+                  </motion.p>
+                  <motion.h2
+                    className="text-xl font-semibold tracking-tight text-zinc-300 ml-0.5"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3 }}
+                    transition={{ delay: 0.25 }}
                   >
                     {greeting}, <span className="text-white">{userName}</span>
                   </motion.h2>
                 </div>
 
-                {/* Live cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                  {/* Weather Card */}
-                  <motion.div 
-                    className="bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-5 shadow-2xl relative overflow-hidden group hover:border-white/10 transition-colors"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                  >
-                    <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
-                    <div className="flex items-center gap-2 mb-3">
-                      <Cloud className="w-4 h-4 text-blue-400" />
-                      <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{weather?.locationName || "Weather"}</span>
-                    </div>
-                    {weather ? (
-                      <>
-                        <div className="flex items-baseline gap-2">
-                          <p className="text-4xl font-bold tracking-tight">{weather.tempC}°</p>
+                {/* Morning briefing card */}
+                <AnimatePresence>
+                  {(briefingLoading || briefingScript) && (
+                    <motion.div
+                      className="mb-5 bg-gradient-to-br from-blue-600/10 to-purple-600/10 border border-blue-500/20 rounded-3xl p-5 backdrop-blur-xl"
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.96 }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="w-4 h-4 text-blue-400" />
+                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Morning Briefing</span>
+                        {briefingLoading && <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin ml-auto" />}
+                      </div>
+                      {briefingScript ? (
+                        <p className="text-[14px] text-zinc-300 leading-relaxed">{briefingScript}</p>
+                      ) : (
+                        <div className="h-10 flex items-center">
+                          <div className="flex gap-1.5">
+                            {[0, 0.15, 0.3].map((delay, i) => (
+                              <motion.div key={i} className="w-1.5 h-1.5 bg-blue-400/60 rounded-full"
+                                animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.7, delay }} />
+                            ))}
+                          </div>
+                          <span className="text-sm text-zinc-500 ml-3">Preparing your briefing…</span>
                         </div>
-                        <p className="text-sm text-zinc-400 capitalize mt-1 font-medium">{weather.label} <span className="text-zinc-600">•</span> Feels like {weather.feelsLikeC}°</p>
-                      </>
-                    ) : (
-                      <div className="h-16 flex items-center justify-center">
-                        <Loader2 className="w-5 h-5 text-zinc-600 animate-spin" />
-                      </div>
-                    )}
-                  </motion.div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                  {/* Calendar Card */}
-                  <motion.div 
-                    className="bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-5 shadow-2xl relative overflow-hidden group hover:border-white/10 transition-colors"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5 }}
-                  >
-                    <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:bg-green-500/20 transition-all" />
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-green-400" />
-                        <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Today</span>
-                      </div>
-                      {!isGoogleConnected && (
-                         <button onClick={handleConnectCalendar} className="text-[10px] uppercase font-bold tracking-wider text-blue-400 hover:text-blue-300">Connect</button>
+                {/* Situation panel */}
+                <motion.div
+                  className="bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-3xl overflow-hidden mb-5 shadow-2xl"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  {/* Weather strip */}
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+                    <div className="flex items-center gap-3">
+                      <Cloud className="w-4 h-4 text-blue-400 shrink-0" />
+                      {weather ? (
+                        <div>
+                          <span className="text-white font-semibold text-[15px]">{weather.tempC}°C</span>
+                          <span className="text-zinc-500 text-[13px] ml-2 capitalize">{weather.label}</span>
+                          <span className="text-zinc-600 text-[12px] ml-1">· feels {weather.feelsLikeC}°</span>
+                        </div>
+                      ) : bootstrap.isLoading ? (
+                        <span className="text-zinc-600 text-sm">Loading…</span>
+                      ) : (
+                        <span className="text-zinc-500 text-sm">Tell me your city to see weather</span>
                       )}
                     </div>
-                    
-                    {isGoogleConnected ? (
-                      todayEvents.length > 0 ? (
-                        <div className="space-y-3 mt-2">
-                          {todayEvents.slice(0, 3).map((e, i) => (
-                            <div key={i} className="flex items-center justify-between group/event">
-                              <div className="flex items-center gap-3 overflow-hidden">
-                                <div className="w-1 h-1 rounded-full bg-green-500/50" />
-                                <p className="text-sm font-medium truncate text-zinc-200 group-hover/event:text-white transition-colors">{e.title}</p>
-                              </div>
-                              <p className="text-xs text-zinc-500 shrink-0 font-medium">{formatEventTime(e.start, e.allDay)}</p>
-                            </div>
-                          ))}
-                          {todayEvents.length > 3 && (
-                            <p className="text-xs text-zinc-600 font-medium pt-1">+{todayEvents.length - 3} more events today</p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="h-14 flex flex-col justify-center">
-                          <p className="text-[15px] font-medium text-zinc-300">Schedule is perfectly clear.</p>
-                          <p className="text-xs text-zinc-500 mt-1">Enjoy your free time.</p>
-                        </div>
-                      )
-                    ) : (
-                      <div className="h-14 flex flex-col justify-center">
-                        <p className="text-sm text-zinc-400">Connect your calendar to see upcoming events directly here.</p>
-                      </div>
+                    {weather && (
+                      <span className="text-[11px] text-zinc-600 font-medium">{weather.locationName}</span>
                     )}
-                  </motion.div>
-                </div>
+                  </div>
 
-                {/* Suggestion chips */}
-                <motion.div 
-                  className="flex flex-wrap gap-2.5"
+                  {/* Next event strip */}
+                  <div className="flex items-center justify-between px-5 py-4">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <Calendar className="w-4 h-4 text-green-400 shrink-0" />
+                      {!isGoogleConnected ? (
+                        <button onClick={handleConnectCalendar} className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors">
+                          Connect Google Calendar →
+                        </button>
+                      ) : nextEvent ? (
+                        <div className="overflow-hidden">
+                          <p className="text-white text-[14px] font-medium truncate">{nextEvent.title}</p>
+                          <p className="text-zinc-500 text-[12px]">{formatEventTime(nextEvent.start, nextEvent.allDay)}</p>
+                        </div>
+                      ) : todayEvents.length > 0 ? (
+                        <span className="text-zinc-400 text-sm">All done for today</span>
+                      ) : (
+                        <span className="text-zinc-500 text-sm">Nothing scheduled today</span>
+                      )}
+                    </div>
+                    {nextEvent && (
+                      <span className="text-xs font-bold text-green-400 bg-green-400/10 px-2.5 py-1 rounded-full shrink-0 ml-3">
+                        {formatCountdown(nextEvent.start)}
+                      </span>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Quick-action chips */}
+                <motion.div
+                  className="grid grid-cols-2 gap-2.5"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6 }}
+                  transition={{ delay: 0.45 }}
                 >
-                  {SUGGESTIONS.map((s, idx) => (
-                    <motion.button 
-                      key={s} 
-                      onClick={() => handleSend(s)}
-                      initial={{ opacity: 0, scale: 0.9 }}
+                  {quickActions.map(({ icon: Icon, label, msg }, idx) => (
+                    <motion.button
+                      key={label}
+                      onClick={() => handleSend(msg)}
+                      initial={{ opacity: 0, scale: 0.92 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.7 + (idx * 0.1) }}
+                      transition={{ delay: 0.5 + idx * 0.07 }}
                       whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="bg-white/5 border border-white/5 backdrop-blur-md text-sm text-zinc-300 px-4 py-2.5 rounded-2xl hover:bg-white/10 hover:border-white/10 transition-all font-medium"
+                      whileTap={{ scale: 0.97 }}
+                      className="flex items-center gap-3 bg-white/4 hover:bg-white/8 border border-white/5 hover:border-white/10 rounded-2xl px-4 py-3.5 text-left transition-all group"
                     >
-                      {s}
+                      <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
+                        <Icon className="w-4 h-4 text-zinc-300" />
+                      </div>
+                      <span className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors">{label}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-zinc-600 ml-auto group-hover:text-zinc-400 transition-colors" />
                     </motion.button>
                   ))}
                 </motion.div>
