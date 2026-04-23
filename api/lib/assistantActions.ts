@@ -1104,37 +1104,90 @@ export async function executeAssistantAction(
           return {
             action: plan.action,
             status: "needs_input",
-            title: "Browser task details needed",
-            summary: "What specifically do you want me to do or look up on the web?",
+            title: "Search details needed",
+            summary: "What specifically do you want me to look up on the web?",
           };
         }
-        
-        try {
-          const resp = await fetch("http://localhost:8000/browse", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ task }),
-            // Give it plenty of time, browser workflows are slow
-            signal: AbortSignal.timeout(180_000), 
-          });
 
-          if (!resp.ok) throw new Error("Browser microservice failed");
-          const j = await resp.json();
-
-          return {
-            action: plan.action,
-            status: "executed",
-            title: "Web Browsing Complete",
-            summary: j.result || "I finished the task online.",
-            provider: "browser-use",
-          };
-        } catch (error) {
+        const kimiKey = ENV.moonshotApiKey;
+        if (!kimiKey) {
           return {
             action: plan.action,
             status: "failed",
-            title: "Web Browsing Failed",
-            summary: "I tried to accomplish this via the browser agent, but it encountered an error.",
-            provider: "browser-use",
+            title: "Web Search Unavailable",
+            summary: "Web search is not configured. Please add a MOONSHOT_API_KEY to enable it.",
+          };
+        }
+
+        try {
+          console.log("[Flow Guru] Kimi web search for:", task);
+
+          // Step 1: Ask Kimi to search the web
+          const searchResp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${kimiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "moonshot-v1-8k",
+              messages: [{ role: "user", content: task }],
+              tools: [{ type: "builtin_function", function: { name: "$web_search" } }],
+              max_tokens: 1000,
+            }),
+            signal: AbortSignal.timeout(30_000),
+          });
+
+          if (!searchResp.ok) throw new Error(`Kimi search failed: ${searchResp.status}`);
+          const searchData = await searchResp.json() as any;
+          const firstChoice = searchData.choices?.[0]?.message;
+
+          // Step 2: If Kimi returned tool_calls, send back the results for a final answer
+          if (firstChoice?.tool_calls?.length > 0) {
+            const toolCall = firstChoice.tool_calls[0];
+            const followUpResp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${kimiKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "moonshot-v1-8k",
+                messages: [
+                  { role: "user", content: task },
+                  { role: "assistant", content: firstChoice.content || "", tool_calls: firstChoice.tool_calls },
+                  { role: "tool", tool_call_id: toolCall.id, name: toolCall.function.name, content: toolCall.function.arguments },
+                ],
+                max_tokens: 1000,
+              }),
+              signal: AbortSignal.timeout(30_000),
+            });
+
+            if (!followUpResp.ok) throw new Error(`Kimi follow-up failed: ${followUpResp.status}`);
+            const followUpData = await followUpResp.json() as any;
+            const answer = followUpData.choices?.[0]?.message?.content || "I searched the web but couldn't find a clear answer.";
+
+            return {
+              action: plan.action,
+              status: "executed",
+              title: "Web Search Complete",
+              summary: answer,
+              provider: "kimi",
+            };
+          }
+
+          // Step 3: If Kimi answered directly (no search needed)
+          const directAnswer = firstChoice?.content || "I couldn't find an answer online.";
+          return {
+            action: plan.action,
+            status: "executed",
+            title: "Web Search Complete",
+            summary: directAnswer,
+            provider: "kimi",
+          };
+
+        } catch (error) {
+          console.error("[Flow Guru] Kimi web search error:", error);
+          return {
+            action: plan.action,
+            status: "failed",
+            title: "Web Search Failed",
+            summary: "I tried to search the web but ran into an error. Please try again.",
+            provider: "kimi",
           };
         }
       }
