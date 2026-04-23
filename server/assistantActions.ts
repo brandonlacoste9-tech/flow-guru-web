@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getProviderConnection } from "./db";
+import { getProviderConnection, createLocalEvent } from "./db";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
@@ -732,13 +732,7 @@ async function executeCalendarCreateAction(
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
   const connection = await getProviderConnection(options.userId, "google-calendar");
-  if (!connection || (connection as any).status !== "connected") {
-    return connectionRequiredResult(
-      plan.action,
-      "google-calendar",
-      "Google Calendar needs to be connected before I can book that for you.",
-    );
-  }
+  const hasGoogleCalendar = connection && (connection as any).status === "connected";
 
   if (!normalizeText(plan.calendar?.title) || !normalizeText(plan.calendar?.startDescription)) {
     return {
@@ -746,7 +740,6 @@ async function executeCalendarCreateAction(
       status: "needs_input",
       title: "Calendar details needed",
       summary: "I can book that as soon as I know the event title and when it should start.",
-      provider: "google-calendar",
     };
   }
 
@@ -764,39 +757,72 @@ async function executeCalendarCreateAction(
       action: plan.action,
       status: "needs_input",
       title: "Timing still needed",
-      summary: "I’m close, but I still need a clearer time for that booking before I add it to Google Calendar.",
-      provider: "google-calendar",
+      summary: "I need a clearer time for that booking before I add it to your calendar.",
     };
   }
 
   const endIso =
     resolved.endIso ?? new Date(new Date(resolved.startIso).getTime() + 1000 * 60 * 60).toISOString();
 
-  const created = await createGoogleCalendarEvent({
+  // Use Google Calendar if connected, otherwise fall back to local database
+  if (hasGoogleCalendar) {
+    const created = await createGoogleCalendarEvent({
+      userId: options.userId,
+      title: eventTitle,
+      startIso: resolved.startIso,
+      endIso,
+      timeZone: options.timeZone ?? null,
+    });
+
+    const confirmedStart = created.start?.dateTime ?? resolved.startIso;
+    const confirmedEnd = created.end?.dateTime ?? endIso;
+    const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
+
+    return {
+      action: plan.action,
+      status: "executed",
+      title: `Booked: ${created.summary ?? eventTitle}`,
+      summary: `It's on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
+      provider: "google-calendar",
+      data: {
+        id: created.id ?? null,
+        title: created.summary ?? eventTitle,
+        start: confirmedStart,
+        end: confirmedEnd,
+        link: created.htmlLink ?? null,
+        status: created.status ?? null,
+      },
+    };
+  }
+
+  // Local database fallback (no Google Calendar connected)
+  const savedEvent = await createLocalEvent({
     userId: options.userId,
     title: eventTitle,
-    startIso: resolved.startIso,
-    endIso,
-    timeZone: options.timeZone ?? null,
+    description: plan.calendar?.description ?? null,
+    startAt: new Date(resolved.startIso),
+    endAt: new Date(endIso),
+    allDay: false,
+    color: "blue",
+    reminderMinutes: "30,15,5",
   });
-
-  const confirmedStart = created.start?.dateTime ?? resolved.startIso;
-  const confirmedEnd = created.end?.dateTime ?? endIso;
-  const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
-
+  console.log("[Calendar] Local event saved:", savedEvent?.id, eventTitle);
+  const displayTime = new Date(resolved.startIso).toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
   return {
     action: plan.action,
     status: "executed",
-    title: `Booked: ${created.summary ?? eventTitle}`,
-    summary: `It’s on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
-    provider: "google-calendar",
+    title: `Booked: ${eventTitle}`,
+    summary: `Added to your calendar for ${displayTime}.`,
     data: {
-      id: created.id ?? null,
-      title: created.summary ?? eventTitle,
-      start: confirmedStart,
-      end: confirmedEnd,
-      link: created.htmlLink ?? null,
-      status: created.status ?? null,
+      id: savedEvent?.id ?? null,
+      title: eventTitle,
+      start: resolved.startIso,
+      end: endIso,
+      link: null,
+      status: "confirmed",
     },
   };
 }
