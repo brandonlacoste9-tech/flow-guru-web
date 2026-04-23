@@ -1,12 +1,61 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'wouter';
 
 type Tab = 'profile' | 'memory' | 'instructions';
+
+const RADIO_URLS: Record<string, string> = {
+  'radio-focus': 'https://ice6.somafm.com/groovesalad-128-mp3',
+  'radio-chill': 'https://ice6.somafm.com/lush-128-mp3',
+  'radio-energy': 'https://ice6.somafm.com/beatblender-128-mp3',
+  'radio-sleep': 'https://ice6.somafm.com/sleepbot-128-mp3',
+  'radio-space': 'https://ice6.somafm.com/deepspaceone-128-mp3',
+};
+
+function playChimePreview() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const notes = [261.63, 329.63, 392.0, 523.25];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.22;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.35, start + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.7);
+      osc.start(start);
+      osc.stop(start + 0.7);
+    });
+  } catch (e) {
+    toast.error('Could not play chime — try clicking elsewhere first.');
+  }
+}
+
+let radioPreviewAudio: HTMLAudioElement | null = null;
+
+function playRadioPreview(sound: string) {
+  const url = RADIO_URLS[sound];
+  if (!url) return;
+  if (radioPreviewAudio) {
+    radioPreviewAudio.pause();
+    radioPreviewAudio = null;
+  }
+  radioPreviewAudio = new Audio(url);
+  radioPreviewAudio.volume = 0.5;
+  radioPreviewAudio.play().catch(() => toast.error('Could not play radio — browser blocked autoplay.'));
+  setTimeout(() => {
+    if (radioPreviewAudio) { radioPreviewAudio.pause(); radioPreviewAudio = null; }
+  }, 8000);
+  toast.info('Playing 8-second preview…');
+}
 
 export function Settings() {
   const [, navigate] = useLocation();
@@ -35,7 +84,8 @@ export function Settings() {
     },
   });
 
-  const factsQuery = trpc.settings.getMemoryFacts.useQuery();
+  // Fixed: use correct procedure name 'listFacts'
+  const factsQuery = trpc.settings.listFacts.useQuery();
 
   const saveProfileMutation = trpc.settings.saveProfile.useMutation({
     onSuccess: () => { toast.success('Profile saved!'); setProfileDirty(false); profileQuery.refetch(); },
@@ -47,12 +97,14 @@ export function Settings() {
     onError: () => toast.error('Failed to save instructions.'),
   });
 
-  const deleteFactMutation = trpc.settings.deleteMemoryFact.useMutation({
+  // Fixed: use correct procedure name 'deleteFact' and correct input key 'id'
+  const deleteFactMutation = trpc.settings.deleteFact.useMutation({
     onSuccess: () => { toast.success('Memory removed.'); factsQuery.refetch(); },
     onError: () => toast.error('Failed to remove memory.'),
   });
 
-  const addFactMutation = trpc.settings.addMemoryFact.useMutation({
+  // Fixed: use correct procedure name 'addFact'
+  const addFactMutation = trpc.settings.addFact.useMutation({
     onSuccess: () => {
       toast.success('Memory added!');
       setNewFactKey(''); setNewFactValue(''); setShowAddFact(false);
@@ -61,7 +113,22 @@ export function Settings() {
     onError: () => toast.error('Failed to add memory.'),
   });
 
-  const facts = ((factsQuery.data as any)?.facts ?? []).filter((f: any) => f.factKey !== 'custom_instructions');
+  const facts = (Array.isArray(factsQuery.data) ? factsQuery.data : []).filter((f: any) => f.factKey !== 'custom_instructions');
+
+  function handleTestSound() {
+    if (alarmSound === 'none') {
+      toast.info('Silent mode — no sound will play.');
+      return;
+    }
+    if (alarmSound === 'chime') {
+      playChimePreview();
+      toast.success('Playing chime preview…');
+      return;
+    }
+    if (alarmSound.startsWith('radio-')) {
+      playRadioPreview(alarmSound);
+    }
+  }
 
   const TABS = [
     { id: 'profile' as Tab, label: 'Profile', icon: User },
@@ -123,18 +190,25 @@ export function Settings() {
                     placeholder="e.g. I love hip-hop, tech, fitness. I prefer concise answers. I'm building a SaaS startup..."
                     className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Sound</label>
-                  <select value={alarmSound} onChange={e => { setAlarmSound(e.target.value); setProfileDirty(true); }}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors">
-                    <option value="chime">🔔 Chime (default)</option>
-                    <option value="none">🔇 Silent (voice only)</option>
-                    <option value="radio-focus">🎵 Radio — Focus (Groove Salad)</option>
-                    <option value="radio-chill">🎵 Radio — Chill (Lush)</option>
-                    <option value="radio-energy">🎵 Radio — Energy (Beat Blender)</option>
-                    <option value="radio-sleep">🎵 Radio — Sleep (Sleep Bot)</option>
-                    <option value="radio-space">🎵 Radio — Space (Deep Space One)</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <select value={alarmSound} onChange={e => { setAlarmSound(e.target.value); setProfileDirty(true); }}
+                      className="flex-1 bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors">
+                      <option value="chime">🔔 Chime (default)</option>
+                      <option value="none">🔇 Silent (voice only)</option>
+                      <option value="radio-focus">🎵 Radio — Focus (Groove Salad)</option>
+                      <option value="radio-chill">🎵 Radio — Chill (Lush)</option>
+                      <option value="radio-energy">🎵 Radio — Energy (Beat Blender)</option>
+                      <option value="radio-sleep">🎵 Radio — Sleep (Sleep Bot)</option>
+                      <option value="radio-space">🎵 Radio — Space (Deep Space One)</option>
+                    </select>
+                    <button onClick={handleTestSound}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-semibold text-primary hover:bg-primary/10 transition-colors shrink-0">
+                      <Volume2 size={14} /> Test
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Click Test to preview the selected alarm sound.</p>
                 </div>
                 <button disabled={!profileDirty || saveProfileMutation.isLoading}
                   onClick={() => saveProfileMutation.mutate({ wakeUpTime, dailyRoutine, preferencesSummary, alarmSound } as any)}
@@ -192,7 +266,8 @@ export function Settings() {
                         <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{fact.factKey ?? fact.category}</p>
                         <p className="text-sm text-foreground mt-0.5 leading-snug">{fact.factValue}</p>
                       </div>
-                      <button onClick={() => deleteFactMutation.mutate({ factId: fact.id })}
+                      {/* Fixed: use correct input key 'id' not 'factId' */}
+                      <button onClick={() => deleteFactMutation.mutate({ id: fact.id })}
                         className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100">
                         <Trash2 size={13} />
                       </button>
