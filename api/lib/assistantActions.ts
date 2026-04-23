@@ -29,66 +29,66 @@ const NEWS_ISSUE_SLUGS = [
 
 const plannerSchema = z.object({
   action: z.enum(ACTION_NAMES),
-  rationale: z.string(),
+  rationale: z.string().optional().default(""),
   route: z
     .object({
-      origin: z.string().nullable(),
-      destination: z.string().nullable(),
-      mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable(),
+      origin: z.string().nullable().optional(),
+      destination: z.string().nullable().optional(),
+      mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   weather: z
     .object({
-      location: z.string().nullable(),
-      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable(),
+      location: z.string().nullable().optional(),
+      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   news: z
     .object({
-      issueSlug: z.enum(NEWS_ISSUE_SLUGS).nullable(),
-      interestLabel: z.string().nullable(),
-      limit: z.number().int().min(1).max(5).nullable(),
+      issueSlug: z.enum(NEWS_ISSUE_SLUGS).nullable().optional(),
+      interestLabel: z.string().nullable().optional(),
+      limit: z.number().int().min(1).max(5).nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   calendar: z
     .object({
-      title: z.string().nullable(),
-      startDescription: z.string().nullable(),
-      endDescription: z.string().nullable(),
+      title: z.string().nullable().optional(),
+      startDescription: z.string().nullable().optional(),
+      endDescription: z.string().nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   music: z
     .object({
-      query: z.string().nullable(),
-      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+      query: z.string().nullable().optional(),
+      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   reminder: z
     .object({
-      label: z.string().nullable(),
-      when: z.string().nullable(),
-      recurring: z.boolean().nullable(),
+      label: z.string().nullable().optional(),
+      when: z.string().nullable().optional(),
+      recurring: z.boolean().nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   browser: z
     .object({
-      task_description: z.string().nullable(),
+      task_description: z.string().nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   subagent: z
     .object({
-      task: z.string().nullable(),
+      task: z.string().nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
 });
 
 const calendarResolutionSchema = z.object({
-  title: z.string().nullable(),
-  startIso: z.string().nullable(),
-  endIso: z.string().nullable(),
-  timeMinIso: z.string().nullable(),
-  timeMaxIso: z.string().nullable(),
-  searchQuery: z.string().nullable(),
+  title: z.string().nullable().optional(),
+  startIso: z.string().nullable().optional(),
+  endIso: z.string().nullable().optional(),
+  timeMinIso: z.string().nullable().optional(),
+  timeMaxIso: z.string().nullable().optional(),
+  searchQuery: z.string().nullable().optional(),
 });
 
 export type AssistantActionPlan = z.infer<typeof plannerSchema>;
