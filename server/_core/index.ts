@@ -11,7 +11,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerProviderConnectionRoutes } from "./providerConnections";
 import { registerStorageProxy } from "./storageProxy";
-import { registerElevenLabsRoutes } from "./elevenlabs";
+import { registerElevenLabsRoutes } from "./elevenLabs";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 // Removed static import of vite/dev-tools to prevent Vercel 500 errors
