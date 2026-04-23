@@ -69,6 +69,13 @@ export default function Home() {
     onError: (err) => toast.error("Failed to start new session")
   });
 
+  const speakMutation = trpc.assistant.speak.useMutation({
+    onSuccess: (result) => {
+      const audio = new Audio(result.audioDataUri);
+      audio.play().catch(() => {});
+    },
+  });
+
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
       setMessages(result.messages as Message[]);
@@ -128,14 +135,28 @@ export default function Home() {
   };
 
   const speakText = (text: string) => {
-    // Attempt to stream ultra-low latency VibeVoice AI speech
-    const audio = new Audio(`http://localhost:8000/speak?text=${encodeURIComponent(text)}`);
-    audio.play().catch(() => {
-      // Fallback if VibeVoice python microservice is down
-      if (!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-    });
+    // Strip markdown and action-card noise before speaking
+    const clean = text
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\n+/g, ' ')
+      .trim();
+
+    speakMutation.mutate(
+      { text: clean },
+      {
+        onError: () => {
+          // Fallback to browser TTS if ElevenLabs is unavailable
+          if (!('speechSynthesis' in window)) return;
+          window.speechSynthesis.cancel();
+          const utt = new SpeechSynthesisUtterance(clean);
+          utt.rate = 1.05;
+          utt.pitch = 1.0;
+          window.speechSynthesis.speak(utt);
+        },
+      }
+    );
   };
 
   const formatEventTime = (iso: string | null, allDay: boolean) => {
@@ -210,8 +231,15 @@ export default function Home() {
           )}
 
           <button onClick={() => setSpeechEnabled(!speechEnabled)}
-            className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center bg-black/50 backdrop-blur-md hover:bg-white/10 transition-all shadow-sm">
-            {speechEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+            className={cn(
+              "w-9 h-9 rounded-full border flex items-center justify-center backdrop-blur-md transition-all shadow-sm",
+              speakMutation.isPending
+                ? "border-blue-500/40 bg-blue-500/10 text-blue-400"
+                : "border-white/10 bg-black/50 hover:bg-white/10 text-zinc-400"
+            )}>
+            {speakMutation.isPending
+              ? <Loader2 size={14} className="animate-spin" />
+              : speechEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
           </button>
           <button onClick={() => logout()}
             className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center bg-black/50 backdrop-blur-md hover:bg-red-500/10 hover:border-red-500/30 transition-all text-zinc-400 hover:text-red-400 shadow-sm">

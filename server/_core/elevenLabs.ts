@@ -18,8 +18,8 @@ export type SpeechToSpeechOptions = {
   modelId?: string;
 };
 
-const DEFAULT_VOICE_ID = "21m00Tcm4labaLnx8CuA"; // Rachel (Classic)
-const DEFAULT_TTS_MODEL = "eleven_monolingual_v1";
+const DEFAULT_VOICE_ID = "nPczCjzI2devNBz1zQrb"; // Brian — warm, natural, conversational
+const DEFAULT_TTS_MODEL = "eleven_turbo_v2_5"; // Fastest + highest quality
 const DEFAULT_STS_MODEL = "eleven_english_sts_v2";
 
 /**
@@ -44,8 +44,10 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
       text: options.text,
       model_id: options.modelId || DEFAULT_TTS_MODEL,
       voice_settings: {
-        stability: options.stability ?? 0.5,
-        similarity_boost: options.similarityBoost ?? 0.75,
+        stability: options.stability ?? 0.35,
+        similarity_boost: options.similarityBoost ?? 0.85,
+        style: 0.2,
+        use_speaker_boost: true,
       },
     }),
   });
