@@ -345,20 +345,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    // Fallback if the real API fails
-    return {
-      id: "error-fallback-" + Date.now(),
-      created: Math.floor(Date.now() / 1000),
-      model: "error-fallback",
-      choices: [{
-        index: 0,
-        message: {
-          role: "assistant",
-          content: "I hit a snag connecting to my brain! It might be a temporary API issue. I'll be back fully in a moment.",
-        },
-        finish_reason: "error",
-      }],
-    };
+    throw new Error(`LLM API error ${response.status}: ${errorText.slice(0, 300)}`);
   }
 
   return (await response.json()) as InvokeResult;

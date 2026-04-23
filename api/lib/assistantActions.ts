@@ -26,40 +26,42 @@ const NEWS_ISSUE_SLUGS = [
 
 const plannerSchema = z.object({
   action: z.enum(ACTION_NAMES),
-  rationale: z.string(),
+  // rationale is informational — don't hard-fail if the model omits it
+  rationale: z.string().optional().default(""),
+  // Use .nullish() (= nullable + optional) so the model can either send null OR omit the field
   route: z
     .object({
-      origin: z.string().nullable(),
-      destination: z.string().nullable(),
-      mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable(),
+      origin: z.string().nullable().optional(),
+      destination: z.string().nullable().optional(),
+      mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   weather: z
     .object({
-      location: z.string().nullable(),
-      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable(),
+      location: z.string().nullable().optional(),
+      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   news: z
     .object({
-      issueSlug: z.enum(NEWS_ISSUE_SLUGS).nullable(),
-      interestLabel: z.string().nullable(),
-      limit: z.number().int().min(1).max(5).nullable(),
+      issueSlug: z.enum(NEWS_ISSUE_SLUGS).nullable().optional(),
+      interestLabel: z.string().nullable().optional(),
+      limit: z.number().int().min(1).max(5).nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   calendar: z
     .object({
-      title: z.string().nullable(),
-      startDescription: z.string().nullable(),
-      endDescription: z.string().nullable(),
+      title: z.string().nullable().optional(),
+      startDescription: z.string().nullable().optional(),
+      endDescription: z.string().nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
   music: z
     .object({
-      query: z.string().nullable(),
-      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+      query: z.string().nullable().optional(),
+      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable().optional(),
     })
-    .nullable(),
+    .nullish(),
 });
 
 const calendarResolutionSchema = z.object({
@@ -239,7 +241,7 @@ export async function planAssistantAction(params: {
       type: "json_schema",
       json_schema: {
         name: "assistant_action_plan",
-        strict: true,
+        strict: false,
         schema: {
           type: "object",
           properties: {
@@ -311,9 +313,23 @@ export async function planAssistantAction(params: {
   });
 
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  const parsed = plannerSchema.safeParse(JSON.parse(raw || "{}"));
+
+  // Strip markdown code fences the model sometimes wraps JSON in
+  const jsonText = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1]?.trim() ?? raw.trim();
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(jsonText || "{}");
+  } catch {
+    console.error("[Planner] JSON.parse failed. Raw response:", raw.slice(0, 400));
+    throw new Error(`Planner returned non-JSON: ${raw.slice(0, 200)}`);
+  }
+
+  const parsed = plannerSchema.safeParse(parsedJson);
   if (!parsed.success) {
-    throw new Error(`Planner output did not match schema: ${parsed.error.message}`);
+    console.error("[Planner] Zod schema mismatch. Raw JSON:", JSON.stringify(parsedJson).slice(0, 400));
+    console.error("[Planner] Zod errors:", parsed.error.flatten());
+    throw new Error(`Planner schema mismatch: ${parsed.error.message}`);
   }
 
   return parsed.data;
@@ -369,7 +385,7 @@ async function resolveCalendarDetails(params: {
       type: "json_schema",
       json_schema: {
         name: "calendar_resolution",
-        strict: true,
+        strict: false,
         schema: {
           type: "object",
           properties: {
@@ -388,9 +404,20 @@ async function resolveCalendarDetails(params: {
   });
 
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
+  const jsonText = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1]?.trim() ?? raw.trim();
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(jsonText || "{}");
+  } catch {
+    console.error("[CalendarResolution] JSON.parse failed. Raw:", raw.slice(0, 400));
+    throw new Error(`Calendar resolution returned non-JSON: ${raw.slice(0, 200)}`);
+  }
+
+  const parsed = calendarResolutionSchema.safeParse(parsedJson);
   if (!parsed.success) {
-    throw new Error(`Calendar resolution did not match schema: ${parsed.error.message}`);
+    console.error("[CalendarResolution] Zod mismatch:", parsed.error.flatten());
+    throw new Error(`Calendar resolution schema mismatch: ${parsed.error.message}`);
   }
 
   return parsed.data;
