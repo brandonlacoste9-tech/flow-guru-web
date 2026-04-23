@@ -18,5 +18,5 @@ export const ENV = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   spotifyClientId: process.env.SPOTIFY_CLIENT_ID ?? "",
   spotifyClientSecret: process.env.SPOTIFY_CLIENT_SECRET ?? "",
-  theNewsApiKey: clean(process.env.THENEWSAPI_KEY),
+  theNewsApiKey: clean(process.env.THENEWSAPI_API_KEY),
 };
