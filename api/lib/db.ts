@@ -107,7 +107,20 @@ async function ensureSchemaOnce(): Promise<void> {
   if (!_pg) return;
   if (!schemaReadyPromise) {
     schemaReadyPromise = (async () => {
-      await _pg!.unsafe(FLOW_GURU_DDL);
+      // Neon pooler (transaction mode) rejects multiple commands in a single unsafe() call.
+      // Split on semicolons and run each statement individually.
+      const statements = FLOW_GURU_DDL
+        .split(';')
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.length > 0);
+      for (const stmt of statements) {
+        try {
+          await _pg!.unsafe(stmt + ';');
+        } catch (err: any) {
+          // Log but don't throw on non-critical DDL errors (e.g. column already exists)
+          console.warn('[DB] DDL stmt warning:', err?.message?.slice(0, 120));
+        }
+      }
     })().catch(err => {
       schemaReadyPromise = null;
       throw err;
