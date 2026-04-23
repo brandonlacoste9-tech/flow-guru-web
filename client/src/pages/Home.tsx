@@ -57,6 +57,7 @@ export default function Home() {
   const [showForecast, setShowForecast] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [showNews, setShowNews] = useState(false);
+  const [countryCode, setCountryCode] = useState<string>('us');
   // ElevenLabs free default voices (no paid plan required)
   const VOICE_IDS = {
     male: 'nPczCjzI2devNBz1zQrb',   // Brian — warm, natural, conversational male
@@ -101,6 +102,7 @@ export default function Home() {
         const c = wxData.current;
         if (!c || c.temperature_2m == null) return;
         const cityName = cityData.city || cityData.locality || cityData.principalSubdivision || 'Your location';
+        if (cityData.countryCode) setCountryCode(cityData.countryCode.toLowerCase());
         setWeather({
           tempC: Math.round(c.temperature_2m),
           feelsLikeC: Math.round(c.apparent_temperature ?? c.temperature_2m),
@@ -632,7 +634,7 @@ export default function Home() {
       </footer>
 
       {/* News Modal */}
-      <NewsModal open={showNews} onClose={() => setShowNews(false)} />
+      <NewsModal open={showNews} onClose={() => setShowNews(false)} locale={countryCode} locationName={weather?.locationName} />
 
       {/* Weather Forecast Modal */}
       {coords && weather && (
