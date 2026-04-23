@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc-client";
 import { toast } from "sonner";
@@ -44,6 +44,14 @@ export default function Home() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [currentStation, setCurrentStation] = useState('');
+  // ElevenLabs voice: male = Callum, female = Rachel
+  const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(() => {
+    return (localStorage.getItem('voiceGender') as 'male' | 'female') || 'male';
+  });
+  const VOICE_IDS = {
+    male: 'N2lVS1wzUvBXUvBCW9ng',   // Callum — warm, energetic male
+    female: '21m00Tcm4TlvDq8ikWAM',  // Rachel — calm, natural female
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -150,7 +158,7 @@ export default function Home() {
     
     setIsSpeaking(true);
     // Use our new ElevenLabs endpoint
-    const audio = new Audio(`/api/speak?text=${encodeURIComponent(text)}`);
+    const audio = new Audio(`/api/speak?text=${encodeURIComponent(text)}&voiceId=${VOICE_IDS[voiceGender]}`);
     
     audio.onended = () => setIsSpeaking(false);
     audio.onerror = () => setIsSpeaking(false);
@@ -240,6 +248,19 @@ export default function Home() {
           </button>
 
           <ThemeToggle />
+
+          <button
+            onClick={() => {
+              const next = voiceGender === 'male' ? 'female' : 'male';
+              setVoiceGender(next);
+              localStorage.setItem('voiceGender', next);
+              toast.success(`Voice switched to ${next === 'male' ? 'Callum (male)' : 'Rachel (female)'}`);
+            }}
+            title={`Voice: ${voiceGender === 'male' ? 'Male (Callum)' : 'Female (Rachel)'} — click to switch`}
+            className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground"
+          >
+            {voiceGender === 'male' ? <User size={14} /> : <UserRound size={14} />}
+          </button>
 
           <button onClick={() => setSpeechEnabled(!speechEnabled)}
             className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">

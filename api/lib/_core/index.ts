@@ -61,6 +61,24 @@ export async function createMainApp() {
   registerOAuthRoutes(app);
   registerProviderConnectionRoutes(app);
 
+  // ElevenLabs TTS speak endpoint
+  app.get("/api/speak", async (req: any, res: any) => {
+    try {
+      const text = req.query.text as string;
+      const voiceId = req.query.voiceId as string | undefined;
+      if (!text) {
+        return res.status(400).send("Text query parameter is required");
+      }
+      const { textToSpeech } = await import("../elevenLabs.js");
+      const audioBuffer = await textToSpeech({ text, voiceId, stability: 0.75, similarityBoost: 0.75 });
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.send(audioBuffer);
+    } catch (error: any) {
+      console.error("[ElevenLabs Error]", error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     const { setupVite } = await import("./vite.js");
