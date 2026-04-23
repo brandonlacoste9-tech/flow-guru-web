@@ -5,6 +5,7 @@ import {
   listGoogleCalendarEvents,
 } from "./_core/googleCalendar.js";
 import { invokeLLM } from "./_core/llm.js";
+import { ENV } from "./_core/env.js";
 import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map.js";
 
 const ACTION_NAMES = [
