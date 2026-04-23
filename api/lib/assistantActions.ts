@@ -260,8 +260,10 @@ export async function planAssistantAction(params: {
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
           "",
           "CRITICAL: You MUST respond with a valid JSON object. Never return plain text or just an action name.",
-          "Required format: {\"action\": \"<action_name>\", \"rationale\": \"<why>\", \"calendar\": {\"title\": \"<title or null>\", \"startDescription\": \"<when or null>\", \"endDescription\": null}}",
-          "For non-calendar actions, omit the calendar field or set it to null.",
+          "For calendar actions: {\"action\": \"calendar.create_event\", \"rationale\": \"<why>\", \"calendar\": {\"title\": \"<title>\", \"startDescription\": \"<when>\", \"endDescription\": null}}",
+          "For browser.use actions: {\"action\": \"browser.use\", \"rationale\": \"<why>\", \"browser\": {\"task_description\": \"<exact search query or task>\"}}",
+          "For all other actions: {\"action\": \"<action_name>\", \"rationale\": \"<why>\"}",
+          "Always include the relevant data field for the chosen action. Never omit browser.task_description for browser.use.",
         ].join("\n"),
       },
       {
@@ -1109,59 +1111,53 @@ export async function executeAssistantAction(
           };
         }
 
-        const tavilyKey = ENV.tavilyApiKey;
-        if (!tavilyKey) {
-          return {
-            action: plan.action,
-            status: "failed",
-            title: "Web Search Unavailable",
-            summary: "Web search is not configured. Please add a TAVILY_API_KEY to enable it.",
-          };
-        }
-
         try {
-          console.log("[Flow Guru] Tavily web search for:", task);
+          console.log("[Flow Guru] DuckDuckGo web search for:", task);
 
-          // Step 1: Search the web with Tavily
-          const tavilyResp = await fetch("https://api.tavily.com/search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              api_key: tavilyKey,
-              query: task,
-              search_depth: "basic",
-              max_results: 5,
-              include_answer: true,
-            }),
-            signal: AbortSignal.timeout(15_000),
+          // Search using DuckDuckGo HTML endpoint (no API key required)
+          const query = encodeURIComponent(task);
+          const ddgResp = await fetch(`https://html.duckduckgo.com/html/?q=${query}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html",
+            },
+            signal: AbortSignal.timeout(12_000),
           });
 
-          if (!tavilyResp.ok) throw new Error(`Tavily search failed: ${tavilyResp.status}`);
-          const tavilyData = await tavilyResp.json() as any;
+          if (!ddgResp.ok) throw new Error(`DuckDuckGo search failed: ${ddgResp.status}`);
+          const html = await ddgResp.text();
 
-          // Use Tavily's built-in answer if available, otherwise summarize results
-          const tavilyAnswer = tavilyData.answer;
-          const snippets = (tavilyData.results || []).slice(0, 3).map((r: any) => `${r.title}: ${r.content}`).join("\n\n");
-          const searchContext = tavilyAnswer || snippets || "No results found.";
+          // Extract result snippets from HTML using regex (no DOM parser in edge runtime)
+          const snippetMatches = html.matchAll(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g);
+          const snippets: string[] = [];
+          for (const match of snippetMatches) {
+            const text = match[1].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+            if (text.length > 20) snippets.push(text);
+            if (snippets.length >= 4) break;
+          }
 
-          console.log("[Flow Guru] Tavily answer:", searchContext?.slice(0, 100));
+          const searchContext = snippets.length > 0
+            ? snippets.join("\n\n")
+            : "No results found for that query.";
+
+          console.log("[Flow Guru] DuckDuckGo results:", snippets.length, "snippets");
 
           return {
             action: plan.action,
             status: "executed",
             title: "Web Search Complete",
             summary: searchContext,
-            provider: "tavily",
+            provider: "duckduckgo",
           };
 
         } catch (error) {
-          console.error("[Flow Guru] Tavily web search error:", error);
+          console.error("[Flow Guru] DuckDuckGo web search error:", error);
           return {
             action: plan.action,
             status: "failed",
             title: "Web Search Failed",
             summary: "I tried to search the web but ran into an error. Please try again.",
-            provider: "tavily",
+            provider: "duckduckgo",
           };
         }
       }
