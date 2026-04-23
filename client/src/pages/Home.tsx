@@ -7,6 +7,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { ActionResultCard } from "@/components/ActionResultCard";
 import { motion, AnimatePresence } from "framer-motion";
 import { OrbVisualizer } from "@/components/OrbVisualizer";
+import { AuthModal } from "@/components/AuthModal";
 import { useLocation } from "wouter";
 import { MusicPlayer } from "@/components/MusicPlayer";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -38,6 +39,8 @@ const SUGGESTIONS = [
 export default function Home() {
   const [, navigate] = useLocation();
   const { user, logout } = useAuth({ redirectOnUnauthenticated: false });
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const resetToken = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('reset_token') || undefined : undefined;
   const [messages, setMessages] = useState<Message[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(true);
@@ -427,7 +430,7 @@ export default function Home() {
             </button>
           ) : (
             <button
-              onClick={() => { window.location.href = '/api/auth/google'; }}
+              onClick={() => setShowAuthModal(true)}
               title="Sign in to save your history"
               className="flex items-center gap-1.5 px-3 h-9 rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 transition-all text-primary text-xs font-semibold shadow-sm">
               <User size={13} />
@@ -776,10 +779,10 @@ export default function Home() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { window.location.href = '/api/auth/google'; }}
+                  onClick={() => { setShowSignInBanner(false); setShowAuthModal(true); }}
                   className="flex-1 py-2.5 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm transition-colors"
                 >
-                  Sign in with Google
+                  Sign in
                 </button>
                 <button
                   onClick={() => setShowSignInBanner(false)}
@@ -792,6 +795,23 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Auth Modal ── */}
+      {(showAuthModal || resetToken) && (
+        <AuthModal
+          resetToken={resetToken}
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={(name) => {
+            setShowAuthModal(false);
+            // Remove reset_token from URL if present
+            if (resetToken) {
+              window.history.replaceState({}, '', '/');
+            }
+            // Reload to pick up the new session cookie
+            window.location.reload();
+          }}
+        />
+      )}
 
       {/* ── Alarm Overlay ── */}
       <AnimatePresence>

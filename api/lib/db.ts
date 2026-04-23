@@ -26,7 +26,11 @@ CREATE TABLE IF NOT EXISTS fg_users (
     role TEXT DEFAULT 'user' NOT NULL,
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-    "lastSignedIn" TIMESTAMP DEFAULT NOW() NOT NULL
+    "lastSignedIn" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "passwordHash" TEXT,
+    "promoCode" VARCHAR(64),
+    "resetToken" VARCHAR(128),
+    "resetTokenExpiresAt" TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS fg_threads (
     id SERIAL PRIMARY KEY,
@@ -101,6 +105,10 @@ ALTER TABLE fg_local_events ADD COLUMN IF NOT EXISTS "color" VARCHAR(32) DEFAULT
 ALTER TABLE fg_local_events ADD COLUMN IF NOT EXISTS "reminderMinutes" TEXT DEFAULT '30,15,5';
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "alarmSound" VARCHAR(64) DEFAULT 'chime';
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "alarmDays" VARCHAR(32) DEFAULT '0,1,2,3,4,5,6';
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "promoCode" VARCHAR(64);
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "resetToken" VARCHAR(128);
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "resetTokenExpiresAt" TIMESTAMP;
 `;
 
 async function ensureSchemaOnce(): Promise<void> {
@@ -218,6 +226,36 @@ export async function getUserByOpenId(openId: string): Promise<schema.User | nul
     return results[0] || null;
   } catch (err: any) {
     console.error("[DB] getUserByOpenId failed:", err.message);
+    return null;
+  }
+}
+
+export async function getUserByEmail(email: string): Promise<schema.User | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    await ensureTables(db);
+    const results = await (db as any).execute(
+      `SELECT * FROM fg_users WHERE lower(email) = lower('${email.replace(/'/g, "''")}') LIMIT 1`
+    );
+    return (results.rows || results)[0] || null;
+  } catch (err: any) {
+    console.error("[DB] getUserByEmail failed:", err.message);
+    return null;
+  }
+}
+
+export async function getUserByResetToken(token: string): Promise<schema.User | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    await ensureTables(db);
+    const results = await (db as any).execute(
+      `SELECT * FROM fg_users WHERE "resetToken" = '${token.replace(/'/g, "''")}' AND "resetTokenExpiresAt" > NOW() LIMIT 1`
+    );
+    return (results.rows || results)[0] || null;
+  } catch (err: any) {
+    console.error("[DB] getUserByResetToken failed:", err.message);
     return null;
   }
 }
