@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getProviderConnection } from "./db";
+import { getProviderConnection, createLocalEvent, listLocalEvents } from "./db";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
@@ -655,13 +655,7 @@ async function executeCalendarListAction(
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
   const connection = await getProviderConnection(options.userId, "google-calendar");
-  if (!connection || (connection as any).status !== "connected") {
-    return connectionRequiredResult(
-      plan.action,
-      "google-calendar",
-      "Google Calendar needs to be connected before I can check your schedule.",
-    );
-  }
+  const isGoogleConnected = connection && (connection as any).status === "connected";
 
   const resolved = await resolveCalendarDetails({
     plan,
@@ -671,37 +665,60 @@ async function executeCalendarListAction(
     timeZone: options.timeZone,
   });
 
-  const events = await listGoogleCalendarEvents({
-    userId: options.userId,
-    timeMinIso: resolved.timeMinIso ?? new Date().toISOString(),
-    timeMaxIso:
-      resolved.timeMaxIso ?? new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
-    maxResults: 5,
-    query: resolved.searchQuery ?? normalizeText(plan.calendar?.title),
-  });
+  const timeMin = resolved.timeMinIso ? new Date(resolved.timeMinIso) : new Date();
+  const timeMax = resolved.timeMaxIso ? new Date(resolved.timeMaxIso) : new Date(Date.now() + 1000 * 60 * 60 * 24 * 7);
 
-  const items = (events.items ?? []).map(event => ({
-    id: event.id ?? null,
-    title: event.summary ?? "Untitled event",
-    description: event.description ?? null,
-    start: event.start?.dateTime ?? event.start?.date ?? null,
-    end: event.end?.dateTime ?? event.end?.date ?? null,
-    location: event.location ?? null,
-    link: event.htmlLink ?? null,
-    attendees: event.attendees?.map(attendee => attendee.displayName ?? attendee.email ?? "Guest") ?? [],
-    status: event.status ?? null,
-  }));
+  let items: any[] = [];
+  let provider = "local-calendar";
+
+  if (isGoogleConnected) {
+    const events = await listGoogleCalendarEvents({
+      userId: options.userId,
+      timeMinIso: timeMin.toISOString(),
+      timeMaxIso: timeMax.toISOString(),
+      maxResults: 5,
+      query: resolved.searchQuery ?? normalizeText(plan.calendar?.title),
+    });
+    items = (events.items ?? []).map(event => ({
+      id: event.id ?? null,
+      title: event.summary ?? "Untitled event",
+      description: event.description ?? null,
+      start: event.start?.dateTime ?? event.start?.date ?? null,
+      end: event.end?.dateTime ?? event.end?.date ?? null,
+      location: event.location ?? null,
+      link: event.htmlLink ?? null,
+      attendees: event.attendees?.map(attendee => attendee.displayName ?? attendee.email ?? "Guest") ?? [],
+      status: event.status ?? null,
+    }));
+    provider = "google-calendar";
+  } else {
+    const localEvents = await listLocalEvents(options.userId);
+    items = localEvents
+      .filter(e => {
+        const start = new Date(e.startAt);
+        return start >= timeMin && start <= timeMax;
+      })
+      .map(e => ({
+        id: e.id,
+        title: e.title,
+        description: e.description,
+        start: e.startAt.toISOString(),
+        end: e.endAt.toISOString(),
+        location: e.location,
+        allDay: !!e.allDay,
+      }));
+  }
 
   if (!items.length) {
     return {
       action: plan.action,
       status: "executed",
       title: "Schedule is clear",
-      summary: "I didn’t find any matching Google Calendar events in that window.",
-      provider: "google-calendar",
+      summary: `I didn’t find any matching events in your ${provider === "google-calendar" ? "Google Calendar" : "local calendar"} for that window.`,
+      provider,
       data: {
-        timeMinIso: resolved.timeMinIso ?? null,
-        timeMaxIso: resolved.timeMaxIso ?? null,
+        timeMinIso: timeMin.toISOString(),
+        timeMaxIso: timeMax.toISOString(),
         events: [],
       },
     };
@@ -710,12 +727,12 @@ async function executeCalendarListAction(
   return {
     action: plan.action,
     status: "executed",
-    title: "Upcoming Google Calendar events",
+    title: `Upcoming ${provider === "google-calendar" ? "Google Calendar" : "Local"} events`,
     summary: `I found ${items.length} event${items.length === 1 ? "" : "s"} on your calendar.`,
-    provider: "google-calendar",
+    provider,
     data: {
-      timeMinIso: resolved.timeMinIso ?? null,
-      timeMaxIso: resolved.timeMaxIso ?? null,
+      timeMinIso: timeMin.toISOString(),
+      timeMaxIso: timeMax.toISOString(),
       events: items,
     },
   };
@@ -735,13 +752,7 @@ async function executeCalendarCreateAction(
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
   const connection = await getProviderConnection(options.userId, "google-calendar");
-  if (!connection || (connection as any).status !== "connected") {
-    return connectionRequiredResult(
-      plan.action,
-      "google-calendar",
-      "Google Calendar needs to be connected before I can book that for you.",
-    );
-  }
+  const isGoogleConnected = connection && (connection as any).status === "connected";
 
   if (!normalizeText(plan.calendar?.title) || !normalizeText(plan.calendar?.startDescription)) {
     return {
@@ -749,7 +760,7 @@ async function executeCalendarCreateAction(
       status: "needs_input",
       title: "Calendar details needed",
       summary: "I can book that as soon as I know the event title and when it should start.",
-      provider: "google-calendar",
+      provider: isGoogleConnected ? "google-calendar" : "local-calendar",
     };
   }
 
@@ -767,41 +778,66 @@ async function executeCalendarCreateAction(
       action: plan.action,
       status: "needs_input",
       title: "Timing still needed",
-      summary: "I’m close, but I still need a clearer time for that booking before I add it to Google Calendar.",
-      provider: "google-calendar",
+      summary: "I’m close, but I still need a clearer time for that booking before I add it to your calendar.",
+      provider: isGoogleConnected ? "google-calendar" : "local-calendar",
     };
   }
 
-  const endIso =
-    resolved.endIso ?? new Date(new Date(resolved.startIso).getTime() + 1000 * 60 * 60).toISOString();
+  const startAt = new Date(resolved.startIso);
+  const endAt = resolved.endIso 
+    ? new Date(resolved.endIso) 
+    : new Date(startAt.getTime() + 1000 * 60 * 60);
 
-  const created = await createGoogleCalendarEvent({
-    userId: options.userId,
-    title: eventTitle,
-    startIso: resolved.startIso,
-    endIso,
-    timeZone: options.timeZone ?? null,
-  });
+  if (isGoogleConnected) {
+    const created = await createGoogleCalendarEvent({
+      userId: options.userId,
+      title: eventTitle,
+      startIso: startAt.toISOString(),
+      endIso: endAt.toISOString(),
+      timeZone: options.timeZone ?? null,
+    });
 
-  const confirmedStart = created.start?.dateTime ?? resolved.startIso;
-  const confirmedEnd = created.end?.dateTime ?? endIso;
-  const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
+    const confirmedStart = created.start?.dateTime ?? startAt.toISOString();
+    const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
 
-  return {
-    action: plan.action,
-    status: "executed",
-    title: `Booked: ${created.summary ?? eventTitle}`,
-    summary: `It’s on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
-    provider: "google-calendar",
-    data: {
-      id: created.id ?? null,
-      title: created.summary ?? eventTitle,
-      start: confirmedStart,
-      end: confirmedEnd,
-      link: created.htmlLink ?? null,
-      status: created.status ?? null,
-    },
-  };
+    return {
+      action: plan.action,
+      status: "executed",
+      title: `Booked: ${created.summary ?? eventTitle}`,
+      summary: `It’s on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
+      provider: "google-calendar",
+      data: {
+        id: created.id ?? null,
+        title: created.summary ?? eventTitle,
+        start: confirmedStart,
+        end: created.end?.dateTime ?? endAt.toISOString(),
+        link: created.htmlLink ?? null,
+        status: created.status ?? null,
+      },
+    };
+  } else {
+    const eventId = await createLocalEvent({
+      userId: options.userId,
+      title: eventTitle,
+      startAt,
+      endAt,
+      allDay: 0,
+    });
+
+    return {
+      action: plan.action,
+      status: "executed",
+      title: `Booked: ${eventTitle}`,
+      summary: `It’s on your local calendar for ${formatCalendarEventDateTime(startAt.toISOString(), options.timeZone)}.`,
+      provider: "local-calendar",
+      data: {
+        id: eventId,
+        title: eventTitle,
+        start: startAt.toISOString(),
+        end: endAt.toISOString(),
+      },
+    };
+  }
 }
 
 async function executeMusicAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {

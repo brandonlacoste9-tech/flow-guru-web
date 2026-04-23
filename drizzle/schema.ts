@@ -127,3 +127,26 @@ export type InsertConversationMessage = typeof conversationMessages.$inferInsert
 
 export type ProviderConnection = typeof providerConnections.$inferSelect;
 export type InsertProviderConnection = typeof providerConnections.$inferInsert;
+
+export const localEvents = mysqlTable(
+  "localEvents",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    startAt: timestamp("startAt").notNull(),
+    endAt: timestamp("endAt").notNull(),
+    location: text("location"),
+    allDay: int("allDay").default(0).notNull(), // 0 for false, 1 for true
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    userIdx: index("localEvents_user_idx").on(table.userId),
+    startIdx: index("localEvents_start_idx").on(table.startAt),
+  }),
+);
+
+export type LocalEvent = typeof localEvents.$inferSelect;
+export type InsertLocalEvent = typeof localEvents.$inferInsert;

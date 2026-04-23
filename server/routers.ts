@@ -24,6 +24,9 @@ import {
   resolveAssistantUserId,
   touchConversationThread,
   upsertUserMemoryProfile,
+  createLocalEvent,
+  listLocalEvents,
+  deleteLocalEvent,
 } from "./db";
 
 const sendMessageInput = z.object({
@@ -517,14 +520,28 @@ export const appRouter = router({
 
       const calendarPromise = (async (): Promise<CalendarItem[]> => {
         try {
-          const { listGoogleCalendarEvents } = await import("./_core/googleCalendar");
-          const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
-          if (!conn) return [];
           const now = new Date();
           const endOfDay = new Date(now);
           endOfDay.setHours(23, 59, 59, 999);
-          const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
-          return (result?.items ?? []).map((e: any) => ({ title: e.summary || "Untitled event", start: e.start?.dateTime || e.start?.date || null, allDay: !e.start?.dateTime }));
+
+          const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
+          if (conn) {
+            const { listGoogleCalendarEvents } = await import("./_core/googleCalendar");
+            const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
+            return (result?.items ?? []).map((e: any) => ({ title: e.summary || "Untitled event", start: e.start?.dateTime || e.start?.date || null, allDay: !e.start?.dateTime }));
+          } else {
+            const localEvents = await listLocalEvents(userId);
+            return localEvents
+              .filter(e => {
+                const start = new Date(e.startAt);
+                return start >= now && start <= endOfDay;
+              })
+              .map(e => ({
+                title: e.title,
+                start: e.startAt.toISOString(),
+                allDay: !!e.allDay
+              }));
+          }
         } catch { return []; }
       })();
 
@@ -859,7 +876,37 @@ export const appRouter = router({
           audioDataUri: `data:audio/mpeg;base64,${buffer.toString("base64")}`,
         };
       }),
+    listLocalEvents: protectedProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      return await listLocalEvents(userId);
+    }),
+    createLocalEvent: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        startAt: z.date(),
+        endAt: z.date(),
+        location: z.string().optional(),
+        allDay: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        return await createLocalEvent({
+          userId,
+          ...input,
+          startAt: input.startAt,
+          endAt: input.endAt,
+          allDay: input.allDay ? 1 : 0,
+        });
+      }),
+    deleteLocalEvent: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await deleteLocalEvent(userId, input.id);
+        return { success: true };
+      }),
   }),
 });
 
-export type AppRouter = typeof appRouter;
+export type AppRouter = typeof appRouter;

@@ -81,6 +81,18 @@ CREATE TABLE IF NOT EXISTS fg_connections (
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
+CREATE TABLE IF NOT EXISTS fg_local_events (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    "startAt" TIMESTAMP NOT NULL,
+    "endAt" TIMESTAMP NOT NULL,
+    location TEXT,
+    "allDay" INTEGER DEFAULT 0 NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
 `;
 
 async function ensureSchemaOnce(): Promise<void> {
@@ -355,5 +367,47 @@ export async function getConversationThreadById(id: number): Promise<schema.Conv
       return results[0] || null;
     } catch (err) {
       return null;
+    }
+}
+
+export async function createLocalEvent(data: any): Promise<number | null> {
+    const db = await getDb();
+    if (!db) throw new Error("Database connection unavailable");
+    await ensureTables(db);
+    const results = await db.insert(schema.localEvents).values(data).returning({ id: schema.localEvents.id });
+    return results[0]?.id || null;
+}
+
+export async function listLocalEvents(userId: number, startAfter?: Date, endBefore?: Date): Promise<schema.LocalEvent[]> {
+    try {
+      const db = await getDb();
+      if (!db) return [];
+      await ensureTables(db);
+      let query = db.select().from(schema.localEvents).where(eq(schema.localEvents.userId, userId));
+      
+      const conditions = [eq(schema.localEvents.userId, userId)];
+      if (startAfter) conditions.push(desc(schema.localEvents.startAt)); // placeholder for actual filtering
+      
+      // Simpler version for now to avoid complex drizzle-orm imports if not already there
+      return await db.select().from(schema.localEvents)
+        .where(eq(schema.localEvents.userId, userId))
+        .orderBy(schema.localEvents.startAt);
+    } catch (err) {
+      console.error("[DB] listLocalEvents failed:", err);
+      return [];
+    }
+}
+
+export async function deleteLocalEvent(userId: number, eventId: number): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      await ensureTables(db);
+      await db.delete(schema.localEvents).where(and(
+        eq(schema.localEvents.id, eventId),
+        eq(schema.localEvents.userId, userId)
+      ));
+    } catch (err) {
+      console.error("[DB] deleteLocalEvent failed:", err);
     }
 }

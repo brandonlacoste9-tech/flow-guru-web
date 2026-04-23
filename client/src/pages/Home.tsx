@@ -452,17 +452,17 @@ export default function Home() {
                   <div className="flex items-center justify-between px-5 py-4">
                     <div className="flex items-center gap-3 overflow-hidden">
                       <Calendar className="w-4 h-4 text-green-400 shrink-0" />
-                      {!isGoogleConnected ? (
-                        <button onClick={handleConnectCalendar} className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors">
-                          Connect Google Calendar →
-                        </button>
-                      ) : nextEvent ? (
+                      {nextEvent ? (
                         <div className="overflow-hidden">
                           <p className="text-white text-[14px] font-medium truncate">{nextEvent.title}</p>
                           <p className="text-zinc-500 text-[12px]">{formatEventTime(nextEvent.start, nextEvent.allDay)}</p>
                         </div>
                       ) : todayEvents.length > 0 ? (
                         <span className="text-zinc-400 text-sm">All done for today</span>
+                      ) : !isGoogleConnected ? (
+                        <button onClick={handleConnectCalendar} className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors">
+                          Connect Google Calendar →
+                        </button>
                       ) : (
                         <span className="text-zinc-500 text-sm">Nothing scheduled today</span>
                       )}
