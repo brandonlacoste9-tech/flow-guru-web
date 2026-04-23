@@ -12,6 +12,7 @@ import { MusicPlayer } from "@/components/MusicPlayer";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { WeatherForecastModal } from "@/components/WeatherForecastModal";
 import { NewsModal } from "@/components/NewsModal";
+import { useReminders } from "@/hooks/useReminders";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -58,6 +59,7 @@ export default function Home() {
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [showNews, setShowNews] = useState(false);
   const [countryCode, setCountryCode] = useState<string>('us');
+  const [wakeUpTime, setWakeUpTime] = useState<string | null>(null);
   // ElevenLabs free default voices (no paid plan required)
   const VOICE_IDS = {
     male: 'nPczCjzI2devNBz1zQrb',   // Brian — warm, natural, conversational male
@@ -74,6 +76,13 @@ export default function Home() {
   const recognitionRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const geoFetchedRef = useRef(false);
+
+  // Load wake-up time from profile for reminders
+  trpc.settings.getProfile.useQuery(undefined, {
+    onSuccess: (data: any) => {
+      if (data?.wakeUpTime) setWakeUpTime(data.wakeUpTime);
+    },
+  });
 
   const bootstrap = trpc.assistant.bootstrap.useQuery(undefined, { enabled: true });
 
@@ -252,7 +261,16 @@ export default function Home() {
   };
 
   const greeting = currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening";
-  const userName = user?.name?.split(' ')[0] || "there";
+  const userName = user?.name?.split(' ')[0] || "Brandon";
+
+  // AI reminders — checks calendar events and wake-up time every minute
+  useReminders({
+    enabled: speechEnabled,
+    userName,
+    wakeUpTime,
+    speakText,
+    voiceGender,
+  });
 
   const handleConnectCalendar = () => {
     window.location.href = '/api/integrations/google-calendar/start';
