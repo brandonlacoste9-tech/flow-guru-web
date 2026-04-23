@@ -1,6 +1,10 @@
 import { Express } from "express";
 import { textToSpeech } from "../../api/lib/_core/elevenLabs.js";
 
+// Re-export so sibling modules (briefing.ts) can import from this path
+export { textToSpeech, generateSound, generateSoundAsDataUri } from "../../api/lib/_core/elevenLabs.js";
+export type { TtsOptions, SoundGenerationOptions } from "../../api/lib/_core/elevenLabs.js";
+
 export function registerElevenLabsRoutes(app: Express) {
   app.get("/api/speak", async (req, res) => {
     try {
