@@ -351,6 +351,19 @@ export async function createUserMemoryFacts(userId: number, facts: any[]): Promi
     }
 }
 
+export async function deleteUserMemoryFact(userId: number, factId: number): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      await ensureTables(db);
+      await db.delete(schema.userMemoryFacts).where(
+        and(eq(schema.userMemoryFacts.id, factId), eq(schema.userMemoryFacts.userId, userId))
+      );
+    } catch (err) {
+      console.error('[DB] deleteUserMemoryFact failed:', err);
+    }
+}
+
 export async function touchConversationThread(id: number): Promise<void> {
     try {
       const db = await getDb();

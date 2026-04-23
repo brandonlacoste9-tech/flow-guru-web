@@ -963,6 +963,74 @@ export const appRouter = router({
         };
       }),
   }),
+  settings: router({
+    getProfile: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const profile = await getUserMemoryProfile(userId);
+      const facts = await listUserMemoryFacts(userId);
+      const customInstructions = facts.find((f: any) => f.factKey === 'custom_instructions')?.factValue ?? '';
+      return {
+        wakeUpTime: (profile as any)?.wakeUpTime ?? '',
+        dailyRoutine: (profile as any)?.dailyRoutine ?? '',
+        preferencesSummary: (profile as any)?.preferencesSummary ?? '',
+        customInstructions,
+        alarmSound: (profile as any)?.alarmSound ?? 'chime',
+      };
+    }),
+    saveProfile: publicProcedure
+      .input(z.object({
+        wakeUpTime: z.string().optional(),
+        dailyRoutine: z.string().optional(),
+        preferencesSummary: z.string().optional(),
+        alarmSound: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await upsertUserMemoryProfile(userId, {
+          wakeUpTime: input.wakeUpTime ?? null,
+          dailyRoutine: input.dailyRoutine ?? null,
+          preferencesSummary: input.preferencesSummary ?? null,
+          alarmSound: input.alarmSound ?? null,
+        });
+        return { success: true };
+      }),
+    listFacts: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      return await listUserMemoryFacts(userId);
+    }),
+    deleteFact: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { deleteUserMemoryFact } = await import('./db');
+        await deleteUserMemoryFact(userId, input.id);
+        return { success: true };
+      }),
+    addFact: publicProcedure
+      .input(z.object({ factKey: z.string(), factValue: z.string(), category: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await createUserMemoryFacts(userId, [{
+          factKey: input.factKey,
+          factValue: input.factValue,
+          category: (input.category as any) ?? 'general',
+          confidence: 100,
+        }]);
+        return { success: true };
+      }),
+    saveCustomInstructions: publicProcedure
+      .input(z.object({ instructions: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await createUserMemoryFacts(userId, [{
+          factKey: 'custom_instructions',
+          factValue: input.instructions,
+          category: 'preference',
+          confidence: 100,
+        }]);
+        return { success: true };
+      }),
+  }),
 });
 
-export type AppRouter = typeof appRouter;
+export type AppRouter = typeof appRouter;
