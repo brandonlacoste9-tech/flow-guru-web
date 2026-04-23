@@ -15,6 +15,7 @@ const ACTION_NAMES = [
   "route.get",
   "weather.get",
   "news.get",
+  "web.search",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -58,6 +59,11 @@ const plannerSchema = z.object({
     .object({
       query: z.string().nullable().optional(),
       targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable().optional(),
+    })
+    .nullish(),
+  web: z
+    .object({
+      query: z.string().nullable().optional(),
     })
     .nullish(),
 });
@@ -222,7 +228,7 @@ export async function planAssistantAction(params: {
       {
         role: "system",
         content:
-          "You decide whether a Flow Guru user message should trigger a background action. Choose calendar actions for event creation or schedule lookup, music.play for Spotify-like playback requests, route.get for traffic or navigation requests, weather.get for weather questions, news.get for headlines or briefing requests, and none for normal conversation. Resolve likely defaults from saved memory when possible, but never invent missing details. If a required field is missing, leave it null.",
+          "You decide whether a Flow Guru user message should trigger a background action. Choose calendar actions for event creation or schedule lookup, music.play for Spotify-like playback requests, route.get for traffic or navigation requests, weather.get for weather questions, news.get for headlines or briefing requests, web.search for any question that requires current or factual information from the internet (prices, people, recent events, definitions, sports scores, how-to questions, etc.), and none for personal conversation or memory questions. Resolve likely defaults from saved memory when possible, but never invent missing details. If a required field is missing, leave it null.",
       },
       {
         role: "user",
@@ -302,8 +308,16 @@ export async function planAssistantAction(params: {
               required: ["query", "targetType"],
               additionalProperties: false,
             },
+            web: {
+              type: ["object", "null"],
+              properties: {
+                query: { type: ["string", "null"] },
+              },
+              required: ["query"],
+              additionalProperties: false,
+            },
           },
-          required: ["action", "rationale", "route", "weather", "news", "calendar", "music"],
+          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "web"],
           additionalProperties: false,
         },
       },
@@ -601,6 +615,50 @@ async function executeNewsAction(plan: AssistantActionPlan, options?: { memoryCo
   };
 }
 
+type BraveSearchResult = { title: string; url: string; description?: string };
+type BraveSearchResponse = { web?: { results?: BraveSearchResult[] } };
+type DdgRelatedTopic = { Text?: string; FirstURL?: string };
+type DdgResponse = { Abstract?: string; AbstractText?: string; AbstractURL?: string; AbstractSource?: string; Answer?: string; RelatedTopics?: DdgRelatedTopic[] };
+type WebSearchResult = { title: string; url: string; snippet: string };
+
+async function executeWebSearchAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
+  const query = normalizeText(plan.web?.query);
+  if (!query) {
+    return { action: plan.action, status: "needs_input", title: "Search query needed", summary: "What would you like me to search for?" };
+  }
+
+  const braveKey = process.env.BRAVE_SEARCH_API_KEY;
+
+  if (braveKey) {
+    const url = new URL("https://api.search.brave.com/res/v1/web/search");
+    url.searchParams.set("q", query);
+    url.searchParams.set("count", "5");
+    url.searchParams.set("safesearch", "moderate");
+    const res = await fetch(url.toString(), { headers: { Accept: "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": braveKey } });
+    if (!res.ok) throw new Error(`Brave Search error ${res.status}`);
+    const payload = (await res.json()) as BraveSearchResponse;
+    const results: WebSearchResult[] = (payload.web?.results ?? []).map(r => ({ title: r.title, url: r.url, snippet: r.description ?? "" }));
+    if (!results.length) return { action: plan.action, status: "failed", title: "No results found", summary: `No results for "${query}".`, provider: "brave-search" };
+    return { action: plan.action, status: "executed", title: `Web search: ${query}`, summary: `Found ${results.length} result${results.length === 1 ? "" : "s"}.`, provider: "brave-search", data: { query, results } };
+  }
+
+  // DuckDuckGo fallback
+  const url = new URL("https://api.duckduckgo.com/");
+  url.searchParams.set("q", query);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("no_html", "1");
+  url.searchParams.set("skip_disambig", "1");
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`DuckDuckGo error ${res.status}`);
+  const ddg = (await res.json()) as DdgResponse;
+  const results: WebSearchResult[] = [];
+  if (ddg.Answer) results.push({ title: "Instant answer", url: "", snippet: ddg.Answer });
+  if (ddg.AbstractText) results.push({ title: ddg.AbstractSource ?? "Summary", url: ddg.AbstractURL ?? "", snippet: ddg.AbstractText.slice(0, 300) });
+  (ddg.RelatedTopics ?? []).filter(t => t.Text && t.FirstURL).slice(0, 4).forEach(t => results.push({ title: t.Text!.split(" - ")[0].trim(), url: t.FirstURL!, snippet: t.Text!.slice(0, 200) }));
+  if (!results.length) return { action: plan.action, status: "failed", title: "No results found", summary: `No results for "${query}". Add BRAVE_SEARCH_API_KEY for richer search.`, provider: "duckduckgo" };
+  return { action: plan.action, status: "executed", title: `Web search: ${query}`, summary: `Found results for "${query}".`, provider: "duckduckgo", data: { query, results } };
+}
+
 function connectionRequiredResult(action: AssistantActionPlan["action"], provider: string, summary: string) {
   return {
     action,
@@ -821,6 +879,8 @@ export async function executeAssistantAction(
           "spotify",
           "Spotify playback is staged next. The assistant can recognize music requests already, and it will be ready to connect once the final Spotify flow is enabled.",
         );
+      case "web.search":
+        return await executeWebSearchAction(plan);
       default:
         return null;
     }
@@ -841,7 +901,9 @@ export async function executeAssistantAction(
               ? "google-calendar"
               : plan.action.startsWith("music")
                 ? "spotify"
-                : undefined,
+                : plan.action.startsWith("web")
+                  ? (process.env.BRAVE_SEARCH_API_KEY ? "brave-search" : "duckduckgo")
+                  : undefined,
     };
   }
 }

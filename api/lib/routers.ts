@@ -441,6 +441,7 @@ export const appRouter = router({
         actionResult?.status === "executed" &&
         (actionResult.action === "calendar.create_event" ||
           actionResult.action === "calendar.list_events");
+      // web.search always goes through the LLM so it can synthesize results naturally
 
       if (!shouldUseDirectActionReply) {
         try {
