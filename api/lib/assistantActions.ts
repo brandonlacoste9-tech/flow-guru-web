@@ -1109,85 +1109,59 @@ export async function executeAssistantAction(
           };
         }
 
-        const kimiKey = ENV.moonshotApiKey;
-        if (!kimiKey) {
+        const tavilyKey = ENV.tavilyApiKey;
+        if (!tavilyKey) {
           return {
             action: plan.action,
             status: "failed",
             title: "Web Search Unavailable",
-            summary: "Web search is not configured. Please add a MOONSHOT_API_KEY to enable it.",
+            summary: "Web search is not configured. Please add a TAVILY_API_KEY to enable it.",
           };
         }
 
         try {
-          console.log("[Flow Guru] Kimi web search for:", task);
+          console.log("[Flow Guru] Tavily web search for:", task);
 
-          // Step 1: Ask Kimi to search the web
-          const searchResp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+          // Step 1: Search the web with Tavily
+          const tavilyResp = await fetch("https://api.tavily.com/search", {
             method: "POST",
-            headers: { "Authorization": `Bearer ${kimiKey}`, "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "moonshot-v1-8k",
-              messages: [{ role: "user", content: task }],
-              tools: [{ type: "builtin_function", function: { name: "$web_search" } }],
-              max_tokens: 1000,
+              api_key: tavilyKey,
+              query: task,
+              search_depth: "basic",
+              max_results: 5,
+              include_answer: true,
             }),
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(15_000),
           });
 
-          if (!searchResp.ok) throw new Error(`Kimi search failed: ${searchResp.status}`);
-          const searchData = await searchResp.json() as any;
-          const firstChoice = searchData.choices?.[0]?.message;
+          if (!tavilyResp.ok) throw new Error(`Tavily search failed: ${tavilyResp.status}`);
+          const tavilyData = await tavilyResp.json() as any;
 
-          // Step 2: If Kimi returned tool_calls, send back the results for a final answer
-          if (firstChoice?.tool_calls?.length > 0) {
-            const toolCall = firstChoice.tool_calls[0];
-            const followUpResp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-              method: "POST",
-              headers: { "Authorization": `Bearer ${kimiKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: "moonshot-v1-8k",
-                messages: [
-                  { role: "user", content: task },
-                  { role: "assistant", content: firstChoice.content || "", tool_calls: firstChoice.tool_calls },
-                  { role: "tool", tool_call_id: toolCall.id, name: toolCall.function.name, content: toolCall.function.arguments },
-                ],
-                max_tokens: 1000,
-              }),
-              signal: AbortSignal.timeout(30_000),
-            });
+          // Use Tavily's built-in answer if available, otherwise summarize results
+          const tavilyAnswer = tavilyData.answer;
+          const snippets = (tavilyData.results || []).slice(0, 3).map((r: any) => `${r.title}: ${r.content}`).join("\n\n");
+          const searchContext = tavilyAnswer || snippets || "No results found.";
 
-            if (!followUpResp.ok) throw new Error(`Kimi follow-up failed: ${followUpResp.status}`);
-            const followUpData = await followUpResp.json() as any;
-            const answer = followUpData.choices?.[0]?.message?.content || "I searched the web but couldn't find a clear answer.";
+          console.log("[Flow Guru] Tavily answer:", searchContext?.slice(0, 100));
 
-            return {
-              action: plan.action,
-              status: "executed",
-              title: "Web Search Complete",
-              summary: answer,
-              provider: "kimi",
-            };
-          }
-
-          // Step 3: If Kimi answered directly (no search needed)
-          const directAnswer = firstChoice?.content || "I couldn't find an answer online.";
           return {
             action: plan.action,
             status: "executed",
             title: "Web Search Complete",
-            summary: directAnswer,
-            provider: "kimi",
+            summary: searchContext,
+            provider: "tavily",
           };
 
         } catch (error) {
-          console.error("[Flow Guru] Kimi web search error:", error);
+          console.error("[Flow Guru] Tavily web search error:", error);
           return {
             action: plan.action,
             status: "failed",
             title: "Web Search Failed",
             summary: "I tried to search the web but ran into an error. Please try again.",
-            provider: "kimi",
+            provider: "tavily",
           };
         }
       }

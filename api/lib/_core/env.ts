@@ -11,6 +11,7 @@ export const ENV = {
   forgeApiKey: clean(process.env.BUILT_IN_FORGE_API_KEY),
   deepSeekApiKey: clean(process.env.DEEPSEEK_API_KEY || process.env.DeepSeek_API_KEY || process.env.DEEP_SEEK_API_KEY),
   moonshotApiKey: clean(process.env.MOONSHOT_API_KEY),
+  tavilyApiKey: clean(process.env.TAVILY_API_KEY),
   elevenLabsApiKey: clean(process.env.ELEVENLABS_API_KEY),
   localAiUrl: process.env.LOCAL_AI_URL || "http://localhost:8080",
   useLocalAi: process.env.USE_LOCAL_AI === "true",
