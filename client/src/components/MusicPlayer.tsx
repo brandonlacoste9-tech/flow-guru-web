@@ -161,9 +161,9 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   useEffect(() => () => stopAudio(), []);
 
   return (
-    <div className="bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-4 shadow-2xl">
+    <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 shadow-xl">
       {/* Station tabs */}
-      <div className="flex gap-1 mb-4 bg-black/30 rounded-2xl p-1">
+      <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1">
         {STATIONS.map((s) => (
           <button
             key={s.id}
@@ -171,8 +171,8 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
             className={cn(
               "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all duration-200 leading-none",
               activeId === s.id
-                ? "bg-white/10 text-white"
-                : "text-zinc-600 hover:text-zinc-400"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             {s.label}
@@ -187,13 +187,13 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
           className={cn(
             "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
             isPlaying || buffering
-              ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30 scale-105"
-              : "bg-white/10 text-zinc-300 hover:bg-white/20 hover:text-white"
+              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105"
+              : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
           )}
         >
           {buffering ? (
             <motion.div
-              className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+              className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}
             />
@@ -205,10 +205,10 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
         </button>
 
         <div className="flex-1 min-w-0">
-          <p className="text-white text-[14px] font-semibold leading-tight">
+          <p className="text-foreground text-[14px] font-semibold leading-tight">
             {station.label}
           </p>
-          <p className="text-zinc-500 text-[11px] truncate">{station.desc}</p>
+          <p className="text-muted-foreground text-[11px] truncate">{station.desc}</p>
         </div>
 
         {/* Equalizer bars */}
@@ -223,7 +223,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
               {([0, 0.12, 0.24] as const).map((delay, i) => (
                 <motion.div
                   key={i}
-                  className="w-[3px] bg-blue-400 rounded-full"
+                  className="w-[3px] bg-primary/60 rounded-full"
                   style={{ height: 4 }}
                   animate={{ height: [4, 14, 4] }}
                   transition={{
@@ -241,7 +241,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
         {/* Mute */}
         <button
           onClick={toggleMute}
-          className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="w-7 h-7 rounded-full bg-secondary/50 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
         >
           {isMuted ? (
             <VolumeX className="w-3.5 h-3.5" />
@@ -252,7 +252,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-white/5">
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border">
         <AnimatePresence>
           {(isPlaying || buffering) && (
             <motion.div
@@ -262,13 +262,13 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
               exit={{ opacity: 0 }}
             >
               <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
+              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
                 Live
               </span>
             </motion.div>
           )}
         </AnimatePresence>
-        <p className="text-zinc-700 text-[10px] ml-auto">
+        <p className="text-muted-foreground/60 text-[10px] ml-auto">
           SomaFM · free internet radio
         </p>
       </div>

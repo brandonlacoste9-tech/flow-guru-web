@@ -52,15 +52,15 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
   if (result.status === "failed") {
     body = (
       <div className="flex items-start gap-2">
-        <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-        <p className="text-zinc-400 text-[15px] leading-relaxed">{result.summary}</p>
+        <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+        <p className="text-muted-foreground text-[15px] leading-relaxed">{result.summary}</p>
       </div>
     );
   } else if (result.status !== "executed") {
     body = (
-      <p className="text-zinc-300 text-[16px] leading-relaxed">
-        This action <strong className="text-zinc-100">needs input</strong> before we can finish — here is what we know so
-        far, <span className="text-zinc-400">without fully executing the action</span>.
+      <p className="text-foreground text-[16px] leading-relaxed">
+        This action <strong className="text-primary">needs input</strong> before we can finish — here is what we know so
+        far, <span className="text-muted-foreground">without fully executing the action</span>.
       </p>
     );
   } else if (result.action === "music.play") {
@@ -69,7 +69,7 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
     if (audioDataUri) {
       body = (
         <div>
-          {query && <p className="text-zinc-300 text-sm mb-2">{query}</p>}
+          {query && <p className="text-muted-foreground text-sm mb-2">{query}</p>}
           <AudioPlayer audioDataUri={audioDataUri} />
         </div>
       );
@@ -81,7 +81,7 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
       (data as { routes?: unknown }).routes != null || (data as { duration?: unknown }).duration != null;
     if (origin && destination && !hasRouteDetail) {
       body = (
-        <p className="text-zinc-300 text-[16px] leading-relaxed">
+        <p className="text-muted-foreground text-[16px] leading-relaxed">
           Route details for {origin} to {destination} are not available yet.
         </p>
       );
@@ -90,7 +90,7 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
     const keys = Object.keys(data);
     if (keys.length === 0 || (data as { forecast?: unknown }).forecast == null) {
       body = (
-        <p className="text-zinc-300 text-[16px] leading-relaxed">
+        <p className="text-muted-foreground text-[16px] leading-relaxed">
           Weather details are not available for this result yet.
         </p>
       );
@@ -99,7 +99,7 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
     const stories = (data as { stories?: unknown }).stories;
     if (Array.isArray(stories) && stories.length === 0) {
       body = (
-        <p className="text-zinc-300 text-[16px] leading-relaxed">
+        <p className="text-muted-foreground text-[16px] leading-relaxed">
           No story cards were available for this news result yet.
         </p>
       );
@@ -109,17 +109,17 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
   return (
     <div
       className={cn(
-        "bg-[#1C1C1E]/50 border border-white/5 rounded-[24px] p-6 max-w-[85%] backdrop-blur-xl animate-in zoom-in-95 duration-500",
-        result.status === "failed" && "border-red-500/10",
+        "bg-card border border-border rounded-[24px] p-6 max-w-[85%] backdrop-blur-xl animate-in zoom-in-95 duration-500 shadow-xl",
+        result.status === "failed" && "border-destructive/20 bg-destructive/5",
       )}
     >
       <div className="flex items-center gap-3 mb-3">
-        <div className={cn("p-2 rounded-full", result.status === "failed" ? "bg-red-500/10" : "bg-blue-500/10")}>
-          <Icon className={cn("w-5 h-5", result.status === "failed" ? "text-red-400" : "text-blue-500")} />
+        <div className={cn("p-2 rounded-full", result.status === "failed" ? "bg-destructive/10" : "bg-primary/10")}>
+          <Icon className={cn("w-5 h-5", result.status === "failed" ? "text-destructive" : "text-primary")} />
         </div>
-        <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">{result.title}</h3>
+        <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">{result.title}</h3>
       </div>
-      {body ?? <p className="text-zinc-300 text-[16px] leading-relaxed">{result.summary}</p>}
+      {body ?? <p className="text-foreground text-[16px] leading-relaxed">{result.summary}</p>}
     </div>
   );
 }

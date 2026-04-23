@@ -44,39 +44,51 @@
 }
 
 :root {
-  --primary: oklch(0.58 0.14 65); /* Tan Leather */
+  /* Tanned Leather Theme (Light) */
+  --primary: oklch(0.55 0.12 55); /* Warm Tanned Leather */
   --primary-foreground: oklch(0.98 0.01 75);
-  --sidebar-primary: oklch(0.58 0.14 65);
+  --sidebar-primary: oklch(0.55 0.12 55);
   --sidebar-primary-foreground: oklch(0.98 0.01 75);
-  --chart-1: oklch(0.65 0.15 65);
-  --chart-2: oklch(0.55 0.12 60);
-  --chart-3: oklch(0.45 0.1 55);
-  --chart-4: oklch(0.75 0.13 70);
-  --chart-5: oklch(0.85 0.08 80);
-  --radius: 0.95rem;
-  --background: oklch(0.95 0.03 80); /* Creamy Leather Base */
-  --foreground: oklch(0.25 0.05 50); /* Deep Coffee Brown */
-  --card: oklch(0.97 0.02 82);
-  --card-foreground: oklch(0.25 0.05 50);
-  --popover: oklch(0.97 0.02 82);
-  --popover-foreground: oklch(0.25 0.05 50);
-  --secondary: oklch(0.9 0.04 78);
-  --secondary-foreground: oklch(0.35 0.06 55);
-  --muted: oklch(0.92 0.02 85);
-  --muted-foreground: oklch(0.45 0.05 60);
-  --accent: oklch(0.68 0.16 70);
+  
+  --background: oklch(0.96 0.02 85); /* Creamy Parchment / Light Leather */
+  --foreground: oklch(0.25 0.04 45); /* Deep Coffee Brown */
+  
+  --card: oklch(0.98 0.01 88 / 70%); /* Translucent Cream */
+  --card-foreground: oklch(0.25 0.04 45);
+  
+  --popover: oklch(0.98 0.01 88);
+  --popover-foreground: oklch(0.25 0.04 45);
+  
+  --secondary: oklch(0.92 0.03 80); /* Muted Sand */
+  --secondary-foreground: oklch(0.35 0.05 50);
+  
+  --muted: oklch(0.94 0.02 85);
+  --muted-foreground: oklch(0.45 0.04 55);
+  
+  --accent: oklch(0.65 0.15 65); /* Richer Tan Accent */
   --accent-foreground: oklch(0.98 0.01 75);
+  
   --destructive: oklch(0.55 0.18 30);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.82 0.06 72);
-  --input: oklch(0.82 0.06 72);
-  --ring: oklch(0.58 0.14 65);
-  --sidebar: oklch(0.97 0.02 82);
-  --sidebar-foreground: oklch(0.25 0.05 50);
-  --sidebar-accent: oklch(0.9 0.04 78);
-  --sidebar-accent-foreground: oklch(0.35 0.06 55);
-  --sidebar-border: oklch(0.82 0.06 72);
-  --sidebar-ring: oklch(0.58 0.14 65);
+  
+  --border: oklch(0.85 0.04 75);
+  --input: oklch(0.85 0.04 75);
+  --ring: oklch(0.55 0.12 55);
+  
+  --radius: 1rem;
+  
+  --sidebar: oklch(0.98 0.01 88);
+  --sidebar-foreground: oklch(0.25 0.04 45);
+  --sidebar-accent: oklch(0.92 0.03 80);
+  --sidebar-accent-foreground: oklch(0.35 0.05 50);
+  --sidebar-border: oklch(0.85 0.04 75);
+  --sidebar-ring: oklch(0.55 0.12 55);
+
+  --chart-1: oklch(0.6 0.15 60);
+  --chart-2: oklch(0.7 0.12 70);
+  --chart-3: oklch(0.5 0.1 50);
+  --chart-4: oklch(0.8 0.1 80);
+  --chart-5: oklch(0.4 0.08 40);
 }
 
 .dark {
@@ -84,32 +96,27 @@
   --primary-foreground: oklch(0.16 0.02 286);
   --sidebar-primary: oklch(0.74 0.17 278);
   --sidebar-primary-foreground: oklch(0.16 0.02 286);
-  --background: oklch(0 0 0); /* Pure Black */
-  --foreground: oklch(1 0 0); /* Pure White */
-  --card: oklch(0.12 0 0);
-  --card-foreground: oklch(1 0 0);
-  --popover: oklch(0.12 0 0);
-  --popover-foreground: oklch(1 0 0);
-  --secondary: oklch(0.15 0 0);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.12 0 0);
-  --muted-foreground: oklch(0.7 0 0);
-  --accent: oklch(0.2 0 0);
-  --accent-foreground: oklch(1 0 0);
+  --background: oklch(0.15 0.02 20); /* Deep Charcoal for Dark Mode */
+  --foreground: oklch(0.95 0.01 80);
+  --card: oklch(0.18 0.02 20 / 80%);
+  --card-foreground: oklch(0.95 0.01 80);
+  --popover: oklch(0.18 0.02 20);
+  --popover-foreground: oklch(0.95 0.01 80);
+  --secondary: oklch(0.22 0.02 20);
+  --secondary-foreground: oklch(0.95 0.01 80);
+  --muted: oklch(0.2 0.02 20);
+  --muted-foreground: oklch(0.7 0.02 20);
+  --accent: oklch(0.25 0.02 20);
+  --accent-foreground: oklch(0.95 0.01 80);
   --destructive: oklch(0.68 0.2 24);
   --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.72 0.16 276);
-  --chart-1: oklch(0.76 0.11 258);
-  --chart-2: oklch(0.72 0.16 276);
-  --chart-3: oklch(0.64 0.17 292);
-  --chart-4: oklch(0.58 0.13 305);
-  --chart-5: oklch(0.68 0.12 224);
-  --sidebar: oklch(0.1 0 0);
-  --sidebar-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.15 0 0);
-  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar: oklch(0.12 0.02 20);
+  --sidebar-foreground: oklch(0.95 0.01 80);
+  --sidebar-accent: oklch(0.18 0.02 20);
+  --sidebar-accent-foreground: oklch(0.95 0.01 80);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.72 0.16 276);
 }
@@ -126,63 +133,43 @@
     background-image: 
       /* Subtle Leather Grain */
       url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E"),
-      radial-gradient(at 0% 0%, color-mix(in oklab, var(--primary), transparent 95%) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, color-mix(in oklab, var(--accent), transparent 95%) 0px, transparent 50%);
+      radial-gradient(at 0% 0%, color-mix(in oklab, var(--primary), transparent 90%) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, color-mix(in oklab, var(--accent), transparent 90%) 0px, transparent 50%);
     background-blend-mode: overlay, normal, normal;
-  }
-  button:not(:disabled),
-  [role="button"]:not([aria-disabled="true"]),
-  [type="button"]:not(:disabled),
-  [type="submit"]:not(:disabled),
-  [type="reset"]:not(:disabled),
-  a[href],
-  select:not(:disabled),
-  input[type="checkbox"]:not(:disabled),
-  input[type="radio"]:not(:disabled) {
-    @apply cursor-pointer;
   }
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
+  }
+
+  /* Custom Leather Glassmorphism Utility */
+  .leather-glass {
+    @apply bg-card backdrop-blur-2xl border border-white/20 shadow-xl;
   }
 }
 
-/* Prevent flex items from overflowing */
 .flex {
   min-height: 0;
   min-width: 0;
-}
+}

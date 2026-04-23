@@ -1,15 +1,15 @@
 export const theme = {
   colors: {
-    background: '#000000',
-    surface: '#121212',
-    primary: '#007AFF', // Premium iOS Blue
-    secondary: '#1C1C1E', // Dark Gray Bubble
-    text: '#FFFFFF',
-    textMuted: '#8E8E93',
-    accent: '#0A84FF',
+    background: '#F5F2ED', // Creamy Parchment / Light Leather
+    surface: '#FFFFFF',
+    primary: '#8B5C18', // Warm Tanned Leather
+    secondary: '#EBE4D8', // Muted Sand
+    text: '#2D1E12', // Deep Coffee Brown
+    textMuted: '#7A6B5D',
+    accent: '#A67C52', // Richer Tan Accent
     error: '#FF453A',
     success: '#32D74B',
-    glow: 'rgba(0, 122, 255, 0.5)',
+    glow: 'rgba(139, 92, 24, 0.3)',
   },
   spacing: {
     xs: 4,

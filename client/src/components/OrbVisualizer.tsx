@@ -9,7 +9,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
   const variants = {
     idle: {
       scale: [1, 1.05, 1],
-      opacity: [0.4, 0.6, 0.4],
+      opacity: [0.6, 0.8, 0.6],
       transition: {
         duration: 4,
         repeat: Infinity,
@@ -18,7 +18,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
     },
     listening: {
       scale: [1, 1.2, 1],
-      opacity: [0.6, 1, 0.6],
+      opacity: [0.8, 1, 0.8],
       transition: {
         duration: 1.5,
         repeat: Infinity,
@@ -47,10 +47,10 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
 
   const getGlowColor = () => {
     switch (state) {
-      case 'listening': return 'rgba(239, 68, 68, 0.5)'; // Red
-      case 'thinking': return 'rgba(59, 130, 246, 0.5)'; // Blue
-      case 'speaking': return 'rgba(34, 197, 94, 0.5)'; // Green
-      default: return 'rgba(147, 51, 234, 0.3)'; // Purple
+      case 'listening': return 'rgba(239, 68, 68, 0.3)'; // Red
+      case 'thinking': return 'rgba(139, 92, 24, 0.3)'; // Amber/Leather
+      case 'speaking': return 'rgba(34, 197, 94, 0.3)'; // Green
+      default: return 'rgba(139, 92, 24, 0.15)'; // Soft Leather
     }
   };
 
@@ -67,20 +67,20 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
       />
       
       <motion.div
-        className="absolute inset-4 rounded-full blur-xl bg-blue-500/20"
+        className="absolute inset-4 rounded-full blur-xl bg-primary/10"
         animate={state === 'thinking' ? { rotate: 360 } : {}}
         transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
       />
 
-      {/* Main Orb */}
+      {/* Main Orb - Tanned Leather / Amber Glass Aesthetic */}
       <motion.div
-        className="relative w-20 h-20 rounded-full bg-gradient-to-br from-white/20 via-blue-500/40 to-purple-600/40 backdrop-blur-3xl border border-white/30 shadow-[0_0_40px_rgba(59,130,246,0.5)] overflow-hidden"
+        className="relative w-20 h-20 rounded-full bg-gradient-to-br from-white/40 via-primary/30 to-accent/40 backdrop-blur-3xl border border-white/50 shadow-[0_0_40px_rgba(139,92,24,0.3)] overflow-hidden"
         variants={variants}
         animate={state}
       >
         {/* Internal Shimmer */}
         <motion.div
-          className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent"
+          className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent"
           animate={{
             x: ['-100%', '100%'],
             y: ['-100%', '100%'],
@@ -94,7 +94,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
         
         {/* Dynamic Inner core */}
         <motion.div 
-          className="absolute inset-[20%] rounded-full bg-white/10 blur-sm"
+          className="absolute inset-[20%] rounded-full bg-white/20 blur-sm"
           animate={{
             scale: [1, 1.2, 1],
             opacity: [0.3, 0.6, 0.3]
@@ -105,7 +105,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
 
       {/* Decorative Rings */}
       <motion.div
-        className="absolute inset-0 border border-white/5 rounded-full"
+        className="absolute inset-0 border border-primary/20 rounded-full"
         animate={{ scale: [1, 1.4], opacity: [0.5, 0] }}
         transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
       />
