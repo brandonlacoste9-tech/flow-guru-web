@@ -11,6 +11,14 @@ import { useLocation } from "wouter";
 import { MusicPlayer } from "@/components/MusicPlayer";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
+const WEATHER_CODE_LABELS: [number, string][] = [
+  [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
+  [65, "rainy"], [77, "snowy"], [82, "rain showers"], [86, "snow showers"], [99, "thunderstorms"],
+];
+function weatherLabel(code: number): string {
+  return WEATHER_CODE_LABELS.find(([max]) => code <= max)?.[1] ?? "unsettled";
+}
+
 interface Message {
   id: string | number;
   role: 'user' | 'assistant';
@@ -59,6 +67,7 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const geoFetchedRef = useRef(false);
 
   const bootstrap = trpc.assistant.bootstrap.useQuery(undefined, { enabled: true });
 
@@ -66,6 +75,35 @@ export default function Home() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Auto-geolocation: fetch weather client-side if bootstrap didn't return any
+  useEffect(() => {
+    if (bootstrap.isLoading) return;
+    if (weather !== null) return;
+    if (geoFetchedRef.current) return;
+    if (!('geolocation' in navigator)) return;
+    geoFetchedRef.current = true;
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      try {
+        const [cityRes, wxRes] = await Promise.all([
+          fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`),
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,weather_code&timezone=auto`),
+        ]);
+        const cityData = cityRes.ok ? await cityRes.json() : {};
+        const wxData = wxRes.ok ? await wxRes.json() : {};
+        const c = wxData.current;
+        if (!c || c.temperature_2m == null) return;
+        const cityName = cityData.city || cityData.locality || cityData.principalSubdivision || 'Your location';
+        setWeather({
+          tempC: Math.round(c.temperature_2m),
+          feelsLikeC: Math.round(c.apparent_temperature ?? c.temperature_2m),
+          label: weatherLabel(c.weather_code ?? 99),
+          locationName: cityName,
+        });
+      } catch { /* silent */ }
+    }, () => { /* denied — no problem */ });
+  }, [bootstrap.isLoading, weather]);
 
   useEffect(() => {
     const data = bootstrap.data;
