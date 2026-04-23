@@ -98,3 +98,26 @@ export type UserMemoryFact = typeof userMemoryFacts.$inferSelect;
 export type ConversationThread = typeof conversationThreads.$inferSelect;
 export type ConversationMessage = typeof conversationMessages.$inferSelect;
 export type ProviderConnection = typeof providerConnections.$inferSelect;
+
+export const localEvents = pgTable(
+  "fg_local_events",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    startAt: timestamp("startAt").notNull(),
+    endAt: timestamp("endAt").notNull(),
+    location: text("location"),
+    allDay: integer("allDay").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => ({
+    userIdx: index("fg_local_events_user_idx").on(table.userId),
+    startIdx: index("fg_local_events_start_idx").on(table.startAt),
+  })
+);
+
+export type LocalEvent = typeof localEvents.$inferSelect;
+export type InsertLocalEvent = typeof localEvents.$inferInsert;
