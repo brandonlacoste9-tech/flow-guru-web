@@ -392,11 +392,30 @@ export async function getConversationThreadById(id: number): Promise<schema.Conv
 }
 
 export async function createLocalEvent(data: any): Promise<number | null> {
-    const db = await getDb();
-    if (!db) throw new Error("Database connection unavailable");
-    await ensureTables(db);
-    const results = await db.insert(schema.localEvents).values(data).returning({ id: schema.localEvents.id });
-    return results[0]?.id || null;
+    try {
+      const db = await getDb();
+      if (!db) throw new Error("Database connection unavailable");
+      await ensureTables(db);
+      // Ensure only schema-defined columns are passed (strip unknown keys)
+      const safeData = {
+        userId: data.userId,
+        title: data.title,
+        description: data.description ?? null,
+        startAt: data.startAt,
+        endAt: data.endAt,
+        location: data.location ?? null,
+        allDay: data.allDay ?? 0,
+        color: data.color ?? 'blue',
+        reminderMinutes: data.reminderMinutes ?? '30,15,5',
+      };
+      console.log('[DB] createLocalEvent:', JSON.stringify({ ...safeData, startAt: safeData.startAt?.toISOString?.(), endAt: safeData.endAt?.toISOString?.() }));
+      const results = await db.insert(schema.localEvents).values(safeData).returning({ id: schema.localEvents.id });
+      console.log('[DB] createLocalEvent result:', JSON.stringify(results));
+      return results[0]?.id || null;
+    } catch (err: any) {
+      console.error('[DB] createLocalEvent FAILED:', err?.message ?? err);
+      throw err;
+    }
 }
 
 export async function listLocalEvents(userId: number, startAfter?: Date, endBefore?: Date): Promise<schema.LocalEvent[]> {

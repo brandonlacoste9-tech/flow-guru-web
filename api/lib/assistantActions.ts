@@ -825,6 +825,7 @@ async function executeCalendarCreateAction(
   // ── Local calendar fallback (always works) ──
   const startDate = new Date(resolved.startIso);
   const endDate = new Date(endIso);
+  console.log('[Calendar] Creating local event:', JSON.stringify({ userId: options.userId, title: eventTitle, startIso: resolved.startIso, endIso }));
   const localEventId = await createLocalEvent({
     userId: options.userId,
     title: eventTitle,
@@ -833,7 +834,10 @@ async function executeCalendarCreateAction(
     endAt: endDate,
     location: null,
     allDay: 0,
+    color: 'blue',
+    reminderMinutes: '30,15,5',
   });
+  console.log('[Calendar] Local event created with id:', localEventId);
 
   const formattedTime = formatCalendarEventDateTime(resolved.startIso, options.timeZone ?? null);
 
