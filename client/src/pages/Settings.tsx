@@ -89,8 +89,7 @@ export function Settings() {
     setInstructions(data.customInstructions ?? '');
   }, [profileQuery.data]);
 
-  // Fixed: use correct procedure name 'listFacts'
-  const factsQuery = trpc.settings.listFacts.useQuery();
+  const factsQuery = trpc.settings.getMemoryFacts.useQuery();
 
   const saveProfileMutation = trpc.settings.saveProfile.useMutation({
     onSuccess: () => { toast.success('Profile saved!'); setProfileDirty(false); profileQuery.refetch(); },
@@ -102,14 +101,12 @@ export function Settings() {
     onError: () => toast.error('Failed to save instructions.'),
   });
 
-  // Fixed: use correct procedure name 'deleteFact' and correct input key 'id'
-  const deleteFactMutation = trpc.settings.deleteFact.useMutation({
+  const deleteFactMutation = trpc.settings.deleteMemoryFact.useMutation({
     onSuccess: () => { toast.success('Memory removed.'); factsQuery.refetch(); },
     onError: () => toast.error('Failed to remove memory.'),
   });
 
-  // Fixed: use correct procedure name 'addFact'
-  const addFactMutation = trpc.settings.addFact.useMutation({
+  const addFactMutation = trpc.settings.addMemoryFact.useMutation({
     onSuccess: () => {
       toast.success('Memory added!');
       setNewFactKey(''); setNewFactValue(''); setShowAddFact(false);
@@ -118,7 +115,8 @@ export function Settings() {
     onError: () => toast.error('Failed to add memory.'),
   });
 
-  const facts = (Array.isArray(factsQuery.data) ? factsQuery.data : []).filter((f: any) => f.factKey !== 'custom_instructions');
+  const factsRaw = (factsQuery.data as any)?.facts ?? factsQuery.data ?? [];
+  const facts = (Array.isArray(factsRaw) ? factsRaw : []).filter((f: any) => f.factKey !== 'custom_instructions');
 
   function handleTestSound() {
     if (alarmSound === 'none') {
@@ -293,8 +291,7 @@ export function Settings() {
                         <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{fact.factKey ?? fact.category}</p>
                         <p className="text-sm text-foreground mt-0.5 leading-snug">{fact.factValue}</p>
                       </div>
-                      {/* Fixed: use correct input key 'id' not 'factId' */}
-                      <button onClick={() => deleteFactMutation.mutate({ id: fact.id })}
+                      <button onClick={() => deleteFactMutation.mutate({ factId: fact.id })}
                         className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100">
                         <Trash2 size={13} />
                       </button>
