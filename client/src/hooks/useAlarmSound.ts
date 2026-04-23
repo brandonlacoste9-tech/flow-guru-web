@@ -41,11 +41,26 @@ function getCtx(): AudioContext | null {
       return null;
     }
   }
-  // Resume if suspended (autoplay policy)
-  if (_ctx.state === 'suspended') {
-    _ctx.resume().catch(() => {});
-  }
   return _ctx;
+}
+
+/** Returns a running AudioContext, properly awaiting resume(). */
+async function getRunningCtx(): Promise<AudioContext | null> {
+  const ctx = getCtx();
+  if (!ctx) return null;
+  if (ctx.state === 'suspended') {
+    try { await ctx.resume(); } catch { return null; }
+  }
+  return ctx;
+}
+
+// Resume AudioContext when tab becomes visible again (browsers suspend it in background)
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && _ctx && _ctx.state === 'suspended') {
+      _ctx.resume().catch(() => {});
+    }
+  });
 }
 
 /**
@@ -55,18 +70,19 @@ function getCtx(): AudioContext | null {
 export function prewarmAudio(): void {
   const ctx = getCtx();
   if (!ctx) return;
-  // Play a 0-volume silent buffer to unlock the context
+  const doUnlock = () => {
+    try {
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch { /* ignore */ }
+  };
   if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
-  }
-  try {
-    const buf = ctx.createBuffer(1, 1, 22050);
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-    src.start(0);
-  } catch {
-    // ignore
+    ctx.resume().then(doUnlock).catch(() => {});
+  } else {
+    doUnlock();
   }
 }
 
@@ -80,7 +96,8 @@ function scheduleChimeNotes(ctx: AudioContext, offsetSec: number): void {
     gain.connect(ctx.destination);
     osc.type = 'sine';
     osc.frequency.value = freq;
-    const t = ctx.currentTime + offsetSec + i * 0.22;
+    // 0.15s safety buffer after resume to avoid scheduling notes in the past
+    const t = ctx.currentTime + 0.15 + offsetSec + i * 0.22;
     gain.gain.setValueAtTime(0, t);
     gain.gain.linearRampToValueAtTime(0.4, t + 0.05);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
@@ -89,10 +106,10 @@ function scheduleChimeNotes(ctx: AudioContext, offsetSec: number): void {
   });
 }
 
-function playChime(): void {
-  const ctx = getCtx();
+async function playChime(): Promise<void> {
+  // Must await resume() before scheduling notes — ctx.currentTime is 0 while suspended
+  const ctx = await getRunningCtx();
   if (!ctx) return;
-  // Play 3 rounds of the chime
   scheduleChimeNotes(ctx, 0);
   scheduleChimeNotes(ctx, 1.1);
   scheduleChimeNotes(ctx, 2.2);
@@ -122,14 +139,11 @@ function playRadio(type: AlarmSoundType, durationMs: number): void {
   radioAudio = audio;
 
   const tryPlay = () => {
-    audio.play().catch((err) => {
-      // If autoplay blocked, try resuming AudioContext first then retry once
-      const ctx = getCtx();
-      if (ctx) {
-        ctx.resume().then(() => {
-          audio.play().catch(() => {});
-        });
-      }
+    audio.play().catch(() => {
+      // If autoplay blocked, await resume then retry once
+      getRunningCtx().then(() => {
+        audio.play().catch(() => {});
+      });
     });
   };
 

@@ -5,6 +5,7 @@ export type ReminderPayload = {
   body: string;
   fireAt: Date; // exact time to show the notification
   tag?: string;
+  alarmSound?: string; // passed to SW so it can tell the page to play sound
 };
 
 export function usePushNotifications() {
@@ -55,6 +56,7 @@ export function usePushNotifications() {
         title: reminder.title,
         body: reminder.body,
         delay,
+        alarmSound: (reminder as any).alarmSound || 'chime',
       });
     } else {
       // Fallback: browser setTimeout (only works while tab is open)

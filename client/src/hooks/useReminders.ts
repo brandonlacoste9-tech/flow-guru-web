@@ -45,6 +45,20 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     }
   }, [enabled, permission, requestPermission]);
 
+  // Listen for PLAY_ALARM messages from the service worker
+  // (fires when the SW scheduled notification fires while the tab is open/backgrounded)
+  useEffect(() => {
+    if (!enabled) return;
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PLAY_ALARM') {
+        const sound = (event.data.alarmSound as AlarmSoundType) || alarmSoundRef.current;
+        playAlarmSound(sound, 30000);
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', handleSwMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', handleSwMessage);
+  }, [enabled]);
+
   // The actual check function — reads from refs so it's always fresh
   const checkReminders = useCallback(async () => {
     if (!enabledRef.current) return;
@@ -187,20 +201,20 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
           const key15 = `push-15-${event.id}-${todayKey}`;
           if (!scheduledPushes.has(key15) && fire15 > now) {
             scheduledPushes.add(key15);
-            scheduleReminder({ title: `⏰ ${event.title}`, body: `Starts in 15 minutes`, fireAt: fire15, tag: key15 });
+            scheduleReminder({ title: `⏰ ${event.title}`, body: `Starts in 15 minutes`, fireAt: fire15, tag: key15, alarmSound: alarmSoundRef.current });
           }
 
           const fire5 = new Date(eventStart.getTime() - 5 * 60000);
           const key5 = `push-5-${event.id}-${todayKey}`;
           if (!scheduledPushes.has(key5) && fire5 > now) {
             scheduledPushes.add(key5);
-            scheduleReminder({ title: `🔔 ${event.title}`, body: `Starting in 5 minutes!`, fireAt: fire5, tag: key5 });
+            scheduleReminder({ title: `🔔 ${event.title}`, body: `Starting in 5 minutes!`, fireAt: fire5, tag: key5, alarmSound: alarmSoundRef.current });
           }
 
           const keyNow = `push-now-${event.id}-${todayKey}`;
           if (!scheduledPushes.has(keyNow) && eventStart > now) {
             scheduledPushes.add(keyNow);
-            scheduleReminder({ title: `🚀 ${event.title}`, body: `Starting right now!`, fireAt: eventStart, tag: keyNow });
+            scheduleReminder({ title: `🚀 ${event.title}`, body: `Starting right now!`, fireAt: eventStart, tag: keyNow, alarmSound: alarmSoundRef.current });
           }
         }
 
@@ -217,7 +231,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             const wakeKey = `push-wakeup-${wakeDate.toDateString()}`;
             if (!scheduledPushes.has(wakeKey)) {
               scheduledPushes.add(wakeKey);
-              scheduleReminder({ title: '☀️ Good Morning!', body: `It's ${wt} — time to rise and shine!`, fireAt: wakeDate, tag: wakeKey });
+              scheduleReminder({ title: '☀️ Good Morning!', body: `It's ${wt} — time to rise and shine!`, fireAt: wakeDate, tag: wakeKey, alarmSound: alarmSoundRef.current });
             }
           }
         }

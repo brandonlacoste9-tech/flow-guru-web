@@ -48,13 +48,20 @@ self.addEventListener('notificationclick', (event) => {
 // Background sync for reminders (fallback when push server not available)
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SCHEDULE_REMINDER') {
-    const { title, body, delay } = event.data;
+    const { title, body, delay, alarmSound } = event.data;
     setTimeout(() => {
+      // Show OS notification
       self.registration.showNotification(title, {
         body,
         icon: '/icon-192.png',
         tag: 'flow-guru-reminder',
         renotify: true,
+      });
+      // Tell all open client pages to play the alarm sound
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        for (const client of clientList) {
+          client.postMessage({ type: 'PLAY_ALARM', alarmSound: alarmSound || 'chime' });
+        }
       });
     }, delay);
   }
