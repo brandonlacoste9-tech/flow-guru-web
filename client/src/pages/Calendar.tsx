@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   ChevronLeft, ChevronRight, Plus, X, MapPin, Clock, Trash2,
-  ArrowLeft, Calendar as CalendarIcon, AlignLeft, Search
+  ArrowLeft, Calendar as CalendarIcon, AlignLeft, Search, RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,8 @@ function formatDatetimeLocal(d: Date) {
 
 type ViewMode = "month" | "week" | "day";
 
+type RecurrenceType = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly';
+
 type EventForm = {
   title: string;
   description: string;
@@ -52,6 +54,7 @@ type EventForm = {
   location: string;
   allDay: boolean;
   color: string;
+  recurrence: RecurrenceType;
 };
 
 const blankForm = (day: Date): EventForm => {
@@ -59,7 +62,7 @@ const blankForm = (day: Date): EventForm => {
   start.setHours(9, 0, 0, 0);
   const end = new Date(start);
   end.setHours(10, 0, 0, 0);
-  return { title: "", description: "", startAt: formatDatetimeLocal(start), endAt: formatDatetimeLocal(end), location: "", allDay: false, color: "blue" };
+  return { title: "", description: "", startAt: formatDatetimeLocal(start), endAt: formatDatetimeLocal(end), location: "", allDay: false, color: "blue", recurrence: "none" };
 };
 
 // ─── Mini Calendar (sidebar) ──────────────────────────────────────────────────
@@ -244,6 +247,20 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
               <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})}
                 placeholder="Add description" rows={2}
                 className="flex-1 bg-transparent text-sm outline-none resize-none placeholder:text-muted-foreground/50"/>
+            </div>
+
+            {/* Recurrence */}
+            <div className="flex items-center gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2">
+              <RefreshCw size={14} className="text-muted-foreground shrink-0"/>
+              <select value={form.recurrence} onChange={e => setForm({...form, recurrence: e.target.value as RecurrenceType})}
+                className="flex-1 bg-transparent text-sm outline-none text-foreground">
+                <option value="none">Does not repeat</option>
+                <option value="daily">Every day</option>
+                <option value="weekdays">Every weekday (Mon–Fri)</option>
+                <option value="weekly">Every week</option>
+                <option value="monthly">Every month</option>
+                <option value="yearly">Every year</option>
+              </select>
             </div>
 
             {/* Color picker */}
@@ -582,15 +599,49 @@ export default function Calendar() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim()) { toast.error("Title is required"); return; }
-    createMutation.mutate({
-      title: form.title.trim(),
-      description: form.description || undefined,
-      startAt: new Date(form.startAt).toISOString(),
-      endAt: new Date(form.endAt).toISOString(),
-      location: form.location || undefined,
-      allDay: form.allDay,
-      color: form.color,
-    });
+
+    const baseStart = new Date(form.startAt);
+    const baseEnd = new Date(form.endAt);
+    const durationMs = baseEnd.getTime() - baseStart.getTime();
+
+    // Generate recurring dates (up to 52 occurrences / 1 year)
+    const dates: Date[] = [baseStart];
+    if (form.recurrence !== 'none') {
+      const MAX = 52;
+      for (let i = 1; i < MAX; i++) {
+        const next = new Date(baseStart);
+        if (form.recurrence === 'daily') next.setDate(next.getDate() + i);
+        else if (form.recurrence === 'weekdays') {
+          let added = 0; let offset = 0;
+          while (added < i) { offset++; const d = new Date(baseStart); d.setDate(d.getDate() + offset); if (d.getDay() !== 0 && d.getDay() !== 6) added++; }
+          next.setDate(baseStart.getDate() + offset);
+        }
+        else if (form.recurrence === 'weekly') next.setDate(next.getDate() + i * 7);
+        else if (form.recurrence === 'monthly') { next.setMonth(next.getMonth() + i); }
+        else if (form.recurrence === 'yearly') { next.setFullYear(next.getFullYear() + i); break; /* only 1 year ahead */ }
+        dates.push(next);
+      }
+    }
+
+    // Create all occurrences sequentially
+    const createAll = async () => {
+      for (const startDate of dates) {
+        const endDate = new Date(startDate.getTime() + durationMs);
+        await createMutation.mutateAsync({
+          title: form.title.trim(),
+          description: form.description || undefined,
+          startAt: startDate.toISOString(),
+          endAt: endDate.toISOString(),
+          location: form.location || undefined,
+          allDay: form.allDay,
+          color: form.color,
+        });
+      }
+      eventsQuery.refetch();
+      setShowForm(false);
+      toast.success(dates.length > 1 ? `${dates.length} recurring events saved` : 'Event saved');
+    };
+    createAll().catch(() => toast.error("Couldn't save event"));
   };
 
   const headerTitle = useMemo(() => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
+import { usePushNotifications } from './usePushNotifications';
 
 interface UseRemindersOptions {
   enabled: boolean;
@@ -12,6 +13,8 @@ interface UseRemindersOptions {
 
 // Track which reminders have already fired this session to avoid repeats
 const firedReminders = new Set<string>();
+// Track which push notifications have already been scheduled this session
+const scheduledPushes = new Set<string>();
 
 function getMinutesUntil(targetHour: number, targetMin: number, now: Date): number {
   const target = new Date(now);
@@ -24,6 +27,95 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   const utils = trpc.useUtils();
   const speakRef = useRef(speakText);
   speakRef.current = speakText;
+  const { permission, requestPermission, scheduleReminder } = usePushNotifications();
+
+  // Request notification permission once when reminders are enabled
+  useEffect(() => {
+    if (enabled && permission === 'default') {
+      requestPermission();
+    }
+  }, [enabled, permission, requestPermission]);
+
+  // Pre-schedule today's push notifications for upcoming events (runs once per session)
+  const preSchedulePushes = useCallback(async () => {
+    if (!enabled || permission !== 'granted') return;
+    const now = new Date();
+    const endAt = new Date(now);
+    endAt.setHours(23, 59, 59, 999);
+
+    try {
+      const events = await utils.calendar.list.fetch({
+        startAt: now.toISOString(),
+        endAt: endAt.toISOString(),
+      });
+
+      for (const event of events) {
+        if (!event.startAt) continue;
+        const eventStart = new Date(event.startAt);
+        const todayKey = now.toDateString();
+
+        // Schedule 15-min push
+        const fire15 = new Date(eventStart.getTime() - 15 * 60000);
+        const key15 = `push-15-${event.id}-${todayKey}`;
+        if (!scheduledPushes.has(key15) && fire15 > now) {
+          scheduledPushes.add(key15);
+          scheduleReminder({
+            title: `⏰ ${event.title}`,
+            body: `Starts in 15 minutes`,
+            fireAt: fire15,
+            tag: key15,
+          });
+        }
+
+        // Schedule 5-min push
+        const fire5 = new Date(eventStart.getTime() - 5 * 60000);
+        const key5 = `push-5-${event.id}-${todayKey}`;
+        if (!scheduledPushes.has(key5) && fire5 > now) {
+          scheduledPushes.add(key5);
+          scheduleReminder({
+            title: `🔔 ${event.title}`,
+            body: `Starting in 5 minutes!`,
+            fireAt: fire5,
+            tag: key5,
+          });
+        }
+
+        // Schedule exact-time push
+        const keyNow = `push-now-${event.id}-${todayKey}`;
+        if (!scheduledPushes.has(keyNow) && eventStart > now) {
+          scheduledPushes.add(keyNow);
+          scheduleReminder({
+            title: `🚀 ${event.title}`,
+            body: `Starting right now!`,
+            fireAt: eventStart,
+            tag: keyNow,
+          });
+        }
+      }
+
+      // Schedule wake-up push
+      if (wakeUpTime) {
+        const [wh, wm] = wakeUpTime.split(':').map(Number);
+        if (!isNaN(wh) && !isNaN(wm)) {
+          const wakeDate = new Date(now);
+          wakeDate.setHours(wh, wm, 0, 0);
+          if (wakeDate <= now) wakeDate.setDate(wakeDate.getDate() + 1);
+          const wakeKey = `push-wakeup-${wakeDate.toDateString()}`;
+          if (!scheduledPushes.has(wakeKey)) {
+            scheduledPushes.add(wakeKey);
+            scheduleReminder({
+              title: '☀️ Good Morning!',
+              body: `It's ${wakeUpTime} — time to rise and shine!`,
+              fireAt: wakeDate,
+              tag: wakeKey,
+            });
+          }
+        }
+      }
+    } catch {
+      // Silent fail
+    }
+  }, [enabled, permission, wakeUpTime, utils, scheduleReminder]);
 
   const checkReminders = useCallback(async () => {
     if (!enabled) return;
@@ -107,6 +199,9 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   useEffect(() => {
     if (!enabled) return;
 
+    // Pre-schedule push notifications for today's events
+    preSchedulePushes();
+
     // Check immediately on mount
     checkReminders();
 
@@ -123,5 +218,5 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
       clearTimeout(timeout);
       clearInterval(interval);
     };
-  }, [enabled, checkReminders]);
+  }, [enabled, checkReminders, preSchedulePushes]);
 }
