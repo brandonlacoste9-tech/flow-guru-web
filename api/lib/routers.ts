@@ -689,6 +689,7 @@ export const appRouter = router({
           memoryContext,
           message: input.message,
         });
+        console.log('[Flow Guru] Planner decided:', JSON.stringify({ action: plannedAction.action, calendar: plannedAction.calendar, reminder: plannedAction.reminder }));
         actionResult = await executeAssistantAction(plannedAction, {
           userId,
           userName,
@@ -696,6 +697,7 @@ export const appRouter = router({
           memoryContext,
           timeZone: input.timeZone ?? null,
         });
+        console.log('[Flow Guru] Action result:', JSON.stringify({ status: actionResult?.status, title: actionResult?.title, action: actionResult?.action }));
       } catch (error) {
         console.error("[Flow Guru] SYSTEM FAILURE:", error);
         if (error instanceof Error) {
