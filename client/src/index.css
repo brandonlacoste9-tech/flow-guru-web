@@ -92,33 +92,49 @@
 }
 
 .dark {
-  --primary: oklch(0.74 0.17 278);
-  --primary-foreground: oklch(0.16 0.02 286);
-  --sidebar-primary: oklch(0.74 0.17 278);
-  --sidebar-primary-foreground: oklch(0.16 0.02 286);
-  --background: oklch(0.15 0.02 20); /* Deep Charcoal for Dark Mode */
-  --foreground: oklch(0.95 0.01 80);
-  --card: oklch(0.18 0.02 20 / 80%);
-  --card-foreground: oklch(0.95 0.01 80);
-  --popover: oklch(0.18 0.02 20);
-  --popover-foreground: oklch(0.95 0.01 80);
-  --secondary: oklch(0.22 0.02 20);
-  --secondary-foreground: oklch(0.95 0.01 80);
-  --muted: oklch(0.2 0.02 20);
-  --muted-foreground: oklch(0.7 0.02 20);
-  --accent: oklch(0.25 0.02 20);
-  --accent-foreground: oklch(0.95 0.01 80);
-  --destructive: oklch(0.68 0.2 24);
+  /* FLO GURU Dark Leather Theme */
+  --primary: oklch(0.72 0.12 65);            /* Antique gold */
+  --primary-foreground: oklch(0.12 0.03 40); /* Deep espresso on gold */
+  --sidebar-primary: oklch(0.72 0.12 65);
+  --sidebar-primary-foreground: oklch(0.12 0.03 40);
+
+  --background: oklch(0.13 0.03 40);         /* Deep espresso #1a1208 */
+  --foreground: oklch(0.92 0.03 80);         /* Warm cream #f0e4cc */
+
+  --card: oklch(0.16 0.03 40 / 88%);        /* Rich dark leather card */
+  --card-foreground: oklch(0.92 0.03 80);
+
+  --popover: oklch(0.16 0.03 40);
+  --popover-foreground: oklch(0.92 0.03 80);
+
+  --secondary: oklch(0.20 0.04 45);          /* Slightly lighter leather */
+  --secondary-foreground: oklch(0.88 0.03 78);
+
+  --muted: oklch(0.18 0.03 42);              /* Muted dark leather */
+  --muted-foreground: oklch(0.62 0.06 60);   /* Warm tan muted text */
+
+  --accent: oklch(0.22 0.04 48);             /* Leather accent surface */
+  --accent-foreground: oklch(0.92 0.03 80);
+
+  --destructive: oklch(0.58 0.18 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.72 0.16 276);
-  --sidebar: oklch(0.12 0.02 20);
-  --sidebar-foreground: oklch(0.95 0.01 80);
-  --sidebar-accent: oklch(0.18 0.02 20);
-  --sidebar-accent-foreground: oklch(0.95 0.01 80);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.72 0.16 276);
+
+  --border: oklch(0.38 0.07 55 / 40%);      /* Warm leather border */
+  --input: oklch(0.20 0.04 45);              /* Dark leather input bg */
+  --ring: oklch(0.72 0.12 65);               /* Gold focus ring */
+
+  --sidebar: oklch(0.11 0.03 38);            /* Darkest espresso sidebar */
+  --sidebar-foreground: oklch(0.92 0.03 80);
+  --sidebar-accent: oklch(0.18 0.03 42);
+  --sidebar-accent-foreground: oklch(0.92 0.03 80);
+  --sidebar-border: oklch(0.38 0.07 55 / 25%);
+  --sidebar-ring: oklch(0.72 0.12 65);
+
+  --chart-1: oklch(0.72 0.12 65);            /* Gold */
+  --chart-2: oklch(0.58 0.10 50);            /* Cognac */
+  --chart-3: oklch(0.45 0.08 40);            /* Saddle */
+  --chart-4: oklch(0.65 0.09 70);            /* Amber */
+  --chart-5: oklch(0.52 0.07 35);            /* Dark tan */
 }
 
 @layer base {

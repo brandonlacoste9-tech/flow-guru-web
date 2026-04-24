@@ -318,9 +318,14 @@ export default function Home() {
   });
 
   const EVENT_COLOR_MAP: Record<string, string> = {
-    blue: 'bg-blue-500', green: 'bg-emerald-500', red: 'bg-red-500',
-    yellow: 'bg-yellow-400', purple: 'bg-purple-500', pink: 'bg-pink-400',
-    orange: 'bg-orange-400', teal: 'bg-teal-500',
+    blue: 'bg-amber-700',    // Cognac leather
+    green: 'bg-amber-800',   // Saddle leather
+    red: 'bg-rose-900',      // Burgundy leather
+    yellow: 'bg-amber-500',  // Amber leather
+    purple: 'bg-stone-600',  // Dusty rose leather
+    pink: 'bg-rose-800',     // Blush tan leather
+    orange: 'bg-amber-600',  // Warm tan leather
+    teal: 'bg-stone-500',    // Slate leather
   };
 
   const greeting = currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening";

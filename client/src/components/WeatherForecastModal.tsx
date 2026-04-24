@@ -195,7 +195,7 @@ export function WeatherForecastModal({
                     {/* Stats */}
                     <div className="flex items-center gap-3 ml-auto shrink-0">
                       {day.precipitationSum > 0 && (
-                        <span className="flex items-center gap-0.5 text-xs text-blue-400 font-medium">
+                        <span className="flex items-center gap-0.5 text-xs text-amber-400 font-medium">
                           <Droplets size={10} />{day.precipitationSum}mm
                         </span>
                       )}
