@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { ENV } from "./env.js";
 import { upsertProviderConnection, getProviderConnection } from "../db.js";
 import { encryptToken, decryptToken } from "./crypto.js";
@@ -5,24 +6,78 @@ import { encryptToken, decryptToken } from "./crypto.js";
 const SPOTIFY_AUTH_URL = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API_BASE = "https://api.spotify.com/v1";
 
+/* ── HMAC-signed OAuth state (same pattern as Google Calendar) ─────────── */
+
+function base64UrlEncode(value: string) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function base64UrlDecode(value: string) {
+  return Buffer.from(value, "base64url").toString("utf8");
+}
+
+function signPayload(payload: string) {
+  return crypto
+    .createHmac("sha256", ENV.cookieSecret || "flow-guru-provider-state")
+    .update(payload)
+    .digest("base64url");
+}
+
+type SpotifyOAuthState = {
+  provider: "spotify";
+  userId: number;
+  issuedAt: number;
+};
+
 export function buildSpotifyOAuthState(userId: number): string {
-  return btoa(JSON.stringify({ userId, provider: "spotify", ts: Date.now() }));
+  const payload = JSON.stringify({
+    provider: "spotify",
+    userId,
+    issuedAt: Date.now(),
+  } satisfies SpotifyOAuthState);
+  return `${base64UrlEncode(payload)}.${signPayload(payload)}`;
 }
 
 export function parseSpotifyOAuthState(state: string): { userId: number } {
-  try {
-    const parsed = JSON.parse(atob(state));
-    return { userId: Number(parsed.userId) };
-  } catch {
-    throw new Error("Invalid Spotify OAuth state.");
+  const [encodedPayload, signature] = state.split(".");
+  if (!encodedPayload || !signature) {
+    throw new Error("Spotify OAuth state is malformed.");
   }
+
+  const payload = base64UrlDecode(encodedPayload);
+  const expectedSignature = signPayload(payload);
+  if (
+    !crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    )
+  ) {
+    throw new Error("Spotify OAuth state signature did not match.");
+  }
+
+  const parsed = JSON.parse(payload) as SpotifyOAuthState;
+  if (parsed.provider !== "spotify") {
+    throw new Error("Spotify OAuth state provider was invalid.");
+  }
+  if (!parsed.userId || !parsed.issuedAt) {
+    throw new Error("Spotify OAuth state was incomplete.");
+  }
+  if (Date.now() - parsed.issuedAt > 1000 * 60 * 15) {
+    throw new Error("Spotify OAuth state expired (15 min window).");
+  }
+
+  return { userId: parsed.userId };
 }
+
+/* ── Callback URL helper ─────────────────────────────────────────────── */
 
 export function getSpotifyCallbackUrl(req: { headers: { host?: string }; protocol: string }): string {
   const host = req.headers.host || "flow-guru-web.vercel.app";
   const protocol = host.includes("localhost") ? "http" : "https";
   return `${protocol}://${host}/api/integrations/spotify/callback`;
 }
+
+/* ── Token exchange (no profile lookup – userId comes from signed state) ── */
 
 export async function connectSpotify(params: {
   userId: number;
@@ -51,11 +106,19 @@ export async function connectSpotify(params: {
 
   const tokenData = await response.json();
   
-  // Get user profile to get a label
-  const meResponse = await fetch(`${SPOTIFY_API_BASE}/me`, {
-    headers: { "Authorization": `Bearer ${tokenData.access_token}` }
-  });
-  const meData = await meResponse.json();
+  // Best-effort profile fetch for a friendly label (non-fatal if it fails)
+  let accountLabel = "Spotify Account";
+  try {
+    const meResponse = await fetch(`${SPOTIFY_API_BASE}/me`, {
+      headers: { "Authorization": `Bearer ${tokenData.access_token}` }
+    });
+    if (meResponse.ok) {
+      const meData = await meResponse.json();
+      accountLabel = meData.display_name || meData.id || accountLabel;
+    }
+  } catch {
+    // Profile fetch is cosmetic — swallow errors
+  }
 
   const connection = {
     userId: params.userId,
@@ -64,7 +127,7 @@ export async function connectSpotify(params: {
     accessToken: encryptToken(tokenData.access_token),
     refreshToken: encryptToken(tokenData.refresh_token || null),
     expiresAtUnixMs: tokenData.expires_in ? Date.now() + tokenData.expires_in * 1000 : null,
-    externalAccountLabel: meData.display_name || meData.id || "Spotify Account",
+    externalAccountLabel: accountLabel,
     lastError: null,
   };
 

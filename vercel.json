@@ -9,6 +9,14 @@
     { "src": "api/*.ts", "use": "@vercel/node", "config": { "maxDuration": 60 } },
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist/public" } }
   ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.floguru.com" }],
+      "destination": "https://floguru.com/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     { "source": "/api/auth/email", "destination": "/api/auth-email.ts" },
     { "source": "/api/auth/google/callback", "destination": "/api/auth-google-callback.ts" },

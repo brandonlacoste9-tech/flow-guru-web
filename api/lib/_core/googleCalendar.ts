@@ -208,14 +208,24 @@ export async function connectGoogleCalendar(params: {
     code: params.code,
     redirectUri: params.redirectUri,
   });
-  const profile = await fetchGoogleProfile(token.access_token!);
+
+  // Best-effort profile fetch for a friendly label (non-fatal if scopes are missing)
+  let accountLabel = "Google Calendar";
+  let accountId = "google-calendar";
+  try {
+    const profile = await fetchGoogleProfile(token.access_token!);
+    accountLabel = profile.email ?? profile.name ?? accountLabel;
+    accountId = profile.id ?? profile.email ?? accountId;
+  } catch (err) {
+    console.warn("[Google Calendar] Profile fetch failed (cosmetic only, continuing):", (err as Error).message);
+  }
 
   await upsertProviderConnection({
     userId: params.userId,
     provider: "google-calendar",
     status: "connected",
-    externalAccountId: profile.id ?? profile.email ?? "google-calendar",
-    externalAccountLabel: profile.email ?? profile.name ?? "Google Calendar",
+    externalAccountId: accountId,
+    externalAccountLabel: accountLabel,
     accessToken: encryptToken(token.access_token ?? null),
     refreshToken: encryptToken(token.refresh_token ?? null),
     scope: token.scope ?? null,
@@ -225,7 +235,7 @@ export async function connectGoogleCalendar(params: {
   });
 
   return {
-    accountLabel: profile.email ?? profile.name ?? "Google Calendar",
+    accountLabel,
   };
 }
 

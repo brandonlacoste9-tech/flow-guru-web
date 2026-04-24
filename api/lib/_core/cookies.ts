@@ -9,7 +9,6 @@ function isIpAddress(host: string) {
 }
 
 function isSecureRequest(req: VercelRequest) {
-  // Use casting if properties are missing on base VercelRequest
   const protocol = (req as any).protocol;
   if (protocol === "https") return true;
 
@@ -23,28 +22,40 @@ function isSecureRequest(req: VercelRequest) {
   return protoList.some((proto: string) => proto.trim().toLowerCase() === "https");
 }
 
+function extractHostname(req: VercelRequest): string | undefined {
+  const host = (req as any).hostname
+    || (req.headers?.["x-forwarded-host"] as string)?.split(",")[0]?.trim()
+    || (req.headers?.host as string)?.split(":")[0];
+  return host || undefined;
+}
+
 export function getSessionCookieOptions(
   req: VercelRequest
 ): any {
-  // const hostname = req.hostname;
-  // const shouldSetDomain =
-  //   hostname &&
-  //   !LOCAL_HOSTS.has(hostname) &&
-  //   !isIpAddress(hostname) &&
-  //   hostname !== "127.0.0.1" &&
-  //   hostname !== "::1";
+  const hostname = extractHostname(req);
+  const isLocal =
+    !hostname ||
+    LOCAL_HOSTS.has(hostname) ||
+    isIpAddress(hostname);
 
-  // const domain =
-  //   shouldSetDomain && !hostname.startsWith(".")
-  //     ? `.${hostname}`
-  //     : shouldSetDomain
-  //       ? hostname
-  //       : undefined;
+  const secure = isSecureRequest(req);
+
+  // For production domains, set domain to apex with leading dot
+  // so sessions survive www↔apex and future subdomains.
+  let domain: string | undefined;
+  if (!isLocal && hostname) {
+    // Extract apex domain (e.g. "floguru.com" from "www.floguru.com" or "flow-guru-web.vercel.app")
+    const parts = hostname.split(".");
+    if (parts.length >= 2) {
+      domain = `.${parts.slice(-2).join(".")}`;
+    }
+  }
 
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    sameSite: "lax" as const,
+    secure,
+    ...(domain ? { domain } : {}),
   };
 }

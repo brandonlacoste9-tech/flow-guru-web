@@ -351,19 +351,22 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       }
 
       const errorText = await response.text();
-      console.warn(`[Flow Guru] Provider ${provider.name} failed (${response.status}):`, errorText);
+      lastError = new Error(`LLM API error ${response.status} from ${provider.name}: ${errorText.slice(0, 200)}`);
       
-      // Always try the next provider if available
+      // Only log loudly when we've exhausted all providers
       if (providers.indexOf(provider) < providers.length - 1) {
-        console.log(`[Flow Guru] ${provider.name} failed with ${response.status}, trying next provider...`);
+        // Silent fallback — don't spam logs with expected provider failures
         continue;
       }
 
       // No more providers — throw so the caller can handle it properly
-      throw new Error(`LLM API error ${response.status} from ${provider.name}: ${errorText.slice(0, 200)}`);
+      throw lastError;
     } catch (err) {
-      console.error(`[Flow Guru] Critical error with provider ${provider.name}:`, err);
       lastError = err;
+      // Only log loudly if this is the LAST provider
+      if (providers.indexOf(provider) >= providers.length - 1) {
+        console.error(`[Flow Guru] All LLM providers exhausted. Last error (${provider.name}):`, err);
+      }
     }
   }
 
