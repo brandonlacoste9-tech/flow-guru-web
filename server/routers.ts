@@ -1,5 +1,6 @@
 import { COOKIE_NAME } from "@shared/const";
 import { z } from "zod";
+import fs from "fs";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM, type Tool, type ToolCall } from "./_core/llm";
 import { systemRouter } from "./_core/systemRouter";
@@ -10,6 +11,7 @@ import {
   formatActionResultContext,
   planAssistantAction,
   type AssistantActionResult,
+  type AssistantActionPlan,
 } from "./assistantActions";
 import {
   createConversationMessage,
@@ -339,12 +341,8 @@ async function extractAndPersistMemory(params: {
                     type: "string",
                     enum: [...MEMORY_FACT_CATEGORIES],
                   },
-                  factKey: {
-                    type: ["string", "null"],
-                  },
-                  factValue: {
-                    type: "string",
-                  },
+                  factKey: { type: ["string", "null"] },
+                  factValue: { type: "string" },
                   confidence: {
                     type: "integer",
                     minimum: 1,
@@ -550,54 +548,29 @@ export const appRouter = router({
       let weather: WeatherSnapshot | null = null;
       let todayEvents: CalendarItem[] = [];
 
-      const weatherPromise = (async (): Promise<WeatherSnapshot | null> => {
+      const weatherPromise = (async () => {
         if (!userLocation) return null;
         try {
-          const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(userLocation)}&count=1`;
-          const geoResp = await fetch(geoUrl);
-          if (!geoResp.ok) return null;
-          const geoData = await geoResp.json();
-          const geo = geoData.results?.[0];
-          if (!geo) return null;
-
-          const wxUrl = new URL("https://api.open-meteo.com/v1/forecast");
-          wxUrl.searchParams.set("latitude", String(geo.latitude));
-          wxUrl.searchParams.set("longitude", String(geo.longitude));
-          wxUrl.searchParams.set("current", "temperature_2m,apparent_temperature,weather_code");
-          wxUrl.searchParams.set("timezone", "auto");
-          const wxResp = await fetch(wxUrl.toString());
-          if (!wxResp.ok) return null;
-          const wxData = await wxResp.json();
-          const c = wxData.current;
-          if (!c || c.temperature_2m == null) return null;
-
-          const code = c.weather_code ?? 99;
-          let label = "unsettled weather";
-          if (code <= 1) label = "clear skies";
-          else if (code <= 3) label = "partly cloudy";
-          else if (code <= 48) label = "foggy";
-          else if (code <= 57) label = "drizzle";
-          else if (code <= 65) label = "rainy";
-          else if (code <= 77) label = "snowy";
-          else if (code <= 86) label = "snow showers";
-          else if (code <= 99) label = "thunderstorms";
-
-          return { tempC: Math.round(c.temperature_2m), feelsLikeC: Math.round(c.apparent_temperature ?? c.temperature_2m), label, locationName: geo.name || userLocation };
-        } catch { return null; }
+          const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
+          const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather" });
+          const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
+          if (result.status === "executed" && result.data?.current) {
+            const c = result.data.current as any;
+            return { tempC: c.temperatureC, feelsLikeC: c.apparentTemperatureC, label: c.weatherLabel, locationName: result.data.location as string };
+          }
+        } catch { /* ignore */ }
+        return null;
       })();
 
-      const calendarPromise = (async (): Promise<CalendarItem[]> => {
+      const calendarPromise = (async () => {
+        const results: CalendarItem[] = [];
         const now = new Date();
-        const startOfDay = new Date(now);
-        startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(now);
         endOfDay.setHours(23, 59, 59, 999);
 
-        const results: CalendarItem[] = [];
-
         try {
-          const localEvts = await listLocalEvents(userId, startOfDay, endOfDay);
-          for (const e of localEvts) {
+          const local = await listLocalEvents(userId, now, endOfDay);
+          for (const e of local) {
             results.push({ title: e.title, start: e.startAt ? e.startAt.toISOString() : null, allDay: e.allDay ?? false });
           }
         } catch { /* ignore */ }
@@ -686,9 +659,6 @@ export const appRouter = router({
       };
     }),
     send: publicProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
-      try {
-        fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] /api/trpc/chat.send CALLED with: ${input.message}\n`);
-      } catch (e) {}
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
 
@@ -760,22 +730,18 @@ export const appRouter = router({
         "",
         `The user's saved memory:`,
         memoryContext,
-        "",
-        "AUTONOMOUS AGENT PROTOCOL (The Manus Loop):",
-        "1. ANALYZE: Process the user intent and current project state.",
-        "2. SELECT: Choose the precise tool (Browser or Sub-Agent) for the next step.",
-        "3. OBSERVE: Wait for the result. Never hallucinate outputs.",
-        "4. ITERATE: If the task needs more steps, delegate them one by one.",
       ].join("\n");
 
       let actionResult: AssistantActionResult | null = null;
 
       try {
+        // PERF: Combined Planner + Action Execution
         const plannedAction = await planAssistantAction({
           userName,
           memoryContext,
           message: input.message,
         });
+        
         actionResult = await executeAssistantAction(plannedAction, {
           userId,
           userName,
@@ -785,9 +751,6 @@ export const appRouter = router({
         });
       } catch (error) {
         console.error("[Flow Guru] SYSTEM FAILURE IN SEND:", error);
-        if (error instanceof Error) {
-          console.error("[Flow Guru] Stack:", error.stack);
-        }
         actionResult = {
           action: "none",
           status: "failed",
@@ -811,11 +774,6 @@ export const appRouter = router({
                 resultJson,
                 "",
                 "INSTRUCTION: The tool ran successfully. Your reply MUST confirm what happened using the data above.",
-                "For music: say what's playing (e.g., 'Playing house music for you now 🔥').",
-                "For weather: share the actual temperature and conditions.",
-                "For calendar: confirm what was booked or list the events.",
-                "For routes: share the estimated travel time.",
-                "For news: briefly mention the top headline.",
                 "Keep it short (1-2 sentences), warm, and enthusiastic. DO NOT ignore the tool result.",
               ].join("\n"),
             });
@@ -827,7 +785,7 @@ export const appRouter = router({
                 resultJson,
                 "",
                 "The user wants to do something that requires connecting an account first.",
-                "Warmly explain they need to connect the service and offer to help set it up.",
+                "Warmly explain they need to connect the service.",
               ].join("\n"),
             });
           } else if (actionResult.status === "needs_input") {
@@ -847,12 +805,13 @@ export const appRouter = router({
                 "TOOL RESULT — FAILED:",
                 resultJson,
                 "",
-                "The tool didn't work. Briefly acknowledge the issue and offer an alternative.",
+                "The tool didn't work. Briefly acknowledge the issue.",
               ].join("\n"),
             });
           }
         }
 
+        // PERF: Final Chat Generation
         const llmResponse = await invokeLLM({
           messages: [
             {
@@ -867,10 +826,9 @@ export const appRouter = router({
           ],
         });
 
-        assistantReply =
-          extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+        assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
       } catch (error) {
-        console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
+        console.error("[Flow Guru] Chat generation failed.", error);
       }
 
       await createConversationMessage({
@@ -881,29 +839,21 @@ export const appRouter = router({
       });
       await touchConversationThread(threadId);
 
-      let memoryUpdate = {
-        profileUpdated: false,
-        factsAdded: 0,
-      };
+      // PERF: Fire-and-forget memory extraction to return response immediately
+      extractAndPersistMemory({
+        userId,
+        userName,
+        userMessage: input.message,
+        assistantReply,
+      }).catch(err => console.warn("[Flow Guru] Background memory extraction failed:", err));
 
-      try {
-        memoryUpdate = await extractAndPersistMemory({
-          userId,
-          userName,
-          userMessage: input.message,
-          assistantReply,
-        });
-      } catch (error) {
-        console.warn("[Flow Guru] Memory extraction failed, but the message send completed.", error);
-      }
-
-      const messages = await listConversationMessages(threadId);
+      const finalMessages = await listConversationMessages(threadId);
 
       return {
         threadId,
         reply: assistantReply,
-        messages,
-        memoryUpdate,
+        messages: finalMessages,
+        memoryUpdate: { profileUpdated: false, factsAdded: 0 }, // Handled in background
         actionResult,
       };
     }),
