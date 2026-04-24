@@ -16,15 +16,12 @@ export function registerElevenLabsRoutes(app: Express) {
         return res.status(400).send("Text query parameter is required");
       }
 
-      console.log(`[ElevenLabs] Synthesizing Stream: "${text.slice(0, 50)}..."`);
+      console.log(`[ElevenLabs] Synthesizing: "${text.slice(0, 50)}..."`);
       
-      const stream = await textToSpeechStream({ text, voiceId });
+      const audioBuffer = await textToSpeech({ text, voiceId });
 
       res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("Transfer-Encoding", "chunked");
-      
-      const nodeStream = Readable.fromWeb(stream as any);
-      nodeStream.pipe(res);
+      res.send(audioBuffer);
       
     } catch (error: any) {
       console.error("[ElevenLabs Error]", error);
