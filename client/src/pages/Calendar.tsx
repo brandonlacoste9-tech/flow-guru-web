@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, X, MapPin, Clock, Trash2,
-  ArrowLeft, Calendar as CalendarIcon, AlignLeft, Search, RefreshCw, Bell, Pencil, Check
+  ArrowLeft, Calendar as CalendarIcon, AlignLeft, Search, RefreshCw, Bell, Pencil, Check, Palette
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -14,19 +14,249 @@ const WEEKDAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+// ─── Calendar Theme Palettes ──────────────────────────────────────────────────
+// Each theme defines CSS variables injected on the calendar root.
+// light/dark variants are applied based on the .dark class on <html>.
+export type CalendarThemeId =
+  | "default"
+  | "ocean"
+  | "forest"
+  | "rose"
+  | "slate"
+  | "lavender"
+  | "amber"
+  | "midnight";
+
+export type CalendarTheme = {
+  id: CalendarThemeId;
+  label: string;
+  swatch: string; // Tailwind bg class for the preview dot
+  // CSS vars injected on the calendar container
+  vars: {
+    "--cal-bg": string;
+    "--cal-header-bg": string;
+    "--cal-cell-bg": string;
+    "--cal-cell-other": string;
+    "--cal-cell-today": string;
+    "--cal-cell-selected": string;
+    "--cal-border": string;
+    "--cal-text": string;
+    "--cal-text-muted": string;
+    "--cal-accent": string;
+    "--cal-accent-fg": string;
+    "--cal-sidebar-bg": string;
+  };
+};
+
+export const CALENDAR_THEMES: CalendarTheme[] = [
+  {
+    id: "default",
+    label: "Parchment",
+    swatch: "bg-amber-100",
+    vars: {
+      "--cal-bg":           "light-dark(#faf8f4, #1a1a1f)",
+      "--cal-header-bg":    "light-dark(rgba(255,253,247,0.95), rgba(26,26,31,0.95))",
+      "--cal-cell-bg":      "light-dark(#fffdf7, #1e1e24)",
+      "--cal-cell-other":   "light-dark(#f5f2ec, #17171c)",
+      "--cal-cell-today":   "light-dark(#f0e8d8, #2a2535)",
+      "--cal-cell-selected":"light-dark(#e8dcc8, #2d2840)",
+      "--cal-border":       "light-dark(rgba(180,160,120,0.25), rgba(255,255,255,0.08))",
+      "--cal-text":         "light-dark(#3d2e1a, #f0ece4)",
+      "--cal-text-muted":   "light-dark(#9a8060, #7a7060)",
+      "--cal-accent":       "light-dark(#8b6a3e, #a08060)",
+      "--cal-accent-fg":    "#ffffff",
+      "--cal-sidebar-bg":   "light-dark(rgba(250,248,244,0.7), rgba(20,20,25,0.7))",
+    },
+  },
+  {
+    id: "ocean",
+    label: "Ocean",
+    swatch: "bg-sky-400",
+    vars: {
+      "--cal-bg":           "light-dark(#f0f8ff, #0d1b2a)",
+      "--cal-header-bg":    "light-dark(rgba(240,248,255,0.95), rgba(13,27,42,0.95))",
+      "--cal-cell-bg":      "light-dark(#f7fbff, #0f1f30)",
+      "--cal-cell-other":   "light-dark(#e8f4fd, #0a1520)",
+      "--cal-cell-today":   "light-dark(#dbeeff, #1a3a55)",
+      "--cal-cell-selected":"light-dark(#c8e4ff, #1e4060)",
+      "--cal-border":       "light-dark(rgba(100,180,240,0.2), rgba(100,180,240,0.12))",
+      "--cal-text":         "light-dark(#0d3a5c, #d0eaff)",
+      "--cal-text-muted":   "light-dark(#5a9abf, #5a8aaa)",
+      "--cal-accent":       "light-dark(#0ea5e9, #38bdf8)",
+      "--cal-accent-fg":    "#ffffff",
+      "--cal-sidebar-bg":   "light-dark(rgba(240,248,255,0.7), rgba(13,27,42,0.7))",
+    },
+  },
+  {
+    id: "forest",
+    label: "Forest",
+    swatch: "bg-emerald-500",
+    vars: {
+      "--cal-bg":           "light-dark(#f0faf4, #0d1f14)",
+      "--cal-header-bg":    "light-dark(rgba(240,250,244,0.95), rgba(13,31,20,0.95))",
+      "--cal-cell-bg":      "light-dark(#f5fdf7, #0f2218)",
+      "--cal-cell-other":   "light-dark(#e6f5ec, #0a1a10)",
+      "--cal-cell-today":   "light-dark(#d4edda, #1a3d28)",
+      "--cal-cell-selected":"light-dark(#c0e6cc, #1e4530)",
+      "--cal-border":       "light-dark(rgba(60,180,100,0.2), rgba(60,180,100,0.12))",
+      "--cal-text":         "light-dark(#0d3d20, #c8f0d8)",
+      "--cal-text-muted":   "light-dark(#4a9a65, #4a8060)",
+      "--cal-accent":       "light-dark(#10b981, #34d399)",
+      "--cal-accent-fg":    "#ffffff",
+      "--cal-sidebar-bg":   "light-dark(rgba(240,250,244,0.7), rgba(13,31,20,0.7))",
+    },
+  },
+  {
+    id: "rose",
+    label: "Rose",
+    swatch: "bg-rose-400",
+    vars: {
+      "--cal-bg":           "light-dark(#fff5f7, #1f0d10)",
+      "--cal-header-bg":    "light-dark(rgba(255,245,247,0.95), rgba(31,13,16,0.95))",
+      "--cal-cell-bg":      "light-dark(#fff8f9, #221015)",
+      "--cal-cell-other":   "light-dark(#fce8ec, #180a0d)",
+      "--cal-cell-today":   "light-dark(#fdd5db, #3d1a20)",
+      "--cal-cell-selected":"light-dark(#fcc0ca, #451e25)",
+      "--cal-border":       "light-dark(rgba(240,80,100,0.18), rgba(240,80,100,0.12))",
+      "--cal-text":         "light-dark(#5c0d1a, #ffd0d8)",
+      "--cal-text-muted":   "light-dark(#c05070, #905060)",
+      "--cal-accent":       "light-dark(#f43f5e, #fb7185)",
+      "--cal-accent-fg":    "#ffffff",
+      "--cal-sidebar-bg":   "light-dark(rgba(255,245,247,0.7), rgba(31,13,16,0.7))",
+    },
+  },
+  {
+    id: "slate",
+    label: "Slate",
+    swatch: "bg-slate-400",
+    vars: {
+      "--cal-bg":           "light-dark(#f8f9fb, #0f1117)",
+      "--cal-header-bg":    "light-dark(rgba(248,249,251,0.95), rgba(15,17,23,0.95))",
+      "--cal-cell-bg":      "light-dark(#fafbfc, #111318)",
+      "--cal-cell-other":   "light-dark(#f0f2f5, #0c0e13)",
+      "--cal-cell-today":   "light-dark(#e2e8f0, #1e2330)",
+      "--cal-cell-selected":"light-dark(#d4dce8, #222838)",
+      "--cal-border":       "light-dark(rgba(100,120,160,0.18), rgba(100,120,160,0.12))",
+      "--cal-text":         "light-dark(#1e2a3a, #e2e8f0)",
+      "--cal-text-muted":   "light-dark(#64748b, #4a5568)",
+      "--cal-accent":       "light-dark(#475569, #94a3b8)",
+      "--cal-accent-fg":    "#ffffff",
+      "--cal-sidebar-bg":   "light-dark(rgba(248,249,251,0.7), rgba(15,17,23,0.7))",
+    },
+  },
+  {
+    id: "lavender",
+    label: "Lavender",
+    swatch: "bg-violet-400",
+    vars: {
+      "--cal-bg":           "light-dark(#f8f5ff, #120d1f)",
+      "--cal-header-bg":    "light-dark(rgba(248,245,255,0.95), rgba(18,13,31,0.95))",
+      "--cal-cell-bg":      "light-dark(#faf8ff, #151020)",
+      "--cal-cell-other":   "light-dark(#f0ebff, #0e0a18)",
+      "--cal-cell-today":   "light-dark(#e4d8ff, #2a1f45)",
+      "--cal-cell-selected":"light-dark(#d8c8ff, #301e50)",
+      "--cal-border":       "light-dark(rgba(140,80,240,0.18), rgba(140,80,240,0.12))",
+      "--cal-text":         "light-dark(#2d0d5c, #e8d8ff)",
+      "--cal-text-muted":   "light-dark(#8060c0, #6050a0)",
+      "--cal-accent":       "light-dark(#7c3aed, #a78bfa)",
+      "--cal-accent-fg":    "#ffffff",
+      "--cal-sidebar-bg":   "light-dark(rgba(248,245,255,0.7), rgba(18,13,31,0.7))",
+    },
+  },
+  {
+    id: "amber",
+    label: "Amber",
+    swatch: "bg-amber-400",
+    vars: {
+      "--cal-bg":           "light-dark(#fffbf0, #1f1800)",
+      "--cal-header-bg":    "light-dark(rgba(255,251,240,0.95), rgba(31,24,0,0.95))",
+      "--cal-cell-bg":      "light-dark(#fffcf2, #221a00)",
+      "--cal-cell-other":   "light-dark(#fff5d6, #180f00)",
+      "--cal-cell-today":   "light-dark(#ffedb0, #3d2e00)",
+      "--cal-cell-selected":"light-dark(#ffe590, #453400)",
+      "--cal-border":       "light-dark(rgba(220,160,0,0.2), rgba(220,160,0,0.12))",
+      "--cal-text":         "light-dark(#4a2e00, #ffe8a0)",
+      "--cal-text-muted":   "light-dark(#b08030, #806020)",
+      "--cal-accent":       "light-dark(#d97706, #fbbf24)",
+      "--cal-accent-fg":    "#ffffff",
+      "--cal-sidebar-bg":   "light-dark(rgba(255,251,240,0.7), rgba(31,24,0,0.7))",
+    },
+  },
+  {
+    id: "midnight",
+    label: "Midnight",
+    swatch: "bg-indigo-900",
+    vars: {
+      "--cal-bg":           "light-dark(#f0f2ff, #08091a)",
+      "--cal-header-bg":    "light-dark(rgba(240,242,255,0.95), rgba(8,9,26,0.95))",
+      "--cal-cell-bg":      "light-dark(#f5f6ff, #0a0b1e)",
+      "--cal-cell-other":   "light-dark(#e8eaff, #060710)",
+      "--cal-cell-today":   "light-dark(#d8dcff, #1a1e40)",
+      "--cal-cell-selected":"light-dark(#c8ceff, #1e2248)",
+      "--cal-border":       "light-dark(rgba(60,80,220,0.18), rgba(60,80,220,0.12))",
+      "--cal-text":         "light-dark(#0a0d3a, #d0d4ff)",
+      "--cal-text-muted":   "light-dark(#4050b0, #303880)",
+      "--cal-accent":       "light-dark(#3730a3, #6366f1)",
+      "--cal-accent-fg":    "#ffffff",
+      "--cal-sidebar-bg":   "light-dark(rgba(240,242,255,0.7), rgba(8,9,26,0.7))",
+    },
+  },
+];
+
+const THEME_STORAGE_KEY = "fg_calendar_theme";
+
+function useCalendarTheme() {
+  const [themeId, setThemeId] = useState<CalendarThemeId>(() => {
+    try { return (localStorage.getItem(THEME_STORAGE_KEY) as CalendarThemeId) || "default"; }
+    catch { return "default"; }
+  });
+
+  const theme = CALENDAR_THEMES.find(t => t.id === themeId) ?? CALENDAR_THEMES[0];
+
+  const applyTheme = (id: CalendarThemeId) => {
+    setThemeId(id);
+    try { localStorage.setItem(THEME_STORAGE_KEY, id); } catch {}
+  };
+
+  return { theme, themeId, applyTheme };
+}
+
+// ─── Event Colors ─────────────────────────────────────────────────────────────
 const EVENT_COLORS = [
-  { id: "blue",   label: "Blueberry",  bg: "bg-blue-500",   text: "text-white",  dot: "bg-blue-500",   light: "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800/50" },
-  { id: "green",  label: "Sage",       bg: "bg-emerald-500",text: "text-white",  dot: "bg-emerald-500",light: "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/50" },
-  { id: "red",    label: "Tomato",     bg: "bg-red-500",    text: "text-white",  dot: "bg-red-500",    light: "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800/50" },
-  { id: "yellow", label: "Banana",     bg: "bg-amber-400",  text: "text-gray-900",dot:"bg-amber-400",  light: "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/50" },
-  { id: "purple", label: "Grape",      bg: "bg-purple-500", text: "text-white",  dot: "bg-purple-500", light: "bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/50" },
-  { id: "pink",   label: "Flamingo",   bg: "bg-pink-400",   text: "text-white",  dot: "bg-pink-400",   light: "bg-pink-50 text-pink-700 border border-pink-200 dark:bg-pink-950/50 dark:text-pink-300 dark:border-pink-800/50" },
-  { id: "orange", label: "Tangerine",  bg: "bg-orange-400", text: "text-white",  dot: "bg-orange-400", light: "bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-800/50" },
-  { id: "teal",   label: "Peacock",    bg: "bg-teal-500",   text: "text-white",  dot: "bg-teal-500",   light: "bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-800/50" },
+  { id: "blue",   label: "Blueberry",  bg: "bg-blue-500",    text: "text-white",       dot: "bg-blue-500",    lightBg: "#eff6ff", lightText: "#1d4ed8", lightBorder: "#bfdbfe", darkBg: "rgba(30,58,138,0.4)", darkText: "#93c5fd", darkBorder: "rgba(59,130,246,0.3)" },
+  { id: "green",  label: "Sage",       bg: "bg-emerald-500", text: "text-white",       dot: "bg-emerald-500", lightBg: "#ecfdf5", lightText: "#065f46", lightBorder: "#a7f3d0", darkBg: "rgba(6,78,59,0.4)",  darkText: "#6ee7b7", darkBorder: "rgba(16,185,129,0.3)" },
+  { id: "red",    label: "Tomato",     bg: "bg-red-500",     text: "text-white",       dot: "bg-red-500",     lightBg: "#fef2f2", lightText: "#991b1b", lightBorder: "#fecaca", darkBg: "rgba(127,29,29,0.4)", darkText: "#fca5a5", darkBorder: "rgba(239,68,68,0.3)" },
+  { id: "yellow", label: "Banana",     bg: "bg-amber-400",   text: "text-gray-900",    dot: "bg-amber-400",   lightBg: "#fffbeb", lightText: "#92400e", lightBorder: "#fde68a", darkBg: "rgba(120,53,15,0.4)", darkText: "#fcd34d", darkBorder: "rgba(245,158,11,0.3)" },
+  { id: "purple", label: "Grape",      bg: "bg-purple-500",  text: "text-white",       dot: "bg-purple-500",  lightBg: "#faf5ff", lightText: "#6b21a8", lightBorder: "#e9d5ff", darkBg: "rgba(88,28,135,0.4)", darkText: "#d8b4fe", darkBorder: "rgba(168,85,247,0.3)" },
+  { id: "pink",   label: "Flamingo",   bg: "bg-pink-400",    text: "text-white",       dot: "bg-pink-400",    lightBg: "#fdf2f8", lightText: "#9d174d", lightBorder: "#fbcfe8", darkBg: "rgba(131,24,67,0.4)", darkText: "#f9a8d4", darkBorder: "rgba(236,72,153,0.3)" },
+  { id: "orange", label: "Tangerine",  bg: "bg-orange-400",  text: "text-white",       dot: "bg-orange-400",  lightBg: "#fff7ed", lightText: "#9a3412", lightBorder: "#fed7aa", darkBg: "rgba(124,45,18,0.4)", darkText: "#fdba74", darkBorder: "rgba(249,115,22,0.3)" },
+  { id: "teal",   label: "Peacock",    bg: "bg-teal-500",    text: "text-white",       dot: "bg-teal-500",    lightBg: "#f0fdfa", lightText: "#134e4a", lightBorder: "#99f6e4", darkBg: "rgba(19,78,74,0.4)",  darkText: "#5eead4", darkBorder: "rgba(20,184,166,0.3)" },
 ];
 
 function getColor(colorId?: string | null) {
   return EVENT_COLORS.find(c => c.id === colorId) ?? EVENT_COLORS[0];
+}
+
+// Render an event chip with inline styles so it works in any theme
+function EventChip({ event, onClick }: { event: any; onClick?: (e: React.MouseEvent) => void }) {
+  const color = getColor(event.color);
+  const isDark = document.documentElement.classList.contains("dark");
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        backgroundColor: isDark ? color.darkBg : color.lightBg,
+        color: isDark ? color.darkText : color.lightText,
+        borderColor: isDark ? color.darkBorder : color.lightBorder,
+        borderWidth: "1px",
+        borderStyle: "solid",
+      }}
+      className="text-[10px] leading-tight truncate px-1.5 py-0.5 rounded-md font-medium cursor-pointer hover:opacity-80 transition-opacity"
+    >
+      {!event.allDay && <span className="opacity-60 mr-1">{formatTime(new Date(event.startAt)).replace(":00","")}</span>}
+      {event.title}
+    </div>
+  );
 }
 
 function isSameDay(a: Date, b: Date) {
@@ -43,7 +273,6 @@ function formatDatetimeLocal(d: Date) {
 }
 
 type ViewMode = "month" | "week" | "day";
-
 type RecurrenceType = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly';
 
 type EventForm = {
@@ -65,6 +294,79 @@ const blankForm = (day: Date): EventForm => {
   end.setHours(10, 0, 0, 0);
   return { title: "", description: "", startAt: formatDatetimeLocal(start), endAt: formatDatetimeLocal(end), location: "", allDay: false, color: "blue", recurrence: "none", reminderMinutes: "30,15,5" };
 };
+
+// ─── Theme Palette Picker ─────────────────────────────────────────────────────
+function ThemePicker({ themeId, onSelect }: { themeId: CalendarThemeId; onSelect: (id: CalendarThemeId) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const current = CALENDAR_THEMES.find(t => t.id === themeId) ?? CALENDAR_THEMES[0];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Calendar theme"
+        className="w-9 h-9 rounded-full hover:bg-[var(--cal-cell-today)] flex items-center justify-center transition-colors text-[var(--cal-text-muted)] hover:text-[var(--cal-text)]"
+      >
+        <Palette size={16}/>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: -6 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 top-11 z-50 rounded-2xl shadow-2xl border p-3 min-w-[200px]"
+            style={{
+              background: "var(--cal-header-bg)",
+              borderColor: "var(--cal-border)",
+              backdropFilter: "blur(16px)",
+            }}
+          >
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-2.5 px-1" style={{ color: "var(--cal-text-muted)" }}>
+              Calendar Theme
+            </p>
+            <div className="grid grid-cols-4 gap-1.5">
+              {CALENDAR_THEMES.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => { onSelect(t.id); setOpen(false); }}
+                  title={t.label}
+                  className={cn(
+                    "flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all",
+                    themeId === t.id
+                      ? "ring-2 ring-offset-1 ring-[var(--cal-accent)] bg-[var(--cal-cell-today)]"
+                      : "hover:bg-[var(--cal-cell-today)]"
+                  )}
+                >
+                  <span className={cn("w-6 h-6 rounded-full shadow-sm", t.swatch)}/>
+                  <span className="text-[9px] font-medium leading-tight text-center" style={{ color: "var(--cal-text-muted)" }}>
+                    {t.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 pt-2 border-t" style={{ borderColor: "var(--cal-border)" }}>
+              <p className="text-[10px] text-center" style={{ color: "var(--cal-text-muted)" }}>
+                Current: <span className="font-semibold" style={{ color: "var(--cal-text)" }}>{current.label}</span>
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ─── Mini Calendar (sidebar) ──────────────────────────────────────────────────
 function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, events }: {
@@ -88,14 +390,24 @@ function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, event
   return (
     <div className="p-3 select-none">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-foreground">{MONTHS_SHORT[viewDate.getMonth()]} {viewDate.getFullYear()}</span>
+        <span className="text-sm font-semibold" style={{ color: "var(--cal-text)" }}>{MONTHS_SHORT[viewDate.getMonth()]} {viewDate.getFullYear()}</span>
         <div className="flex gap-1">
-          <button onClick={() => onChangeMonth(new Date(viewDate.getFullYear(), viewDate.getMonth()-1,1))} className="w-6 h-6 flex items-center justify-center rounded hover:bg-accent transition-colors"><ChevronLeft size={12}/></button>
-          <button onClick={() => onChangeMonth(new Date(viewDate.getFullYear(), viewDate.getMonth()+1,1))} className="w-6 h-6 flex items-center justify-center rounded hover:bg-accent transition-colors"><ChevronRight size={12}/></button>
+          <button onClick={() => onChangeMonth(new Date(viewDate.getFullYear(), viewDate.getMonth()-1,1))}
+            className="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--cal-cell-today)]"
+            style={{ color: "var(--cal-text-muted)" }}>
+            <ChevronLeft size={12}/>
+          </button>
+          <button onClick={() => onChangeMonth(new Date(viewDate.getFullYear(), viewDate.getMonth()+1,1))}
+            className="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--cal-cell-today)]"
+            style={{ color: "var(--cal-text-muted)" }}>
+            <ChevronRight size={12}/>
+          </button>
         </div>
       </div>
       <div className="grid grid-cols-7 mb-1">
-        {WEEKDAYS_SHORT.map(d => <div key={d} className="text-center text-[9px] font-semibold text-muted-foreground/70 py-0.5">{d[0]}</div>)}
+        {WEEKDAYS_SHORT.map(d => (
+          <div key={d} className="text-center text-[9px] font-semibold py-0.5" style={{ color: "var(--cal-text-muted)" }}>{d[0]}</div>
+        ))}
       </div>
       <div className="grid grid-cols-7 gap-px">
         {days.map((day, i) => {
@@ -105,14 +417,15 @@ function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, event
           const hasDot = hasEvent(day);
           return (
             <button key={i} onClick={() => onSelectDay(day)}
-              className={cn("relative w-7 h-7 mx-auto flex items-center justify-center rounded-full text-[11px] transition-colors",
-                !isCurrentMonth && "text-muted-foreground/30",
-                isToday && !isSelected && "text-primary font-bold",
-                isSelected && "bg-primary text-primary-foreground font-bold",
-                !isSelected && isCurrentMonth && "hover:bg-accent",
-              )}>
+              style={{
+                backgroundColor: isSelected ? "var(--cal-accent)" : isToday ? "var(--cal-cell-today)" : "transparent",
+                color: isSelected ? "var(--cal-accent-fg)" : isToday ? "var(--cal-accent)" : isCurrentMonth ? "var(--cal-text)" : "var(--cal-text-muted)",
+              }}
+              className="relative w-7 h-7 mx-auto flex items-center justify-center rounded-full text-[11px] font-medium transition-colors hover:opacity-80">
               {day.getDate()}
-              {hasDot && !isSelected && <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary/60"/>}
+              {hasDot && !isSelected && (
+                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full" style={{ backgroundColor: "var(--cal-accent)" }}/>
+              )}
             </button>
           );
         })}
@@ -138,15 +451,12 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
   const [editAllDay, setEditAllDay] = useState(!!event.allDay);
 
   const updateMutation = trpc.calendar.update.useMutation({
-    onSuccess: () => {
-      toast.success("Event updated");
-      onUpdated();
-      onClose();
-    },
+    onSuccess: () => { toast.success("Event updated"); onUpdated(); onClose(); },
     onError: () => toast.error("Couldn't update event"),
   });
 
   const color = getColor(isEditing ? editColor : event.color);
+  const isDark = document.documentElement.classList.contains("dark");
 
   const handleSave = () => {
     if (!editTitle.trim()) { toast.error("Title is required"); return; }
@@ -166,9 +476,13 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
-      <div className="relative bg-card border border-border/60 rounded-2xl shadow-2xl w-full max-w-sm p-0 overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div
+        className="relative rounded-2xl shadow-2xl w-full max-w-sm p-0 overflow-hidden"
+        style={{ background: "var(--cal-cell-bg)", border: "1px solid var(--cal-border)" }}
+        onClick={e => e.stopPropagation()}
+      >
         {/* Color accent bar */}
-        <div className={cn("h-1.5 w-full transition-colors", color.bg)} />
+        <div className={cn("h-1.5 w-full", color.bg)} />
 
         <div className="p-5">
           {/* Header row */}
@@ -178,37 +492,44 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                 value={editTitle}
                 onChange={e => setEditTitle(e.target.value)}
                 autoFocus
-                className="flex-1 text-lg font-bold bg-transparent border-0 border-b-2 border-primary outline-none pb-1 placeholder:text-muted-foreground/40"
+                className="flex-1 text-lg font-bold bg-transparent border-0 border-b-2 outline-none pb-1 placeholder:opacity-40"
+                style={{ borderColor: "var(--cal-accent)", color: "var(--cal-text)" }}
                 placeholder="Event title"
               />
             ) : (
-              <h3 className="text-lg font-bold leading-tight flex-1">{event.title}</h3>
+              <h3 className="text-lg font-bold leading-tight flex-1" style={{ color: "var(--cal-text)" }}>{event.title}</h3>
             )}
             <div className="flex gap-1 shrink-0">
-              {/* Edit / Save toggle */}
               {isEditing ? (
                 <>
                   <button onClick={handleSave} disabled={updateMutation.isPending}
-                    className="w-8 h-8 rounded-full hover:bg-emerald-100 hover:text-emerald-600 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors text-muted-foreground disabled:opacity-50">
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 hover:opacity-80"
+                    style={{ color: "#10b981", backgroundColor: isDark ? "rgba(16,185,129,0.15)" : "#ecfdf5" }}>
                     <Check size={14}/>
                   </button>
                   <button onClick={() => setIsEditing(false)}
-                    className="w-8 h-8 rounded-full hover:bg-accent flex items-center justify-center transition-colors text-muted-foreground">
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+                    style={{ color: "var(--cal-text-muted)" }}>
                     <X size={14}/>
                   </button>
                 </>
               ) : (
                 <>
                   <button onClick={() => setIsEditing(true)}
-                    className="w-8 h-8 rounded-full hover:bg-accent flex items-center justify-center transition-colors text-muted-foreground"
-                    title="Edit event">
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+                    style={{ color: "var(--cal-text-muted)" }} title="Edit event">
                     <Pencil size={13}/>
                   </button>
                   <button onClick={() => { onDelete(event.id); onClose(); }}
-                    className="w-8 h-8 rounded-full hover:bg-destructive/10 hover:text-destructive flex items-center justify-center transition-colors text-muted-foreground">
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                    style={{ color: "var(--cal-text-muted)" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#ef4444"; (e.currentTarget as HTMLElement).style.backgroundColor = isDark ? "rgba(239,68,68,0.15)" : "#fef2f2"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--cal-text-muted)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}>
                     <Trash2 size={14}/>
                   </button>
-                  <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-accent flex items-center justify-center transition-colors text-muted-foreground">
+                  <button onClick={onClose}
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+                    style={{ color: "var(--cal-text-muted)" }}>
                     <X size={14}/>
                   </button>
                 </>
@@ -220,26 +541,26 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
           {!isEditing && (
             <div className="space-y-2.5">
               {!event.allDay && (
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <Clock size={14} className="shrink-0 text-primary/70"/>
+                <div className="flex items-center gap-3 text-sm" style={{ color: "var(--cal-text-muted)" }}>
+                  <Clock size={14} className="shrink-0" style={{ color: "var(--cal-accent)" }}/>
                   <span>{new Date(event.startAt).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} · {formatTime(new Date(event.startAt))} – {formatTime(new Date(event.endAt))}</span>
                 </div>
               )}
               {event.allDay === 1 && (
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <CalendarIcon size={14} className="shrink-0 text-primary/70"/>
+                <div className="flex items-center gap-3 text-sm" style={{ color: "var(--cal-text-muted)" }}>
+                  <CalendarIcon size={14} className="shrink-0" style={{ color: "var(--cal-accent)" }}/>
                   <span>{new Date(event.startAt).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} · All day</span>
                 </div>
               )}
               {event.location && (
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <MapPin size={14} className="shrink-0 text-primary/70"/>
+                <div className="flex items-center gap-3 text-sm" style={{ color: "var(--cal-text-muted)" }}>
+                  <MapPin size={14} className="shrink-0" style={{ color: "var(--cal-accent)" }}/>
                   <span>{event.location}</span>
                 </div>
               )}
               {event.description && (
-                <div className="flex items-start gap-3 text-sm text-muted-foreground">
-                  <AlignLeft size={14} className="shrink-0 mt-0.5 text-primary/70"/>
+                <div className="flex items-start gap-3 text-sm" style={{ color: "var(--cal-text-muted)" }}>
+                  <AlignLeft size={14} className="shrink-0 mt-0.5" style={{ color: "var(--cal-accent)" }}/>
                   <span className="leading-relaxed">{event.description}</span>
                 </div>
               )}
@@ -252,57 +573,66 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
               {/* All day toggle */}
               <div className="flex items-center gap-3">
                 <button type="button" onClick={() => setEditAllDay(v => !v)}
-                  className={cn("relative w-9 h-5 rounded-full transition-colors shrink-0", editAllDay ? "bg-primary" : "bg-muted")}>
+                  className="relative w-9 h-5 rounded-full transition-colors shrink-0"
+                  style={{ backgroundColor: editAllDay ? "var(--cal-accent)" : "var(--cal-cell-today)" }}>
                   <span className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all", editAllDay ? "left-4" : "left-0.5")}/>
                 </button>
-                <span className="text-sm text-muted-foreground">All day</span>
+                <span className="text-sm" style={{ color: "var(--cal-text-muted)" }}>All day</span>
               </div>
 
               {/* Date/time */}
               {!editAllDay ? (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] font-semibold text-muted-foreground mb-1 block uppercase tracking-wide">Start</label>
+                    <label className="text-[10px] font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Start</label>
                     <input type="datetime-local" value={editStartAt} onChange={e => setEditStartAt(e.target.value)}
-                      className="w-full bg-muted/40 border border-border/60 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"/>
+                      className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2"
+                      style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold text-muted-foreground mb-1 block uppercase tracking-wide">End</label>
+                    <label className="text-[10px] font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>End</label>
                     <input type="datetime-local" value={editEndAt} onChange={e => setEditEndAt(e.target.value)}
-                      className="w-full bg-muted/40 border border-border/60 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"/>
+                      className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2"
+                      style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
                   </div>
                 </div>
               ) : (
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground mb-1 block uppercase tracking-wide">Date</label>
+                  <label className="text-[10px] font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Date</label>
                   <input type="date" value={editStartAt.split("T")[0]} onChange={e => { setEditStartAt(e.target.value+"T09:00"); setEditEndAt(e.target.value+"T10:00"); }}
-                    className="w-full bg-muted/40 border border-border/60 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"/>
+                    className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                    style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
                 </div>
               )}
 
               {/* Location */}
-              <div className="flex items-center gap-2 bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-                <MapPin size={13} className="text-muted-foreground shrink-0"/>
+              <div className="flex items-center gap-2 rounded-lg px-3 py-2"
+                style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
+                <MapPin size={13} style={{ color: "var(--cal-text-muted)" }} className="shrink-0"/>
                 <input value={editLocation} onChange={e => setEditLocation(e.target.value)}
-                  placeholder="Add location" className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/40"/>
+                  placeholder="Add location"
+                  className="flex-1 bg-transparent text-sm outline-none placeholder:opacity-40"
+                  style={{ color: "var(--cal-text)" }}/>
               </div>
 
               {/* Description */}
-              <div className="flex items-start gap-2 bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-                <AlignLeft size={13} className="text-muted-foreground shrink-0 mt-0.5"/>
+              <div className="flex items-start gap-2 rounded-lg px-3 py-2"
+                style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
+                <AlignLeft size={13} style={{ color: "var(--cal-text-muted)" }} className="shrink-0 mt-0.5"/>
                 <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)}
                   placeholder="Add description" rows={2}
-                  className="flex-1 bg-transparent text-sm outline-none resize-none placeholder:text-muted-foreground/40"/>
+                  className="flex-1 bg-transparent text-sm outline-none resize-none placeholder:opacity-40"
+                  style={{ color: "var(--cal-text)" }}/>
               </div>
 
               {/* Color picker */}
               <div>
-                <label className="text-[10px] font-semibold text-muted-foreground mb-2 block uppercase tracking-wide">Color</label>
+                <label className="text-[10px] font-semibold mb-2 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Color</label>
                 <div className="flex gap-2 flex-wrap">
                   {EVENT_COLORS.map(c => (
                     <button key={c.id} type="button" onClick={() => setEditColor(c.id)}
                       className={cn("w-6 h-6 rounded-full transition-all", c.bg,
-                        editColor === c.id ? "ring-2 ring-offset-2 ring-offset-card ring-foreground scale-110" : "hover:scale-110 opacity-70 hover:opacity-100")}>
+                        editColor === c.id ? "ring-2 ring-offset-2 ring-offset-[var(--cal-cell-bg)] ring-white scale-110" : "hover:scale-110 opacity-70 hover:opacity-100")}>
                     </button>
                   ))}
                 </div>
@@ -311,11 +641,13 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
               {/* Save / Cancel */}
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setIsEditing(false)}
-                  className="flex-1 py-2 rounded-xl border border-border/60 text-sm font-semibold hover:bg-accent transition-colors">
+                  className="flex-1 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-80"
+                  style={{ border: "1px solid var(--cal-border)", color: "var(--cal-text)", background: "transparent" }}>
                   Cancel
                 </button>
                 <button type="button" onClick={handleSave} disabled={updateMutation.isPending}
-                  className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+                  className="flex-1 py-2 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-50 hover:opacity-90"
+                  style={{ background: "var(--cal-accent)", color: "var(--cal-accent-fg)" }}>
                   {updateMutation.isPending ? "Saving…" : "Save changes"}
                 </button>
               </div>
@@ -334,79 +666,94 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
 }) {
   const titleRef = useRef<HTMLInputElement>(null);
   useEffect(() => { setTimeout(() => titleRef.current?.focus(), 50); }, []);
+  const color = getColor(form.color);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.97 }}
-        className="relative bg-card border border-border/60 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+        className="relative rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+        style={{ background: "var(--cal-cell-bg)", border: "1px solid var(--cal-border)" }}
         onClick={e => e.stopPropagation()}>
         {/* Color bar */}
-        <div className={cn("h-1.5 w-full transition-colors", getColor(form.color).bg)} />
+        <div className={cn("h-1.5 w-full transition-colors", color.bg)} />
         <div className="p-6">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-bold">New event</h2>
-            <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-accent flex items-center justify-center transition-colors text-muted-foreground"><X size={15}/></button>
+            <h2 className="text-lg font-bold" style={{ color: "var(--cal-text)" }}>New event</h2>
+            <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+              style={{ color: "var(--cal-text-muted)" }}><X size={15}/></button>
           </div>
 
           <form onSubmit={onSubmit} className="space-y-4">
             {/* Title */}
             <input ref={titleRef} value={form.title} onChange={e => setForm({...form, title: e.target.value})}
               placeholder="Add title" required
-              className="w-full text-xl font-semibold bg-transparent border-0 border-b-2 border-border focus:border-primary outline-none pb-2 placeholder:text-muted-foreground/40 transition-colors"/>
+              className="w-full text-xl font-semibold bg-transparent border-0 border-b-2 outline-none pb-2 placeholder:opacity-40 transition-colors"
+              style={{ borderColor: "var(--cal-border)", color: "var(--cal-text)" }}
+              onFocus={e => (e.target as HTMLElement).style.borderColor = "var(--cal-accent)"}
+              onBlur={e => (e.target as HTMLElement).style.borderColor = "var(--cal-border)"}/>
 
             {/* All day toggle */}
             <div className="flex items-center gap-3">
               <button type="button" onClick={() => setForm({...form, allDay: !form.allDay})}
-                className={cn("relative w-10 h-5 rounded-full transition-colors", form.allDay ? "bg-primary" : "bg-muted")}>
+                className="relative w-10 h-5 rounded-full transition-colors"
+                style={{ backgroundColor: form.allDay ? "var(--cal-accent)" : "var(--cal-cell-today)" }}>
                 <span className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all", form.allDay ? "left-5" : "left-0.5")}/>
               </button>
-              <span className="text-sm text-muted-foreground">All day</span>
+              <span className="text-sm" style={{ color: "var(--cal-text-muted)" }}>All day</span>
             </div>
 
             {/* Date/time */}
             {!form.allDay ? (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Start</label>
+                  <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>Start</label>
                   <input type="datetime-local" value={form.startAt} onChange={e => setForm({...form, startAt: e.target.value})}
-                    className="w-full bg-muted/40 border border-border/60 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"/>
+                    className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                    style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">End</label>
+                  <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>End</label>
                   <input type="datetime-local" value={form.endAt} onChange={e => setForm({...form, endAt: e.target.value})}
-                    className="w-full bg-muted/40 border border-border/60 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"/>
+                    className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                    style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
                 </div>
               </div>
             ) : (
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Date</label>
+                <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>Date</label>
                 <input type="date" value={form.startAt.split("T")[0]} onChange={e => setForm({...form, startAt: e.target.value+"T09:00", endAt: e.target.value+"T10:00"})}
-                  className="w-full bg-muted/40 border border-border/60 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"/>
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
               </div>
             )}
 
             {/* Location */}
-            <div className="flex items-center gap-2 bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-              <MapPin size={14} className="text-muted-foreground shrink-0"/>
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2"
+              style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
+              <MapPin size={14} style={{ color: "var(--cal-text-muted)" }} className="shrink-0"/>
               <input value={form.location} onChange={e => setForm({...form, location: e.target.value})}
-                placeholder="Add location" className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/40"/>
+                placeholder="Add location" className="flex-1 bg-transparent text-sm outline-none placeholder:opacity-40"
+                style={{ color: "var(--cal-text)" }}/>
             </div>
 
             {/* Description */}
-            <div className="flex items-start gap-2 bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-              <AlignLeft size={14} className="text-muted-foreground shrink-0 mt-0.5"/>
+            <div className="flex items-start gap-2 rounded-lg px-3 py-2"
+              style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
+              <AlignLeft size={14} style={{ color: "var(--cal-text-muted)" }} className="shrink-0 mt-0.5"/>
               <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})}
                 placeholder="Add description" rows={2}
-                className="flex-1 bg-transparent text-sm outline-none resize-none placeholder:text-muted-foreground/40"/>
+                className="flex-1 bg-transparent text-sm outline-none resize-none placeholder:opacity-40"
+                style={{ color: "var(--cal-text)" }}/>
             </div>
 
             {/* Recurrence */}
-            <div className="flex items-center gap-2 bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-              <RefreshCw size={14} className="text-muted-foreground shrink-0"/>
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2"
+              style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
+              <RefreshCw size={14} style={{ color: "var(--cal-text-muted)" }} className="shrink-0"/>
               <select value={form.recurrence} onChange={e => setForm({...form, recurrence: e.target.value as RecurrenceType})}
-                className="flex-1 bg-transparent text-sm outline-none text-foreground">
+                className="flex-1 bg-transparent text-sm outline-none" style={{ color: "var(--cal-text)" }}>
                 <option value="none">Does not repeat</option>
                 <option value="daily">Every day</option>
                 <option value="weekdays">Every weekday (Mon–Fri)</option>
@@ -416,11 +763,12 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
               </select>
             </div>
 
-            {/* Reminder time */}
-            <div className="flex items-center gap-2 bg-muted/40 border border-border/60 rounded-lg px-3 py-2">
-              <Bell size={14} className="text-muted-foreground shrink-0"/>
+            {/* Reminder */}
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2"
+              style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
+              <Bell size={14} style={{ color: "var(--cal-text-muted)" }} className="shrink-0"/>
               <select value={form.reminderMinutes} onChange={e => setForm({...form, reminderMinutes: e.target.value})}
-                className="flex-1 bg-transparent text-sm outline-none text-foreground">
+                className="flex-1 bg-transparent text-sm outline-none" style={{ color: "var(--cal-text)" }}>
                 <option value="">No reminder</option>
                 <option value="5">5 minutes before</option>
                 <option value="10">10 minutes before</option>
@@ -437,11 +785,12 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
 
             {/* Color picker */}
             <div>
-              <label className="text-xs text-muted-foreground mb-2 block">Color</label>
+              <label className="text-xs mb-2 block" style={{ color: "var(--cal-text-muted)" }}>Color</label>
               <div className="flex gap-2 flex-wrap">
                 {EVENT_COLORS.map(c => (
                   <button key={c.id} type="button" onClick={() => setForm({...form, color: c.id})}
-                    className={cn("w-6 h-6 rounded-full transition-all", c.bg, form.color === c.id ? "ring-2 ring-offset-2 ring-offset-card ring-foreground scale-110" : "hover:scale-110 opacity-70 hover:opacity-100")}>
+                    className={cn("w-6 h-6 rounded-full transition-all", c.bg,
+                      form.color === c.id ? "ring-2 ring-offset-2 ring-offset-[var(--cal-cell-bg)] ring-white scale-110" : "hover:scale-110 opacity-70 hover:opacity-100")}>
                   </button>
                 ))}
               </div>
@@ -450,11 +799,13 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
             {/* Actions */}
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl border border-border/60 text-sm font-semibold hover:bg-accent transition-colors">
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors hover:opacity-80"
+                style={{ border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}>
                 Cancel
               </button>
               <button type="submit" disabled={isPending}
-                className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-50 hover:opacity-90"
+                style={{ background: "var(--cal-accent)", color: "var(--cal-accent-fg)" }}>
                 {isPending ? "Saving…" : "Save"}
               </button>
             </div>
@@ -485,9 +836,10 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick }: 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 border-b border-border/40 bg-muted/20">
+      <div className="grid grid-cols-7" style={{ borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
         {WEEKDAYS_SHORT.map(d => (
-          <div key={d} className="py-2 text-center text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
+          <div key={d} className="py-2 text-center text-xs font-semibold uppercase tracking-wider"
+            style={{ color: "var(--cal-text-muted)" }}>
             {d}
           </div>
         ))}
@@ -499,42 +851,51 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick }: 
           const isToday = isSameDay(day, today);
           const isSelected = isSameDay(day, selectedDay);
           const dayEvents = eventsOnDay(day);
-          const hasEvents = dayEvents.length > 0;
+          const hasEvents = dayEvents.length > 0 && isCurrentMonth;
           return (
             <div key={i} onClick={() => onDayClick(day)}
-              className={cn(
-                "border-b border-r border-border/30 p-1.5 cursor-pointer transition-colors overflow-hidden group",
-                !isCurrentMonth && "bg-muted/10",
-                isCurrentMonth && !isSelected && "hover:bg-accent/20",
-                isSelected && "bg-primary/5 ring-1 ring-inset ring-primary/20",
-              )}>
+              className="p-1.5 cursor-pointer transition-colors overflow-hidden"
+              style={{
+                borderBottom: "1px solid var(--cal-border)",
+                borderRight: "1px solid var(--cal-border)",
+                background: isSelected
+                  ? "var(--cal-cell-selected)"
+                  : isToday
+                  ? "var(--cal-cell-today)"
+                  : isCurrentMonth
+                  ? "var(--cal-cell-bg)"
+                  : "var(--cal-cell-other)",
+              }}
+              onMouseEnter={e => { if (!isSelected && !isToday) (e.currentTarget as HTMLElement).style.filter = "brightness(0.96)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.filter = ""; }}>
               <div className="flex justify-center mb-1">
-                <span className={cn(
-                  "flex items-center justify-center rounded-full font-medium transition-all",
-                  /* Larger circle when the day has events */
-                  hasEvents && isCurrentMonth ? "w-8 h-8 text-sm" : "w-7 h-7 text-sm",
-                  isToday && "bg-primary text-primary-foreground font-bold shadow-sm",
-                  isSelected && !isToday && "bg-primary/15 text-primary font-bold",
-                  !isCurrentMonth && "text-muted-foreground/40",
-                  !isToday && !isSelected && isCurrentMonth && hasEvents && "text-foreground font-semibold",
-                  !isToday && !isSelected && isCurrentMonth && !hasEvents && "text-muted-foreground",
-                )}>
+                <span
+                  className="flex items-center justify-center rounded-full font-medium transition-all"
+                  style={{
+                    width: hasEvents ? "2rem" : "1.75rem",
+                    height: hasEvents ? "2rem" : "1.75rem",
+                    fontSize: "0.875rem",
+                    fontWeight: isToday || isSelected || hasEvents ? 700 : 400,
+                    backgroundColor: isToday ? "var(--cal-accent)" : "transparent",
+                    color: isToday
+                      ? "var(--cal-accent-fg)"
+                      : isSelected
+                      ? "var(--cal-accent)"
+                      : isCurrentMonth
+                      ? "var(--cal-text)"
+                      : "var(--cal-text-muted)",
+                  }}>
                   {day.getDate()}
                 </span>
               </div>
               <div className="space-y-0.5">
-                {dayEvents.slice(0, 3).map(e => {
-                  const color = getColor(e.color);
-                  return (
-                    <div key={e.id} onClick={ev => { ev.stopPropagation(); onEventClick(e); }}
-                      className={cn("text-[10px] leading-tight truncate px-1.5 py-0.5 rounded-md font-medium cursor-pointer hover:opacity-80 transition-opacity", color.light)}>
-                      {!e.allDay && <span className="opacity-60 mr-1">{formatTime(new Date(e.startAt)).replace(":00","")}</span>}
-                      {e.title}
-                    </div>
-                  );
-                })}
+                {dayEvents.slice(0, 3).map(e => (
+                  <EventChip key={e.id} event={e} onClick={ev => { ev.stopPropagation(); onEventClick(e); }}/>
+                ))}
                 {dayEvents.length > 3 && (
-                  <div className="text-[10px] text-muted-foreground/70 pl-1 font-medium">+{dayEvents.length - 3} more</div>
+                  <div className="text-[10px] pl-1 font-medium" style={{ color: "var(--cal-text-muted)" }}>
+                    +{dayEvents.length - 3} more
+                  </div>
                 )}
               </div>
             </div>
@@ -562,54 +923,52 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
     const end = new Date(event.endAt);
     const startMins = start.getHours() * 60 + start.getMinutes();
     const endMins = end.getHours() * 60 + end.getMinutes();
-    const top = (startMins / 60) * 56;
-    const height = Math.max(((endMins - startMins) / 60) * 56, 20);
-    return { top: `${top}px`, height: `${height}px` };
+    return { top: `${(startMins / 60) * 56}px`, height: `${Math.max(((endMins - startMins) / 60) * 56, 20)}px` };
   };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Day headers */}
-      <div className="grid border-b border-border/40 bg-muted/20" style={{gridTemplateColumns: "56px repeat(7, 1fr)"}}>
+      <div className="grid" style={{ gridTemplateColumns: "56px repeat(7, 1fr)", borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
         <div className="py-2"/>
         {weekDays.map((d, i) => {
           const isToday = isSameDay(d, today);
           return (
             <div key={i} className="py-2 text-center">
-              <div className="text-xs font-semibold text-muted-foreground/70 uppercase">{WEEKDAYS_SHORT[d.getDay()]}</div>
-              <div className={cn("w-8 h-8 mx-auto mt-0.5 flex items-center justify-center rounded-full text-sm font-bold",
-                isToday ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground")}>
+              <div className="text-xs font-semibold uppercase" style={{ color: "var(--cal-text-muted)" }}>{WEEKDAYS_SHORT[d.getDay()]}</div>
+              <div className="w-8 h-8 mx-auto mt-0.5 flex items-center justify-center rounded-full text-sm font-bold"
+                style={{
+                  backgroundColor: isToday ? "var(--cal-accent)" : "transparent",
+                  color: isToday ? "var(--cal-accent-fg)" : "var(--cal-text)",
+                }}>
                 {d.getDate()}
               </div>
             </div>
           );
         })}
       </div>
-      {/* Time grid */}
       <div className="flex-1 overflow-y-auto">
-        <div className="relative grid" style={{gridTemplateColumns: "56px repeat(7, 1fr)"}}>
-          {/* Hour labels */}
+        <div className="relative grid" style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}>
           <div className="col-start-1">
             {hours.map(h => (
               <div key={h} className="h-14 flex items-start justify-end pr-2 pt-0.5">
-                {h > 0 && <span className="text-[10px] text-muted-foreground/60">{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
+                {h > 0 && <span className="text-[10px]" style={{ color: "var(--cal-text-muted)" }}>{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
               </div>
             ))}
           </div>
-          {/* Day columns */}
           {weekDays.map((day, di) => (
-            <div key={di} className="relative border-l border-border/30">
+            <div key={di} className="relative" style={{ borderLeft: "1px solid var(--cal-border)" }}>
               {hours.map(h => (
                 <div key={h} onClick={() => { const d = new Date(day); d.setHours(h,0,0,0); onSlotClick(d); }}
-                  className="h-14 border-b border-border/20 hover:bg-accent/15 cursor-pointer transition-colors"/>
+                  className="h-14 cursor-pointer transition-colors"
+                  style={{ borderBottom: "1px solid var(--cal-border)", opacity: 0.5 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--cal-cell-today)"; (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.opacity = "0.5"; }}/>
               ))}
-              {/* Events */}
               {eventsOnDay(day).map(e => {
                 const color = getColor(e.color);
-                const style = getEventStyle(e);
                 return (
                   <div key={e.id} onClick={ev => { ev.stopPropagation(); onEventClick(e); }}
-                    style={style}
+                    style={getEventStyle(e)}
                     className={cn("absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 text-[11px] font-semibold cursor-pointer hover:opacity-90 transition-opacity overflow-hidden z-10 shadow-sm", color.bg, color.text)}>
                     {e.title}
                     <div className="text-[9px] opacity-80">{formatTime(new Date(e.startAt))}</div>
@@ -638,45 +997,46 @@ function DayView({ viewDate, events, onEventClick, onSlotClick }: {
     const end = new Date(event.endAt);
     const startMins = start.getHours() * 60 + start.getMinutes();
     const endMins = end.getHours() * 60 + end.getMinutes();
-    const top = (startMins / 60) * 64;
-    const height = Math.max(((endMins - startMins) / 60) * 64, 24);
-    return { top: `${top}px`, height: `${height}px` };
+    return { top: `${(startMins / 60) * 64}px`, height: `${Math.max(((endMins - startMins) / 60) * 64, 24)}px` };
   };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Day header */}
-      <div className="border-b border-border/40 py-3 px-4 flex items-center gap-3 bg-muted/20">
-        <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-sm",
-          isToday ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>
+      <div className="py-3 px-4 flex items-center gap-3" style={{ borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
+        <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-sm"
+          style={{
+            backgroundColor: isToday ? "var(--cal-accent)" : "var(--cal-cell-today)",
+            color: isToday ? "var(--cal-accent-fg)" : "var(--cal-text)",
+          }}>
           {viewDate.getDate()}
         </div>
         <div>
-          <div className="font-semibold">{WEEKDAYS_FULL[viewDate.getDay()]}</div>
-          <div className="text-xs text-muted-foreground/70">{MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}</div>
+          <div className="font-semibold" style={{ color: "var(--cal-text)" }}>{WEEKDAYS_FULL[viewDate.getDay()]}</div>
+          <div className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}</div>
         </div>
       </div>
-      {/* Time grid */}
       <div className="flex-1 overflow-y-auto">
-        <div className="relative" style={{display:"grid", gridTemplateColumns:"64px 1fr"}}>
+        <div className="relative" style={{ display: "grid", gridTemplateColumns: "64px 1fr" }}>
           <div>
             {hours.map(h => (
               <div key={h} className="h-16 flex items-start justify-end pr-3 pt-0.5">
-                {h > 0 && <span className="text-[11px] text-muted-foreground/60">{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
+                {h > 0 && <span className="text-[11px]" style={{ color: "var(--cal-text-muted)" }}>{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
               </div>
             ))}
           </div>
-          <div className="relative border-l border-border/30">
+          <div className="relative" style={{ borderLeft: "1px solid var(--cal-border)" }}>
             {hours.map(h => (
               <div key={h} onClick={() => { const d = new Date(viewDate); d.setHours(h,0,0,0); onSlotClick(d); }}
-                className="h-16 border-b border-border/20 hover:bg-accent/15 cursor-pointer transition-colors"/>
+                className="h-16 cursor-pointer transition-colors"
+                style={{ borderBottom: "1px solid var(--cal-border)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--cal-cell-today)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}/>
             ))}
             {dayEvents.map(e => {
               const color = getColor(e.color);
-              const style = getEventStyle(e);
               return (
                 <div key={e.id} onClick={ev => { ev.stopPropagation(); onEventClick(e); }}
-                  style={style}
+                  style={getEventStyle(e)}
                   className={cn("absolute left-1 right-1 rounded-xl px-3 py-1.5 cursor-pointer hover:opacity-90 transition-opacity overflow-hidden z-10 shadow-sm", color.bg, color.text)}>
                   <div className="font-semibold text-sm leading-tight">{e.title}</div>
                   <div className="text-[11px] opacity-80 mt-0.5">{formatTime(new Date(e.startAt))} – {formatTime(new Date(e.endAt))}</div>
@@ -703,8 +1063,8 @@ export default function Calendar() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const { theme, themeId, applyTheme } = useCalendarTheme();
 
-  // Query range based on view
   const queryStart = useMemo(() => {
     const d = new Date(viewDate);
     if (viewMode === "month") { d.setDate(1); d.setDate(d.getDate() - 7); }
@@ -771,10 +1131,7 @@ export default function Calendar() {
     if (viewMode === "month") setViewDate(new Date(day.getFullYear(), day.getMonth(), day.getDate()));
   };
 
-  const handleSlotClick = (d: Date) => {
-    setForm(blankForm(d));
-    setShowForm(true);
-  };
+  const handleSlotClick = (d: Date) => { setForm(blankForm(d)); setShowForm(true); };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -783,9 +1140,8 @@ export default function Calendar() {
     const baseStart = new Date(form.startAt);
     const baseEnd = new Date(form.endAt);
     const durationMs = baseEnd.getTime() - baseStart.getTime();
-
-    // Generate recurring dates (up to 52 occurrences / 1 year)
     const dates: Date[] = [baseStart];
+
     if (form.recurrence !== 'none') {
       const MAX = 52;
       for (let i = 1; i < MAX; i++) {
@@ -797,7 +1153,7 @@ export default function Calendar() {
           next.setDate(baseStart.getDate() + offset);
         }
         else if (form.recurrence === 'weekly') next.setDate(next.getDate() + i * 7);
-        else if (form.recurrence === 'monthly') { next.setMonth(next.getMonth() + i); }
+        else if (form.recurrence === 'monthly') next.setMonth(next.getMonth() + i);
         else if (form.recurrence === 'yearly') { next.setFullYear(next.getFullYear() + i); break; }
         dates.push(next);
       }
@@ -835,36 +1191,47 @@ export default function Calendar() {
     return `${WEEKDAYS_FULL[viewDate.getDay()]}, ${MONTHS[viewDate.getMonth()]} ${viewDate.getDate()}`;
   }, [viewDate, viewMode]);
 
+  // Inject theme CSS variables on the calendar root
+  const themeStyle = theme.vars as React.CSSProperties;
+
   return (
-    <div className="h-screen bg-background text-foreground flex flex-col font-['Outfit'] overflow-hidden">
+    <div
+      className="h-screen text-foreground flex flex-col font-['Outfit'] overflow-hidden"
+      style={{ ...themeStyle, background: "var(--cal-bg)", color: "var(--cal-text)" }}
+    >
       {/* ── Top Header ── */}
-      <header className="px-4 py-2 flex items-center gap-2 border-b border-border/40 bg-card/90 backdrop-blur-md z-30 shrink-0">
+      <header className="px-4 py-2 flex items-center gap-2 z-30 shrink-0 backdrop-blur-md"
+        style={{ borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
         {/* Back */}
         <button onClick={() => navigate("/")}
-          className="w-9 h-9 rounded-full hover:bg-accent flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground shrink-0">
+          className="w-9 h-9 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)] shrink-0"
+          style={{ color: "var(--cal-text-muted)" }}>
           <ArrowLeft size={16}/>
         </button>
 
         {/* Logo */}
         <div className="flex items-center gap-2 mr-2">
-          <CalendarIcon size={20} className="text-primary"/>
-          <span className="font-bold text-base hidden sm:block">Calendar</span>
+          <CalendarIcon size={20} style={{ color: "var(--cal-accent)" }}/>
+          <span className="font-bold text-base hidden sm:block" style={{ color: "var(--cal-text)" }}>Calendar</span>
         </div>
 
         {/* Today button */}
         <button onClick={goToToday}
-          className="px-3 py-1.5 rounded-lg border border-border/60 text-sm font-medium hover:bg-accent transition-colors shrink-0">
+          className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors hover:bg-[var(--cal-cell-today)] shrink-0"
+          style={{ border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}>
           Today
         </button>
 
         {/* Prev / Next */}
         <div className="flex gap-0.5">
-          <button onClick={navigate_prev} className="w-8 h-8 rounded-full hover:bg-accent flex items-center justify-center transition-colors"><ChevronLeft size={16}/></button>
-          <button onClick={navigate_next} className="w-8 h-8 rounded-full hover:bg-accent flex items-center justify-center transition-colors"><ChevronRight size={16}/></button>
+          <button onClick={navigate_prev} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+            style={{ color: "var(--cal-text)" }}><ChevronLeft size={16}/></button>
+          <button onClick={navigate_next} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+            style={{ color: "var(--cal-text)" }}><ChevronRight size={16}/></button>
         </div>
 
         {/* Title */}
-        <h1 className="text-base font-semibold flex-1 truncate">{headerTitle}</h1>
+        <h1 className="text-base font-semibold flex-1 truncate" style={{ color: "var(--cal-text)" }}>{headerTitle}</h1>
 
         {/* Search */}
         <div className="flex items-center gap-1">
@@ -872,20 +1239,29 @@ export default function Calendar() {
             <motion.input initial={{ width: 0, opacity: 0 }} animate={{ width: 180, opacity: 1 }}
               value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search events…" autoFocus
-              className="bg-muted/50 border border-border/60 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"/>
+              className="rounded-lg px-3 py-1.5 text-sm outline-none"
+              style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
           )}
           <button onClick={() => { setShowSearch(s => !s); setSearchQuery(""); }}
-            className="w-9 h-9 rounded-full hover:bg-accent flex items-center justify-center transition-colors text-muted-foreground">
+            className="w-9 h-9 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+            style={{ color: "var(--cal-text-muted)" }}>
             <Search size={16}/>
           </button>
         </div>
 
+        {/* Theme picker */}
+        <ThemePicker themeId={themeId} onSelect={applyTheme}/>
+
         {/* View mode toggle */}
-        <div className="flex bg-muted/60 rounded-lg p-0.5 shrink-0 border border-border/40">
+        <div className="flex rounded-lg p-0.5 shrink-0" style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
           {(["month","week","day"] as ViewMode[]).map(v => (
             <button key={v} onClick={() => setViewMode(v)}
-              className={cn("px-3 py-1 rounded-md text-xs font-semibold capitalize transition-all",
-                viewMode === v ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground")}>
+              className="px-3 py-1 rounded-md text-xs font-semibold capitalize transition-all"
+              style={{
+                background: viewMode === v ? "var(--cal-cell-bg)" : "transparent",
+                color: viewMode === v ? "var(--cal-text)" : "var(--cal-text-muted)",
+                boxShadow: viewMode === v ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+              }}>
               {v}
             </button>
           ))}
@@ -893,7 +1269,8 @@ export default function Calendar() {
 
         {/* Add event */}
         <button onClick={() => { setForm(blankForm(selectedDay)); setShowForm(true); }}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-primary text-primary-foreground rounded-full text-sm font-semibold hover:opacity-90 transition-opacity shrink-0 shadow-sm">
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold transition-opacity hover:opacity-90 shrink-0 shadow-sm"
+          style={{ background: "var(--cal-accent)", color: "var(--cal-accent-fg)" }}>
           <Plus size={14}/><span className="hidden sm:inline">New</span>
         </button>
       </header>
@@ -901,7 +1278,8 @@ export default function Calendar() {
       {/* ── Main Body ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-52 border-r border-border/30 bg-card/40 flex flex-col shrink-0 overflow-y-auto hidden md:flex">
+        <aside className="w-52 flex flex-col shrink-0 overflow-y-auto hidden md:flex"
+          style={{ borderRight: "1px solid var(--cal-border)", background: "var(--cal-sidebar-bg)" }}>
           <MiniCalendar
             viewDate={viewMode === "month" ? viewDate : new Date(viewDate.getFullYear(), viewDate.getMonth(), 1)}
             selectedDay={selectedDay}
@@ -911,7 +1289,7 @@ export default function Calendar() {
           />
           {/* Upcoming events */}
           <div className="px-3 pb-3 mt-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2 px-1">Upcoming</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-2 px-1" style={{ color: "var(--cal-text-muted)" }}>Upcoming</p>
             {events
               .filter(e => new Date(e.startAt) >= new Date())
               .sort((a,b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
@@ -920,17 +1298,17 @@ export default function Calendar() {
                 const color = getColor(e.color);
                 return (
                   <button key={e.id} onClick={() => setSelectedEvent(e)}
-                    className="w-full text-left flex items-start gap-2 py-1.5 px-1 rounded-lg hover:bg-accent/60 transition-colors group">
+                    className="w-full text-left flex items-start gap-2 py-1.5 px-1 rounded-lg transition-colors hover:bg-[var(--cal-cell-today)]">
                     <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", color.dot)}/>
                     <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{e.title}</p>
-                      <p className="text-[10px] text-muted-foreground/70">{new Date(e.startAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</p>
+                      <p className="text-xs font-medium truncate" style={{ color: "var(--cal-text)" }}>{e.title}</p>
+                      <p className="text-[10px]" style={{ color: "var(--cal-text-muted)" }}>{new Date(e.startAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</p>
                     </div>
                   </button>
                 );
               })}
             {events.filter(e => new Date(e.startAt) >= new Date()).length === 0 && (
-              <p className="text-xs text-muted-foreground/60 px-1">No upcoming events</p>
+              <p className="text-xs px-1" style={{ color: "var(--cal-text-muted)" }}>No upcoming events</p>
             )}
           </div>
         </aside>
