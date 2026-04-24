@@ -37,29 +37,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ connected: false, nowPlaying: null, playlists: [] });
     }
 
-    // Fetch currently playing
+    // Fetch player state (includes currently playing + device/volume)
     let nowPlaying: any = null;
+    let volumePercent: number = 50;
     try {
-      const cpResp = await fetch(`${SPOTIFY_API}/me/player/currently-playing`, {
+      const pResp = await fetch(`${SPOTIFY_API}/me/player`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (cpResp.status === 200) {
-        const cpData = await cpResp.json();
-        if (cpData.item) {
+      if (pResp.status === 200) {
+        const pData = await pResp.json();
+        volumePercent = pData.device?.volume_percent ?? 50;
+        if (pData.item) {
           nowPlaying = {
-            trackId: cpData.item.id,
-            name: cpData.item.name,
-            artists: (cpData.item.artists ?? []).map((a: any) => a.name),
-            albumArt: cpData.item.album?.images?.[0]?.url ?? null,
-            isPlaying: cpData.is_playing ?? false,
-            progressMs: cpData.progress_ms ?? 0,
-            durationMs: cpData.item.duration_ms ?? 0,
+            trackId: pData.item.id,
+            name: pData.item.name,
+            artists: (pData.item.artists ?? []).map((a: any) => a.name),
+            albumArt: pData.item.album?.images?.[0]?.url ?? null,
+            isPlaying: pData.is_playing ?? false,
+            progressMs: pData.progress_ms ?? 0,
+            durationMs: pData.item.duration_ms ?? 0,
           };
         }
+      } else if (pResp.status === 204) {
+        // No active device/playback
       }
-      // 204 = nothing playing, that's fine
     } catch {
-      // Swallow — nowPlaying stays null
+      // Swallow
     }
 
     // Fetch user playlists
@@ -81,9 +84,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Swallow — playlists stays empty
     }
 
-    return res.json({ connected: true, nowPlaying, playlists });
+    return res.json({ connected: true, nowPlaying, playlists, volumePercent });
   } catch (err: any) {
     console.error("[Spotify State]", err.message);
-    return res.status(500).json({ connected: false, nowPlaying: null, playlists: [] });
+    return res.status(500).json({ connected: false, nowPlaying: null, playlists: [], volumePercent: 50 });
   }
 }

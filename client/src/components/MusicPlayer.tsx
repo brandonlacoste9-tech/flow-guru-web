@@ -87,6 +87,7 @@ type SpotifyState = {
   connected: boolean;
   nowPlaying: SpotifyNowPlaying | null;
   playlists: SpotifyPlaylist[];
+  volumePercent: number;
 };
 
 export type MusicPlayerHandle = {
@@ -105,9 +106,10 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   const [hasInitializedMode, setHasInitializedMode] = useState(false);
 
   /* ── Spotify state ──────────────────────────────────────────────── */
-  const [spotify, setSpotify] = useState<SpotifyState>({ connected: false, nowPlaying: null, playlists: [] });
+  const [spotify, setSpotify] = useState<SpotifyState>({ connected: false, nowPlaying: null, playlists: [], volumePercent: 50 });
   const [spotifyLoading, setSpotifyLoading] = useState(true);
   const [playlistTab, setPlaylistTab] = useState<string | null>(null);
+  const [spotifyVolume, setSpotifyVolume] = useState(50);
 
   const fetchSpotifyState = async () => {
     try {
@@ -115,6 +117,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
       if (resp.ok) {
         const data = await resp.json();
         setSpotify(data);
+        setSpotifyVolume(data.volumePercent ?? 50);
         
         // Auto-switch to spotify mode on first load if connected
         if (!hasInitializedMode && data.connected) {
@@ -166,6 +169,18 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
         body: JSON.stringify({ action: 'pause' }),
       });
       setTimeout(fetchSpotifyState, 1000);
+    } catch { /* silent */ }
+  };
+
+  const spotifySetVolume = async (vol: number) => {
+    setSpotifyVolume(vol);
+    try {
+      await fetch('/api/integrations/spotify/play', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'volume', volumePercent: vol }),
+      });
     } catch { /* silent */ }
   };
 
@@ -392,6 +407,23 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
                   <p className="text-muted-foreground text-[11px]">Pick a playlist to start</p>
                 </div>
               )}
+            </div>
+
+            {/* Volume control for Spotify */}
+            <div className="flex items-center gap-1.5 shrink-0 ml-1">
+              <div className="w-6 h-6 flex items-center justify-center text-muted-foreground">
+                <Volume2 className="w-3.5 h-3.5" />
+              </div>
+              <input 
+                type="range" 
+                min={0} 
+                max={100} 
+                step={5} 
+                value={spotifyVolume} 
+                onChange={(e) => spotifySetVolume(parseInt(e.target.value))}
+                className="w-16 h-1 accent-[#1DB954] cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-[#1DB954]"
+                style={{ background: `linear-gradient(to right, #1DB954 ${spotifyVolume}%, hsl(var(--secondary)) ${spotifyVolume}%)` }}
+              />
             </div>
 
             <AnimatePresence>

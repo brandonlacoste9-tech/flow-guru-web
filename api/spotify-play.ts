@@ -32,18 +32,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const { contextUri, uris, action } = req.body as { contextUri?: string; uris?: string[]; action?: 'play' | 'pause' };
+    const { contextUri, uris, action, volumePercent } = req.body as { contextUri?: string; uris?: string[]; action?: 'play' | 'pause' | 'volume'; volumePercent?: number };
 
-    const endpoint = action === 'pause' ? 'pause' : 'play';
+    let endpoint = 'play';
+    let query = '';
+    if (action === 'pause') endpoint = 'pause';
+    if (action === 'volume') {
+      endpoint = 'volume';
+      query = `?volume_percent=${volumePercent ?? 50}`;
+    }
+
     const method = "PUT";
-
     const body: any = {};
-    if (action !== 'pause') {
+    if (!action || action === 'play') {
       if (contextUri) body.context_uri = contextUri;
       if (uris) body.uris = uris;
     }
 
-    const controlResp = await fetch(`${SPOTIFY_API}/me/player/${endpoint}`, {
+    const controlResp = await fetch(`${SPOTIFY_API}/me/player/${endpoint}${query}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
