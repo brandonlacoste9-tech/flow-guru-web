@@ -32,14 +32,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const { contextUri, uris } = req.body as { contextUri?: string; uris?: string[] };
+    const { contextUri, uris, action } = req.body as { contextUri?: string; uris?: string[]; action?: 'play' | 'pause' };
+
+    const endpoint = action === 'pause' ? 'pause' : 'play';
+    const method = "PUT";
 
     const body: any = {};
-    if (contextUri) body.context_uri = contextUri;
-    if (uris) body.uris = uris;
+    if (action !== 'pause') {
+      if (contextUri) body.context_uri = contextUri;
+      if (uris) body.uris = uris;
+    }
 
-    const playResp = await fetch(`${SPOTIFY_API}/me/player/play`, {
-      method: "PUT",
+    const controlResp = await fetch(`${SPOTIFY_API}/me/player/${endpoint}`, {
+      method,
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
@@ -47,18 +52,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
     });
 
-    if (playResp.ok || playResp.status === 204) {
+    if (controlResp.ok || controlResp.status === 204) {
       return res.json({ ok: true });
     }
 
-    if (playResp.status === 404) {
+    if (controlResp.status === 404) {
       return res.status(404).json({ error: "No active Spotify device found. Open Spotify on your phone or computer." });
     }
 
-    const errText = await playResp.text();
-    return res.status(playResp.status).json({ error: errText });
+    const errText = await controlResp.text();
+    return res.status(controlResp.status).json({ error: errText });
   } catch (err: any) {
-    console.error("[Spotify Play]", err.message);
-    return res.status(500).json({ error: "Failed to start playback" });
+    console.error("[Spotify Control]", err.message);
+    return res.status(500).json({ error: "Failed to control playback" });
   }
 }

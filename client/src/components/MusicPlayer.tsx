@@ -100,6 +100,10 @@ interface MusicPlayerProps {
 
 export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   ({ onStateChange }, ref) => {
+  /* ── Mode state ────────────────────────────────────────────────── */
+  const [mode, setMode] = useState<"spotify" | "radio">("radio");
+  const [hasInitializedMode, setHasInitializedMode] = useState(false);
+
   /* ── Spotify state ──────────────────────────────────────────────── */
   const [spotify, setSpotify] = useState<SpotifyState>({ connected: false, nowPlaying: null, playlists: [] });
   const [spotifyLoading, setSpotifyLoading] = useState(true);
@@ -111,7 +115,16 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
       if (resp.ok) {
         const data = await resp.json();
         setSpotify(data);
-        if (data.connected && data.nowPlaying?.isPlaying) {
+        
+        // Auto-switch to spotify mode on first load if connected
+        if (!hasInitializedMode && data.connected) {
+          setMode("spotify");
+          setHasInitializedMode(true);
+        } else if (!hasInitializedMode && !data.connected) {
+          setHasInitializedMode(true);
+        }
+
+        if (data.connected && data.nowPlaying?.isPlaying && mode === "spotify") {
           onStateChange?.(true, data.nowPlaying.name);
         }
       }
@@ -123,10 +136,13 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
     fetchSpotifyState();
     const interval = setInterval(fetchSpotifyState, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [mode]);
 
   const spotifyPlay = async (contextUri?: string) => {
     try {
+      // Pause radio if it's playing
+      stopAudio();
+
       const body: any = {};
       if (contextUri) body.contextUri = contextUri;
       await fetch('/api/integrations/spotify/play', {
@@ -178,6 +194,11 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   };
 
   const startAudio = (urls: string[], urlIdx = 0) => {
+    // Pause Spotify if it's playing
+    if (spotify.connected && spotify.nowPlaying?.isPlaying) {
+      spotifyPause();
+    }
+
     stopAudio();
     if (urlIdx >= urls.length) return;
     urlIndexRef.current = urlIdx;
@@ -278,277 +299,219 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
 
   /* ── Render ─────────────────────────────────────────────────────── */
 
-  // If Spotify is connected, show the Spotify player
-  if (spotify.connected) {
-    const np = spotify.nowPlaying;
-    const progress = np ? Math.min((np.progressMs / np.durationMs) * 100, 100) : 0;
+  return (
+    <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 shadow-xl">
+      {/* Source Selector (only if Spotify is connected) */}
+      {spotify.connected && (
+        <div className="flex gap-1 mb-3 bg-secondary/30 rounded-xl p-0.5 w-fit ml-auto">
+          <button
+            onClick={() => {
+              if (isPlaying || buffering) stopAudio();
+              setMode("spotify");
+            }}
+            className={cn(
+              "px-3 py-1 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider",
+              mode === "spotify" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Spotify
+          </button>
+          <button
+            onClick={() => {
+              if (spotify.nowPlaying?.isPlaying) spotifyPause();
+              setMode("radio");
+            }}
+            className={cn(
+              "px-3 py-1 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider",
+              mode === "radio" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Radio
+          </button>
+        </div>
+      )}
 
-    return (
-      <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 shadow-xl">
-        {/* Playlist tabs (scrollable) */}
-        {spotify.playlists.length > 0 && (
-          <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1 overflow-x-auto no-scrollbar">
-            {spotify.playlists.slice(0, 5).map((pl) => (
+      {mode === "spotify" && spotify.connected ? (
+        <>
+          {/* Spotify View */}
+          {/* Playlist tabs (scrollable) */}
+          {spotify.playlists.length > 0 && (
+            <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1 overflow-x-auto no-scrollbar">
+              {spotify.playlists.slice(0, 5).map((pl) => (
+                <button
+                  key={pl.id}
+                  onClick={() => {
+                    setPlaylistTab(pl.id);
+                    spotifyPlay(`spotify:playlist:${pl.id}`);
+                  }}
+                  className={cn(
+                    "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all duration-200 leading-none whitespace-nowrap px-2",
+                    playlistTab === pl.id
+                      ? "bg-[#1DB954] text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {pl.name.length > 12 ? pl.name.slice(0, 12) + '…' : pl.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Now Playing */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => spotify.nowPlaying?.isPlaying ? spotifyPause() : spotifyPlay()}
+              className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
+                spotify.nowPlaying?.isPlaying
+                  ? "bg-[#1DB954] text-white shadow-lg shadow-[#1DB954]/30 scale-105"
+                  : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+              )}
+            >
+              {spotify.nowPlaying?.isPlaying ? (
+                <Pause className="w-4 h-4" />
+              ) : (
+                <Play className="w-4 h-4 ml-0.5" />
+              )}
+            </button>
+
+            <div className="flex-1 min-w-0">
+              {spotify.nowPlaying ? (
+                <div className="flex items-center gap-2">
+                  {spotify.nowPlaying.albumArt && (
+                    <img src={spotify.nowPlaying.albumArt} alt="" className="w-8 h-8 rounded-lg shadow-md shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-foreground text-[14px] font-semibold leading-tight truncate">{spotify.nowPlaying.name}</p>
+                    <p className="text-muted-foreground text-[11px] truncate">{spotify.nowPlaying.artists.join(', ')}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="min-w-0">
+                  <p className="text-foreground text-[14px] font-semibold leading-tight">Spotify</p>
+                  <p className="text-muted-foreground text-[11px]">Pick a playlist to start</p>
+                </div>
+              )}
+            </div>
+
+            <AnimatePresence>
+              {spotify.nowPlaying?.isPlaying && (
+                <motion.div
+                  className="flex gap-[3px] items-end h-4 mr-1"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  {([0, 0.12, 0.24] as const).map((delay, i) => (
+                    <motion.div
+                      key={i}
+                      className="w-[3px] bg-[#1DB954]/60 rounded-full"
+                      style={{ height: 4 }}
+                      animate={{ height: [4, 14, 4] }}
+                      transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }}
+                    />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {spotify.nowPlaying && (
+            <div className="mt-3 space-y-1">
+              <div className="w-full h-1 bg-secondary rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-[#1DB954] rounded-full"
+                  style={{ width: `${Math.min((spotify.nowPlaying.progressMs / spotify.nowPlaying.durationMs) * 100, 100)}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+              <div className="flex justify-between text-[9px] text-muted-foreground font-medium">
+                <span>{formatTime(spotify.nowPlaying.progressMs)}</span>
+                <span>{formatTime(spotify.nowPlaying.durationMs)}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mt-2 pt-2.5 border-t border-border">
+            <AnimatePresence>
+              {spotify.nowPlaying?.isPlaying && (
+                <motion.div className="flex items-center gap-1.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <div className="w-1.5 h-1.5 bg-[#1DB954] rounded-full animate-pulse" />
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Playing</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <svg className="w-3 h-3 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.216.354-.678.468-1.032.252-2.86-1.748-6.458-2.143-10.697-1.174-.405.093-.812-.162-.905-.567-.093-.405.162-.812.567-.905 4.636-1.06 8.597-.613 11.77 1.332.355.216.469.678.252 1.032z"/></svg>
+              <p className="text-muted-foreground/60 text-[10px]">Spotify Premium</p>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* SomaFM View */}
+          <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1">
+            {STATIONS.map((s) => (
               <button
-                key={pl.id}
-                onClick={() => {
-                  setPlaylistTab(pl.id);
-                  spotifyPlay(`spotify:playlist:${pl.id}`);
-                }}
+                key={s.id}
+                onClick={() => switchStation(s.id)}
                 className={cn(
-                  "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all duration-200 leading-none whitespace-nowrap px-2",
-                  playlistTab === pl.id
-                    ? "bg-[#1DB954] text-white shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                  "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all duration-200 leading-none",
+                  activeId === s.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {pl.name.length > 12 ? pl.name.slice(0, 12) + '…' : pl.name}
+                {s.label}
               </button>
             ))}
           </div>
-        )}
 
-        {/* Now Playing */}
-        <div className="flex items-center gap-3">
-          {/* Play/Pause */}
-          <button
-            onClick={() => np?.isPlaying ? spotifyPause() : spotifyPlay()}
-            className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
-              np?.isPlaying
-                ? "bg-[#1DB954] text-white shadow-lg shadow-[#1DB954]/30 scale-105"
-                : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-            )}
-          >
-            {np?.isPlaying ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4 ml-0.5" />
-            )}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggle}
+              className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
+                isPlaying || buffering ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+              )}
+            >
+              {buffering ? <motion.div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }} /> : isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+            </button>
 
-          {/* Track info */}
-          <div className="flex-1 min-w-0">
-            {np ? (
-              <>
-                <div className="flex items-center gap-2">
-                  {np.albumArt && (
-                    <img src={np.albumArt} alt="" className="w-8 h-8 rounded-lg shadow-md shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-foreground text-[14px] font-semibold leading-tight truncate">{np.name}</p>
-                    <p className="text-muted-foreground text-[11px] truncate">{np.artists.join(', ')}</p>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="min-w-0">
-                <p className="text-foreground text-[14px] font-semibold leading-tight">Spotify</p>
-                <p className="text-muted-foreground text-[11px]">Pick a playlist to start</p>
-              </div>
-            )}
-          </div>
-
-          {/* Equalizer bars */}
-          <AnimatePresence>
-            {np?.isPlaying && (
-              <motion.div
-                className="flex gap-[3px] items-end h-4 mr-1"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                {([0, 0.12, 0.24] as const).map((delay, i) => (
-                  <motion.div
-                    key={i}
-                    className="w-[3px] bg-[#1DB954]/60 rounded-full"
-                    style={{ height: 4 }}
-                    animate={{ height: [4, 14, 4] }}
-                    transition={{
-                      repeat: Infinity,
-                      duration: 0.55,
-                      delay,
-                      ease: "easeInOut",
-                    }}
-                  />
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Progress bar */}
-        {np && (
-          <div className="mt-3 space-y-1">
-            <div className="w-full h-1 bg-secondary rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-[#1DB954] rounded-full"
-                style={{ width: `${progress}%` }}
-                transition={{ duration: 0.5 }}
-              />
+            <div className="flex-1 min-w-0">
+              <p className="text-foreground text-[14px] font-semibold leading-tight">{station.label}</p>
+              <p className="text-muted-foreground text-[11px] truncate">{station.desc}</p>
             </div>
-            <div className="flex justify-between text-[9px] text-muted-foreground font-medium">
-              <span>{formatTime(np.progressMs)}</span>
-              <span>{formatTime(np.durationMs)}</span>
+
+            <AnimatePresence>
+              {isPlaying && (
+                <motion.div className="flex gap-[3px] items-end h-4 mr-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  {([0, 0.12, 0.24] as const).map((delay, i) => (
+                    <motion.div key={i} className="w-[3px] bg-primary/60 rounded-full" style={{ height: 4 }} animate={{ height: [4, 14, 4] }} transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }} />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={toggleMute} className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              </button>
+              <input type="range" min={0} max={1} step={0.02} value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="w-16 h-1 accent-primary cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary" style={{ background: `linear-gradient(to right, hsl(var(--primary)) ${(isMuted ? 0 : volume) * 100}%, hsl(var(--secondary)) ${(isMuted ? 0 : volume) * 100}%)` }} />
             </div>
           </div>
-        )}
 
-        {/* Footer */}
-        <div className="flex items-center justify-between mt-2 pt-2.5 border-t border-border">
-          <AnimatePresence>
-            {np?.isPlaying && (
-              <motion.div
-                className="flex items-center gap-1.5"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                <div className="w-1.5 h-1.5 bg-[#1DB954] rounded-full animate-pulse" />
-                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                  Playing
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex items-center gap-1.5 ml-auto">
-            <svg className="w-3 h-3 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.216.354-.678.468-1.032.252-2.86-1.748-6.458-2.143-10.697-1.174-.405.093-.812-.162-.905-.567-.093-.405.162-.812.567-.905 4.636-1.06 8.597-.613 11.77 1.332.355.216.469.678.252 1.032z"/>
-            </svg>
-            <p className="text-muted-foreground/60 text-[10px]">Spotify Premium</p>
+          <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border">
+            <AnimatePresence>
+              {(isPlaying || buffering) && (
+                <motion.div className="flex items-center gap-1.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Live</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <p className="text-muted-foreground/60 text-[10px] ml-auto">SomaFM · free internet radio</p>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── SomaFM fallback (not connected to Spotify) ───────────────────
-  return (
-    <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 shadow-xl">
-      {/* Station tabs */}
-      <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1">
-        {STATIONS.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => switchStation(s.id)}
-            className={cn(
-              "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all duration-200 leading-none",
-              activeId === s.id
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Player row */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={toggle}
-          className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
-            isPlaying || buffering
-              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105"
-              : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-          )}
-        >
-          {buffering ? (
-            <motion.div
-              className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}
-            />
-          ) : isPlaying ? (
-            <Pause className="w-4 h-4" />
-          ) : (
-            <Play className="w-4 h-4 ml-0.5" />
-          )}
-        </button>
-
-        <div className="flex-1 min-w-0">
-          <p className="text-foreground text-[14px] font-semibold leading-tight">
-            {station.label}
-          </p>
-          <p className="text-muted-foreground text-[11px] truncate">{station.desc}</p>
-        </div>
-
-        {/* Equalizer bars */}
-        <AnimatePresence>
-          {isPlaying && (
-            <motion.div
-              className="flex gap-[3px] items-end h-4 mr-1"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              {([0, 0.12, 0.24] as const).map((delay, i) => (
-                <motion.div
-                  key={i}
-                  className="w-[3px] bg-primary/60 rounded-full"
-                  style={{ height: 4 }}
-                  animate={{ height: [4, 14, 4] }}
-                  transition={{
-                    repeat: Infinity,
-                    duration: 0.55,
-                    delay,
-                    ease: "easeInOut",
-                  }}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Volume control */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={toggleMute}
-            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {isMuted || volume === 0 ? (
-              <VolumeX className="w-3.5 h-3.5" />
-            ) : (
-              <Volume2 className="w-3.5 h-3.5" />
-            )}
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.02}
-            value={isMuted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="w-16 h-1 accent-primary cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary"
-            style={{
-              background: `linear-gradient(to right, hsl(var(--primary)) ${(isMuted ? 0 : volume) * 100}%, hsl(var(--secondary)) ${(isMuted ? 0 : volume) * 100}%)`,
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border">
-        <AnimatePresence>
-          {(isPlaying || buffering) && (
-            <motion.div
-              className="flex items-center gap-1.5"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                Live
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <p className="text-muted-foreground/60 text-[10px] ml-auto">
-          SomaFM · free internet radio
-        </p>
-      </div>
+        </>
+      )}
     </div>
   );
 });
