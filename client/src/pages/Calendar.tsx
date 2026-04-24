@@ -62,8 +62,8 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-cell-today":   "light-dark(#e8dcc8, #2a2535)",
       "--cal-cell-selected":"light-dark(#ddd0b8, #2d2840)",
       "--cal-border":       "light-dark(rgba(160,130,90,0.30), rgba(255,255,255,0.08))",
-      "--cal-text":         "light-dark(#1e1208, #f0ece4)",
-      "--cal-text-muted":   "light-dark(#6b5235, #7a7060)",
+      "--cal-text":         "light-dark(#0d0804, #f0ece4)",
+      "--cal-text-muted":   "light-dark(#3d2810, #7a7060)",
       "--cal-accent":       "light-dark(#7a5c2e, #c4a06a)",
       "--cal-accent-fg":    "#ffffff",
       "--cal-sidebar-bg":   "light-dark(rgba(240,234,222,0.85), rgba(20,20,25,0.85))",
@@ -100,8 +100,8 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-cell-today":   "light-dark(#c8e4f5, #1a3a55)",
       "--cal-cell-selected":"light-dark(#b0d4ee, #1e4060)",
       "--cal-border":       "light-dark(rgba(60,140,200,0.25), rgba(100,180,240,0.12))",
-      "--cal-text":         "light-dark(#0a2540, #d0eaff)",
-      "--cal-text-muted":   "light-dark(#3a7a9c, #5a8aaa)",
+      "--cal-text":         "light-dark(#051525, #d0eaff)",
+      "--cal-text-muted":   "light-dark(#1a5070, #5a8aaa)",
       "--cal-accent":       "light-dark(#0284c7, #38bdf8)",
       "--cal-accent-fg":    "#ffffff",
       "--cal-sidebar-bg":   "light-dark(rgba(224,240,252,0.90), rgba(13,27,42,0.90))",
@@ -119,8 +119,8 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-cell-today":   "light-dark(#c0e4cc, #1a3d28)",
       "--cal-cell-selected":"light-dark(#a8d8b8, #1e4530)",
       "--cal-border":       "light-dark(rgba(30,140,70,0.25), rgba(60,180,100,0.12))",
-      "--cal-text":         "light-dark(#082a14, #c8f0d8)",
-      "--cal-text-muted":   "light-dark(#2a6e42, #4a8060)",
+      "--cal-text":         "light-dark(#03140a, #c8f0d8)",
+      "--cal-text-muted":   "light-dark(#144d28, #4a8060)",
       "--cal-accent":       "light-dark(#059669, #34d399)",
       "--cal-accent-fg":    "#ffffff",
       "--cal-sidebar-bg":   "light-dark(rgba(218,240,226,0.90), rgba(13,31,20,0.90))",
@@ -138,8 +138,8 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-cell-today":   "light-dark(#f8c0ca, #3d1a20)",
       "--cal-cell-selected":"light-dark(#f4a8b5, #451e25)",
       "--cal-border":       "light-dark(rgba(200,50,75,0.25), rgba(240,80,100,0.12))",
-      "--cal-text":         "light-dark(#3d0510, #ffd0d8)",
-      "--cal-text-muted":   "light-dark(#8c2a3e, #905060)",
+      "--cal-text":         "light-dark(#1e0208, #ffd0d8)",
+      "--cal-text-muted":   "light-dark(#5c1020, #905060)",
       "--cal-accent":       "light-dark(#e11d48, #fb7185)",
       "--cal-accent-fg":    "#ffffff",
       "--cal-sidebar-bg":   "light-dark(rgba(245,220,228,0.90), rgba(31,13,16,0.90))",
@@ -157,8 +157,8 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-cell-today":   "light-dark(#c8d2de, #1e2330)",
       "--cal-cell-selected":"light-dark(#b8c4d4, #222838)",
       "--cal-border":       "light-dark(rgba(80,100,140,0.25), rgba(100,120,160,0.12))",
-      "--cal-text":         "light-dark(#0d1520, #e2e8f0)",
-      "--cal-text-muted":   "light-dark(#3d5068, #4a5568)",
+      "--cal-text":         "light-dark(#050a12, #e2e8f0)",
+      "--cal-text-muted":   "light-dark(#1e3048, #4a5568)",
       "--cal-accent":       "light-dark(#334e68, #94a3b8)",
       "--cal-accent-fg":    "#ffffff",
       "--cal-sidebar-bg":   "light-dark(rgba(222,228,236,0.90), rgba(15,17,23,0.90))",
@@ -176,8 +176,8 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-cell-today":   "light-dark(#cfc0f5, #2a1f45)",
       "--cal-cell-selected":"light-dark(#bfaaf0, #301e50)",
       "--cal-border":       "light-dark(rgba(110,60,210,0.25), rgba(140,80,240,0.12))",
-      "--cal-text":         "light-dark(#1a0540, #e8d8ff)",
-      "--cal-text-muted":   "light-dark(#5a3a9a, #6050a0)",
+      "--cal-text":         "light-dark(#0d0220, #e8d8ff)",
+      "--cal-text-muted":   "light-dark(#3a1a70, #6050a0)",
       "--cal-accent":       "light-dark(#6d28d9, #a78bfa)",
       "--cal-accent-fg":    "#ffffff",
       "--cal-sidebar-bg":   "light-dark(rgba(226,218,252,0.90), rgba(18,13,31,0.90))",
@@ -195,8 +195,8 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-cell-today":   "light-dark(#e0cc88, #3d2e00)",
       "--cal-cell-selected":"light-dark(#d4c070, #453400)",
       "--cal-border":       "light-dark(rgba(160,110,0,0.28), rgba(220,160,0,0.12))",
-      "--cal-text":         "light-dark(#2a1800, #ffe8a0)",
-      "--cal-text-muted":   "light-dark(#7a5010, #806020)",
+      "--cal-text":         "light-dark(#140c00, #ffe8a0)",
+      "--cal-text-muted":   "light-dark(#4a2e00, #806020)",
       "--cal-accent":       "light-dark(#b45309, #fbbf24)",
       "--cal-accent-fg":    "#ffffff",
       "--cal-sidebar-bg":   "light-dark(rgba(236,220,180,0.90), rgba(31,24,0,0.90))",
@@ -214,8 +214,8 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-cell-today":   "light-dark(#b8bcf0, #1a1e40)",
       "--cal-cell-selected":"light-dark(#a8aee8, #1e2248)",
       "--cal-border":       "light-dark(rgba(40,50,190,0.25), rgba(60,80,220,0.12))",
-      "--cal-text":         "light-dark(#05082a, #d0d4ff)",
-      "--cal-text-muted":   "light-dark(#2a3490, #303880)",
+      "--cal-text":         "light-dark(#020415, #d0d4ff)",
+      "--cal-text-muted":   "light-dark(#141a60, #303880)",
       "--cal-accent":       "light-dark(#3730a3, #6366f1)",
       "--cal-accent-fg":    "#ffffff",
       "--cal-sidebar-bg":   "light-dark(rgba(210,214,252,0.90), rgba(8,9,26,0.90))",
@@ -271,9 +271,9 @@ function EventChip({ event, onClick }: { event: any; onClick?: (e: React.MouseEv
         borderWidth: "1px",
         borderStyle: "solid",
       }}
-      className="text-[10px] leading-tight truncate px-1.5 py-0.5 rounded-md font-medium cursor-pointer hover:opacity-80 transition-opacity"
+      className="text-xs leading-tight truncate px-1.5 py-0.5 rounded-md font-semibold cursor-pointer hover:opacity-80 transition-opacity"
     >
-      {!event.allDay && <span className="opacity-60 mr-1">{formatTime(new Date(event.startAt)).replace(":00","")}</span>}
+      {!event.allDay && <span className="opacity-70 mr-1">{formatTime(new Date(event.startAt)).replace(":00","")}</span>}
       {event.title}
     </div>
   );
@@ -353,7 +353,7 @@ function ThemePicker({ themeId, onSelect }: { themeId: CalendarThemeId; onSelect
               backdropFilter: "blur(16px)",
             }}
           >
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-2.5 px-1" style={{ color: "var(--cal-text-muted)" }}>
+            <p className="text-xs font-bold uppercase tracking-widest mb-2.5 px-1" style={{ color: "var(--cal-text-muted)" }}>
               Calendar Theme
             </p>
             <div className="grid grid-cols-4 gap-1.5">
@@ -370,14 +370,14 @@ function ThemePicker({ themeId, onSelect }: { themeId: CalendarThemeId; onSelect
                   )}
                 >
                   <span className={cn("w-6 h-6 rounded-full shadow-sm", t.swatch)}/>
-                  <span className="text-[9px] font-medium leading-tight text-center" style={{ color: "var(--cal-text-muted)" }}>
+                  <span className="text-[11px] font-semibold leading-tight text-center" style={{ color: "var(--cal-text-muted)" }}>
                     {t.label}
                   </span>
                 </button>
               ))}
             </div>
             <div className="mt-2 pt-2 border-t" style={{ borderColor: "var(--cal-border)" }}>
-              <p className="text-[10px] text-center" style={{ color: "var(--cal-text-muted)" }}>
+              <p className="text-xs text-center" style={{ color: "var(--cal-text-muted)" }}>
                 Current: <span className="font-semibold" style={{ color: "var(--cal-text)" }}>{current.label}</span>
               </p>
             </div>
@@ -426,7 +426,7 @@ function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, event
       </div>
       <div className="grid grid-cols-7 mb-1">
         {WEEKDAYS_SHORT.map(d => (
-          <div key={d} className="text-center text-[9px] font-semibold py-0.5" style={{ color: "var(--cal-text-muted)" }}>{d[0]}</div>
+          <div key={d} className="text-center text-xs font-bold py-0.5" style={{ color: "var(--cal-text-muted)" }}>{d[0]}</div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-px">
@@ -604,13 +604,13 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
               {!editAllDay ? (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Start</label>
+                    <label className="text-xs font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Start</label>
                     <input type="datetime-local" value={editStartAt} onChange={e => setEditStartAt(e.target.value)}
                       className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2"
                       style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>End</label>
+                    <label className="text-xs font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>End</label>
                     <input type="datetime-local" value={editEndAt} onChange={e => setEditEndAt(e.target.value)}
                       className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2"
                       style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
@@ -618,7 +618,7 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                 </div>
               ) : (
                 <div>
-                  <label className="text-[10px] font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Date</label>
+                  <label className="text-xs font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Date</label>
                   <input type="date" value={editStartAt.split("T")[0]} onChange={e => { setEditStartAt(e.target.value+"T09:00"); setEditEndAt(e.target.value+"T10:00"); }}
                     className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none"
                     style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
@@ -647,7 +647,7 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
 
               {/* Color picker */}
               <div>
-                <label className="text-[10px] font-semibold mb-2 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Color</label>
+                <label className="text-xs font-semibold mb-2 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Color</label>
                 <div className="flex gap-2 flex-wrap">
                   {EVENT_COLORS.map(c => (
                     <button key={c.id} type="button" onClick={() => setEditColor(c.id)}
@@ -858,7 +858,7 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick }: 
       {/* Weekday headers */}
       <div className="grid grid-cols-7" style={{ borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
         {WEEKDAYS_SHORT.map(d => (
-          <div key={d} className="py-2 text-center text-xs font-semibold uppercase tracking-wider"
+          <div key={d} className="py-2.5 text-center text-sm font-bold uppercase tracking-wider"
             style={{ color: "var(--cal-text-muted)" }}>
             {d}
           </div>
@@ -892,9 +892,9 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick }: 
                 <span
                   className="flex items-center justify-center rounded-full font-medium transition-all"
                   style={{
-                    width: hasEvents ? "2rem" : "1.75rem",
-                    height: hasEvents ? "2rem" : "1.75rem",
-                    fontSize: "0.875rem",
+                    width: hasEvents ? "2.25rem" : "2rem",
+                    height: hasEvents ? "2.25rem" : "2rem",
+                    fontSize: "1rem",
                     fontWeight: isToday || isSelected || hasEvents ? 700 : 400,
                     backgroundColor: isToday ? "var(--cal-accent)" : "transparent",
                     color: isToday
@@ -913,7 +913,7 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick }: 
                   <EventChip key={e.id} event={e} onClick={ev => { ev.stopPropagation(); onEventClick(e); }}/>
                 ))}
                 {dayEvents.length > 3 && (
-                  <div className="text-[10px] pl-1 font-medium" style={{ color: "var(--cal-text-muted)" }}>
+                  <div className="text-xs pl-1 font-semibold" style={{ color: "var(--cal-text-muted)" }}>
                     +{dayEvents.length - 3} more
                   </div>
                 )}
@@ -954,8 +954,8 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
           const isToday = isSameDay(d, today);
           return (
             <div key={i} className="py-2 text-center">
-              <div className="text-xs font-semibold uppercase" style={{ color: "var(--cal-text-muted)" }}>{WEEKDAYS_SHORT[d.getDay()]}</div>
-              <div className="w-8 h-8 mx-auto mt-0.5 flex items-center justify-center rounded-full text-sm font-bold"
+              <div className="text-sm font-bold uppercase" style={{ color: "var(--cal-text-muted)" }}>{WEEKDAYS_SHORT[d.getDay()]}</div>
+              <div className="w-9 h-9 mx-auto mt-0.5 flex items-center justify-center rounded-full text-base font-bold"
                 style={{
                   backgroundColor: isToday ? "var(--cal-accent)" : "transparent",
                   color: isToday ? "var(--cal-accent-fg)" : "var(--cal-text)",
@@ -971,7 +971,7 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
           <div className="col-start-1">
             {hours.map(h => (
               <div key={h} className="h-14 flex items-start justify-end pr-2 pt-0.5">
-                {h > 0 && <span className="text-[10px]" style={{ color: "var(--cal-text-muted)" }}>{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
+                {h > 0 && <span className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
               </div>
             ))}
           </div>
@@ -989,9 +989,9 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
                 return (
                   <div key={e.id} onClick={ev => { ev.stopPropagation(); onEventClick(e); }}
                     style={getEventStyle(e)}
-                    className={cn("absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 text-[11px] font-semibold cursor-pointer hover:opacity-90 transition-opacity overflow-hidden z-10 shadow-sm", color.bg, color.text)}>
+                    className={cn("absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity overflow-hidden z-10 shadow-sm", color.bg, color.text)}>
                     {e.title}
-                    <div className="text-[9px] opacity-80">{formatTime(new Date(e.startAt))}</div>
+                    <div className="text-[11px] opacity-80">{formatTime(new Date(e.startAt))}</div>
                   </div>
                 );
               })}
@@ -1040,7 +1040,7 @@ function DayView({ viewDate, events, onEventClick, onSlotClick }: {
           <div>
             {hours.map(h => (
               <div key={h} className="h-16 flex items-start justify-end pr-3 pt-0.5">
-                {h > 0 && <span className="text-[11px]" style={{ color: "var(--cal-text-muted)" }}>{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
+                {h > 0 && <span className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
               </div>
             ))}
           </div>
@@ -1059,8 +1059,8 @@ function DayView({ viewDate, events, onEventClick, onSlotClick }: {
                   style={getEventStyle(e)}
                   className={cn("absolute left-1 right-1 rounded-xl px-3 py-1.5 cursor-pointer hover:opacity-90 transition-opacity overflow-hidden z-10 shadow-sm", color.bg, color.text)}>
                   <div className="font-semibold text-sm leading-tight">{e.title}</div>
-                  <div className="text-[11px] opacity-80 mt-0.5">{formatTime(new Date(e.startAt))} – {formatTime(new Date(e.endAt))}</div>
-                  {e.location && <div className="text-[11px] opacity-70 mt-0.5 flex items-center gap-1"><MapPin size={9}/>{e.location}</div>}
+                  <div className="text-xs opacity-80 mt-0.5">{formatTime(new Date(e.startAt))} – {formatTime(new Date(e.endAt))}</div>
+                  {e.location && <div className="text-xs opacity-70 mt-0.5 flex items-center gap-1"><MapPin size={10}/>{e.location}</div>}
                 </div>
               );
             })}
@@ -1309,7 +1309,7 @@ export default function Calendar() {
           />
           {/* Upcoming events */}
           <div className="px-3 pb-3 mt-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-2 px-1" style={{ color: "var(--cal-text-muted)" }}>Upcoming</p>
+            <p className="text-xs font-bold uppercase tracking-widest mb-2 px-1" style={{ color: "var(--cal-text-muted)" }}>Upcoming</p>
             {events
               .filter(e => new Date(e.startAt) >= new Date())
               .sort((a,b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
@@ -1322,7 +1322,7 @@ export default function Calendar() {
                     <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", color.dot)}/>
                     <div className="min-w-0">
                       <p className="text-xs font-medium truncate" style={{ color: "var(--cal-text)" }}>{e.title}</p>
-                      <p className="text-[10px]" style={{ color: "var(--cal-text-muted)" }}>{new Date(e.startAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</p>
+                      <p className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{new Date(e.startAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</p>
                     </div>
                   </button>
                 );
