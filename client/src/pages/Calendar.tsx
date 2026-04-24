@@ -250,16 +250,25 @@ function useCalendarTheme() {
   return { theme, themeId, applyTheme };
 }
 
-// ─── Event Colors ─────────────────────────────────────────────────────────────
+// ─── Event Colors (Leather Palette) ──────────────────────────────────────────
+// IDs kept the same so existing saved events don't lose their color
 const EVENT_COLORS = [
-  { id: "blue",   label: "Blueberry",  bg: "bg-blue-500",    text: "text-white",       dot: "bg-blue-500",    lightBg: "#eff6ff", lightText: "#1d4ed8", lightBorder: "#bfdbfe", darkBg: "rgba(30,58,138,0.4)", darkText: "#93c5fd", darkBorder: "rgba(59,130,246,0.3)" },
-  { id: "green",  label: "Sage",       bg: "bg-emerald-500", text: "text-white",       dot: "bg-emerald-500", lightBg: "#ecfdf5", lightText: "#065f46", lightBorder: "#a7f3d0", darkBg: "rgba(6,78,59,0.4)",  darkText: "#6ee7b7", darkBorder: "rgba(16,185,129,0.3)" },
-  { id: "red",    label: "Tomato",     bg: "bg-red-500",     text: "text-white",       dot: "bg-red-500",     lightBg: "#fef2f2", lightText: "#991b1b", lightBorder: "#fecaca", darkBg: "rgba(127,29,29,0.4)", darkText: "#fca5a5", darkBorder: "rgba(239,68,68,0.3)" },
-  { id: "yellow", label: "Banana",     bg: "bg-amber-400",   text: "text-gray-900",    dot: "bg-amber-400",   lightBg: "#fffbeb", lightText: "#92400e", lightBorder: "#fde68a", darkBg: "rgba(120,53,15,0.4)", darkText: "#fcd34d", darkBorder: "rgba(245,158,11,0.3)" },
-  { id: "purple", label: "Grape",      bg: "bg-purple-500",  text: "text-white",       dot: "bg-purple-500",  lightBg: "#faf5ff", lightText: "#6b21a8", lightBorder: "#e9d5ff", darkBg: "rgba(88,28,135,0.4)", darkText: "#d8b4fe", darkBorder: "rgba(168,85,247,0.3)" },
-  { id: "pink",   label: "Flamingo",   bg: "bg-pink-400",    text: "text-white",       dot: "bg-pink-400",    lightBg: "#fdf2f8", lightText: "#9d174d", lightBorder: "#fbcfe8", darkBg: "rgba(131,24,67,0.4)", darkText: "#f9a8d4", darkBorder: "rgba(236,72,153,0.3)" },
-  { id: "orange", label: "Tangerine",  bg: "bg-orange-400",  text: "text-white",       dot: "bg-orange-400",  lightBg: "#fff7ed", lightText: "#9a3412", lightBorder: "#fed7aa", darkBg: "rgba(124,45,18,0.4)", darkText: "#fdba74", darkBorder: "rgba(249,115,22,0.3)" },
-  { id: "teal",   label: "Peacock",    bg: "bg-teal-500",    text: "text-white",       dot: "bg-teal-500",    lightBg: "#f0fdfa", lightText: "#134e4a", lightBorder: "#99f6e4", darkBg: "rgba(19,78,74,0.4)",  darkText: "#5eead4", darkBorder: "rgba(20,184,166,0.3)" },
+  // Cognac — warm amber-brown (replaces blue)
+  { id: "blue",   label: "Cognac",      bg: "bg-[#b5651d]",   text: "text-white",    dot: "bg-[#b5651d]",   lightBg: "#fdf0e0", lightText: "#6b3410", lightBorder: "#e8b87a", darkBg: "rgba(101,46,14,0.55)", darkText: "#f5c98a", darkBorder: "rgba(181,101,29,0.5)" },
+  // Forest Leather — deep olive-green
+  { id: "green",  label: "Forest",      bg: "bg-[#4a6741]",   text: "text-white",    dot: "bg-[#4a6741]",   lightBg: "#eef3ec", lightText: "#2a3e27", lightBorder: "#a8c4a0", darkBg: "rgba(42,62,39,0.55)",  darkText: "#b8d4b0", darkBorder: "rgba(74,103,65,0.5)" },
+  // Burgundy — deep wine-red
+  { id: "red",    label: "Burgundy",    bg: "bg-[#7c2d3e]",   text: "text-white",    dot: "bg-[#7c2d3e]",   lightBg: "#faeaed", lightText: "#4a1824", lightBorder: "#d4909c", darkBg: "rgba(74,24,36,0.55)",  darkText: "#e8a8b4", darkBorder: "rgba(124,45,62,0.5)" },
+  // Amber — warm golden honey
+  { id: "yellow", label: "Amber",       bg: "bg-[#c8860a]",   text: "text-white",    dot: "bg-[#c8860a]",   lightBg: "#fef5e0", lightText: "#7a5006", lightBorder: "#f0c870", darkBg: "rgba(120,80,6,0.55)",  darkText: "#f5d890", darkBorder: "rgba(200,134,10,0.5)" },
+  // Dusty Rose — muted mauve-pink
+  { id: "purple", label: "Dusty Rose",  bg: "bg-[#b07080]",   text: "text-white",    dot: "bg-[#b07080]",   lightBg: "#faeef0", lightText: "#6a3040", lightBorder: "#d8a8b4", darkBg: "rgba(106,48,64,0.55)", darkText: "#e8c0c8", darkBorder: "rgba(176,112,128,0.5)" },
+  // Blush Tan — soft pink-tan
+  { id: "pink",   label: "Blush Tan",   bg: "bg-[#c8a090]",   text: "text-white",    dot: "bg-[#c8a090]",   lightBg: "#fdf5f2", lightText: "#7a4030", lightBorder: "#e8c4b8", darkBg: "rgba(122,64,48,0.55)", darkText: "#f0d0c4", darkBorder: "rgba(200,160,144,0.5)" },
+  // Saddle — rich warm brown
+  { id: "orange", label: "Saddle",      bg: "bg-[#8b5e3c]",   text: "text-white",    dot: "bg-[#8b5e3c]",   lightBg: "#f5ede4", lightText: "#4a2e18", lightBorder: "#c8a080", darkBg: "rgba(74,46,24,0.55)",  darkText: "#d8b898", darkBorder: "rgba(139,94,60,0.5)" },
+  // Slate Leather — warm grey-tan
+  { id: "teal",   label: "Slate",       bg: "bg-[#7a7060]",   text: "text-white",    dot: "bg-[#7a7060]",   lightBg: "#f2f0ec", lightText: "#3a3028", lightBorder: "#b8b0a0", darkBg: "rgba(58,48,40,0.55)",  darkText: "#c8c0b0", darkBorder: "rgba(122,112,96,0.5)" },
 ];
 
 // Themes that use dark backgrounds — use light/cream text on chips
