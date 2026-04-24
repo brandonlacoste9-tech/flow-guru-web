@@ -1,3 +1,4 @@
+import fs from "fs";
 import { z } from "zod";
 import { getProviderConnection, createLocalEvent } from "./db";
 import {
@@ -372,7 +373,9 @@ export async function planAssistantAction(params: {
   } catch (e) {
     console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw:", raw);
     try {
-      fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Parse Error: ${e}\n`);
+      if (typeof fs !== "undefined") {
+        fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Parse Error: ${e}\n`);
+      }
     } catch (err) {}
     throw new Error(`Failed to parse AI plan: ${(e as Error).message}`);
   }
@@ -799,14 +802,14 @@ async function executeCalendarCreateAction(
   const savedEvent = await createLocalEvent({
     userId: options.userId,
     title: eventTitle,
-    description: plan.calendar?.description ?? null,
+    description: plan.calendar?.title ?? null,
     startAt: new Date(resolved.startIso),
     endAt: new Date(endIso),
-    allDay: false,
+    allDay: 0,
     color: "blue",
     reminderMinutes: "30,15,5",
   });
-  console.log("[Calendar] Local event saved:", savedEvent?.id, eventTitle);
+  console.log("[Calendar] Local event saved:", savedEvent, eventTitle);
   const displayTime = new Date(resolved.startIso).toLocaleString("en-US", {
     weekday: "short", month: "short", day: "numeric",
     hour: "numeric", minute: "2-digit",
@@ -817,7 +820,7 @@ async function executeCalendarCreateAction(
     title: `Booked: ${eventTitle}`,
     summary: `Added to your calendar for ${displayTime}.`,
     data: {
-      id: savedEvent?.id ?? null,
+      id: savedEvent ?? null,
       title: eventTitle,
       start: resolved.startIso,
       end: endIso,

@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import fs from "fs";
 import { z } from "zod";
 import fs from "fs";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -30,6 +31,7 @@ import {
   resolveAssistantUserId,
   touchConversationThread,
   upsertUserMemoryProfile,
+  getUserById,
 } from "./db";
 
 const sendMessageInput = z.object({
@@ -526,12 +528,14 @@ export const appRouter = router({
   assistant: router({
     bootstrap: publicProcedure.query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
-      const profile = await getUserMemoryProfile(userId);
-      const memoryFacts = await listUserMemoryFacts(userId);
-      const thread = await findLatestConversationThread(userId);
+      const [profile, memoryFacts, thread, providerConnections] = await Promise.all([
+        getUserMemoryProfile(userId),
+        listUserMemoryFacts(userId),
+        findLatestConversationThread(userId),
+        listProviderConnections(userId),
+      ]);
       const safeThread = thread && thread.userId === userId ? thread : null;
       const messages = safeThread ? await listConversationMessages(safeThread.id) : [];
-      const providerConnections = await listProviderConnections(userId);
 
       const assistantNameFact = memoryFacts.find(
         (f: any) => f.factKey === "assistant_name" && f.category === "preference"
@@ -571,7 +575,7 @@ export const appRouter = router({
         try {
           const local = await listLocalEvents(userId, now, endOfDay);
           for (const e of local) {
-            results.push({ title: e.title, start: e.startAt ? e.startAt.toISOString() : null, allDay: e.allDay ?? false });
+            results.push({ title: e.title, start: e.startAt ? e.startAt.toISOString() : null, allDay: !!e.allDay });
           }
         } catch { /* ignore */ }
 
@@ -669,9 +673,11 @@ export const appRouter = router({
         content: input.message,
       });
 
-      const profile = await getUserMemoryProfile(userId);
-      const memoryFacts = await listUserMemoryFacts(userId);
-      const history = await listConversationMessages(threadId);
+      const [profile, memoryFacts, history] = await Promise.all([
+        getUserMemoryProfile(userId),
+        listUserMemoryFacts(userId),
+        listConversationMessages(threadId),
+      ]);
 
       // --- Name change detection (fast path, before planner) ---
       const nameChangeMatch = input.message.match(
@@ -819,7 +825,7 @@ export const appRouter = router({
               content: systemPrompt,
             },
             ...actionSystemMessages,
-            ...history.map((m: any) => ({
+            ...history.slice(-15).map((m: any) => ({
               role: m.role as "user" | "assistant",
               content: m.content as string,
             })),
@@ -847,13 +853,13 @@ export const appRouter = router({
         assistantReply,
       }).catch(err => console.warn("[Flow Guru] Background memory extraction failed:", err));
 
-      const finalMessages = await listConversationMessages(threadId);
+      const messages = await listConversationMessages(threadId);
 
       return {
         threadId,
         reply: assistantReply,
-        messages: finalMessages,
-        memoryUpdate: { profileUpdated: false, factsAdded: 0 }, // Handled in background
+        messages,
+        memoryUpdate: { profileUpdated: false, factsAdded: 0 }, // Backgrounded
         actionResult,
       };
     }),
@@ -946,19 +952,19 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-    listFacts: publicProcedure.query(async ({ ctx }) => {
+    getMemoryFacts: publicProcedure.query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       return await listUserMemoryFacts(userId);
     }),
-    deleteFact: publicProcedure
-      .input(z.object({ id: z.number() }))
+    deleteMemoryFact: publicProcedure
+      .input(z.object({ factId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
         const { deleteUserMemoryFact } = await import('./db');
-        await deleteUserMemoryFact(userId, input.id);
+        await deleteUserMemoryFact(userId, input.factId);
         return { success: true };
       }),
-    addFact: publicProcedure
+    addMemoryFact: publicProcedure
       .input(z.object({ factKey: z.string(), factValue: z.string(), category: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -970,6 +976,30 @@ export const appRouter = router({
         }]);
         return { success: true };
       }),
+    getPersona: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const user = await getUserById(userId);
+      return {
+        personaName: user?.personaName ?? '',
+        personaStyle: user?.personaStyle ?? '',
+      };
+    }),
+    savePersona: publicProcedure
+      .input(z.object({ personaName: z.string(), personaStyle: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { updateUserPersona } = await import('./db');
+        await updateUserPersona(userId, input.personaName, input.personaStyle);
+        return { success: true };
+      }),
+    getReferralInfo: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const user = await getUserById(userId);
+      return {
+        referralCode: (user as any)?.referralCode ?? '',
+        credits: (user as any)?.credits ?? 0,
+      };
+    }),
     saveCustomInstructions: publicProcedure
       .input(z.object({ instructions: z.string() }))
       .mutation(async ({ ctx, input }) => {
@@ -981,6 +1011,43 @@ export const appRouter = router({
           confidence: 100,
         }]);
         return { success: true };
+      }),
+  }),
+  news: router({
+    topHeadlines: publicProcedure
+      .input(z.object({
+        limit: z.number().optional(),
+        locale: z.string().optional(),
+        categories: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        try {
+          const url = new URL("https://actually-relevant-api.onrender.com/api/stories");
+          // Map common categories to issueSlugs if needed
+          const cat = input.categories?.toLowerCase() || "";
+          if (cat.includes("tech")) url.searchParams.set("issueSlug", "science-technology");
+          else if (cat.includes("science")) url.searchParams.set("issueSlug", "science-technology");
+          else if (cat.includes("planet") || cat.includes("climate")) url.searchParams.set("issueSlug", "planet-climate");
+          
+          const resp = await fetch(url.toString());
+          if (!resp.ok) return { articles: [] };
+          const payload = await resp.json() as any;
+          const stories = payload.data || [];
+          return {
+            articles: stories.map((s: any) => ({
+              uuid: s.id,
+              title: s.title,
+              description: s.summary || s.blurb || "",
+              url: s.sourceUrl || "#",
+              imageUrl: s.imageUrl || null,
+              source: s.sourceTitle || "News",
+              publishedAt: s.datePublished || new Date().toISOString(),
+              categories: [s.slug],
+            }))
+          };
+        } catch (e) {
+          return { articles: [] };
+        }
       }),
   }),
 });

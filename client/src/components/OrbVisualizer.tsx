@@ -13,7 +13,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
       transition: {
         duration: 4,
         repeat: Infinity,
-        ease: "easeInOut"
+        ease: "easeInOut" as any
       }
     },
     listening: {
@@ -22,7 +22,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
       transition: {
         duration: 1.5,
         repeat: Infinity,
-        ease: "easeInOut"
+        ease: "easeInOut" as any
       }
     },
     thinking: {
@@ -31,7 +31,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
       transition: {
         duration: 2,
         repeat: Infinity,
-        ease: "linear"
+        ease: "linear" as any
       }
     },
     speaking: {
@@ -40,7 +40,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
       transition: {
         duration: 0.8,
         repeat: Infinity,
-        ease: "easeInOut"
+        ease: "easeInOut" as any
       }
     }
   };
@@ -69,13 +69,13 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
       <motion.div
         className="absolute inset-4 rounded-full blur-xl bg-primary/10"
         animate={state === 'thinking' ? { rotate: 360 } : {}}
-        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+        transition={{ duration: 3, repeat: Infinity, ease: "linear" as any }}
       />
 
       {/* Main Orb - Tanned Leather / Amber Glass Aesthetic */}
       <motion.div
         className="relative w-20 h-20 rounded-full bg-gradient-to-br from-white/40 via-primary/30 to-accent/40 backdrop-blur-3xl border border-white/50 shadow-[0_0_40px_rgba(139,92,24,0.3)] overflow-hidden"
-        variants={variants}
+        variants={variants as any}
         animate={state}
       >
         {/* Internal Shimmer */}
@@ -88,7 +88,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
           transition={{
             duration: 3,
             repeat: Infinity,
-            ease: "easeInOut"
+            ease: "easeInOut" as any
           }}
         />
         
@@ -107,7 +107,7 @@ export const OrbVisualizer: React.FC<OrbVisualizerProps> = ({ state }) => {
       <motion.div
         className="absolute inset-0 border border-primary/20 rounded-full"
         animate={{ scale: [1, 1.4], opacity: [0.5, 0] }}
-        transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeOut" as any }}
       />
     </div>
   );

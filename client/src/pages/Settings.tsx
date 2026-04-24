@@ -264,11 +264,11 @@ export function Settings() {
                   </div>
                   <p className="text-[10px] text-muted-foreground">Select which days of the week the wake-up alarm fires.</p>
                 </div>
-                <button disabled={!profileDirty || saveProfileMutation.isLoading}
+                <button disabled={!profileDirty || saveProfileMutation.isPending}
                   onClick={() => saveProfileMutation.mutate({ wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays } as any)}
                   className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
                     profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
-                  <Save size={14} />{saveProfileMutation.isLoading ? 'Saving...' : 'Save Profile'}
+                  <Save size={14} />{saveProfileMutation.isPending ? 'Saving...' : 'Save Profile'}
                 </button>
               </div>
             </motion.div>
@@ -312,11 +312,11 @@ export function Settings() {
                             Cancel
                           </button>
                           <button
-                            disabled={!newFactValue.trim() || addFactMutation.isLoading}
+                            disabled={!newFactValue.trim() || addFactMutation.isPending}
                             onClick={() => addFactMutation.mutate({ factKey: 'note', factValue: newFactValue.trim() })}
                             className="flex-1 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
                             <Save size={13} />
-                            {addFactMutation.isLoading ? 'Saving...' : 'Save Memory'}
+                            {addFactMutation.isPending ? 'Saving...' : 'Save Memory'}
                           </button>
                         </div>
                       </div>
@@ -378,11 +378,11 @@ export function Settings() {
                     ))}
                   </div>
                 </div>
-                <button disabled={!personaDirty || savePersonaMutation.isLoading}
+                <button disabled={!personaDirty || savePersonaMutation.isPending}
                   onClick={() => savePersonaMutation.mutate({ personaName, personaStyle })}
                   className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
                     personaDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
-                  <Save size={14} />{savePersonaMutation.isLoading ? 'Saving...' : 'Save Persona'}
+                  <Save size={14} />{savePersonaMutation.isPending ? 'Saving...' : 'Save Persona'}
                 </button>
               </div>
             </motion.div>
@@ -409,11 +409,11 @@ export function Settings() {
                     className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none font-mono" />
                   <p className="text-[10px] text-muted-foreground text-right">{instructions.length}/2000</p>
                 </div>
-                <button disabled={!instructionsDirty || saveInstructionsMutation.isLoading}
+                <button disabled={!instructionsDirty || saveInstructionsMutation.isPending}
                   onClick={() => saveInstructionsMutation.mutate({ instructions })}
                   className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
                     instructionsDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
-                  <Save size={14} />{saveInstructionsMutation.isLoading ? 'Saving...' : 'Save Instructions'}
+                  <Save size={14} />{saveInstructionsMutation.isPending ? 'Saving...' : 'Save Instructions'}
                 </button>
               </div>
               <div className="flex items-start gap-3 bg-card border border-border rounded-2xl px-4 py-3">

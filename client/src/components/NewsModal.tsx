@@ -188,7 +188,7 @@ export function NewsModal({ open, onClose, locale = "us", locationName }: NewsMo
 
               {/* Remaining articles */}
               <div className="divide-y divide-border mx-4 mb-4 mt-2 border border-border rounded-2xl overflow-hidden">
-                {rest.map((article, i) => (
+                {rest.map((article: any, i: number) => (
                   <motion.a
                     key={article.uuid}
                     href={article.url}
