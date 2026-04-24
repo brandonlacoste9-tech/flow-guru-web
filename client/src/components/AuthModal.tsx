@@ -105,6 +105,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
 
         {/* Logo / title */}
         <div className="mb-6 text-center">
+          <img src="/floguru-logo.png" alt="FLO GURU" className="w-14 h-14 rounded-full object-cover mx-auto mb-3 shadow-lg" />
           <h2 className="text-xl font-bold text-white tracking-tight">
             {view === "signin" && "Welcome back"}
             {view === "signup" && "Create your account"}
@@ -113,7 +114,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
             {view === "reset-sent" && "Password updated"}
           </h2>
           {view === "signin" && (
-            <p className="mt-1 text-sm text-white/50">Sign in to your Flow Guru account</p>
+            <p className="mt-1 text-sm text-white/50">Sign in to your FLO GURU account</p>
           )}
           {view === "signup" && (
             <p className="mt-1 text-sm text-white/50">Free to use — no credit card required</p>

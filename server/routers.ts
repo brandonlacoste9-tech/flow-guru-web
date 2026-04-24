@@ -187,7 +187,7 @@ function detectAssistantNameChange(message: string): string | null {
  */
 function getAssistantName(facts: Array<{ factKey: string | null; factValue: string }>): string {
   const nameFacts = facts.filter(f => f.factKey === "assistant_name");
-  return nameFacts.length > 0 ? nameFacts[nameFacts.length - 1].factValue : "Flow Guru";
+  return nameFacts.length > 0 ? nameFacts[nameFacts.length - 1].factValue : "FLO GURU";
 }
 
 // ─── Memory helpers ───────────────────────────────────────────────────────────
@@ -258,7 +258,7 @@ async function getOrCreateThreadId(userId: number, requestedThreadId?: number) {
 
   const threadId = await createConversationThread({
     userId,
-    title: "Flow Guru Chat",
+    title: "FLO GURU Chat",
   });
 
   if (!threadId) {
@@ -538,7 +538,7 @@ export const appRouter = router({
       const assistantNameFact = memoryFacts.find(
         (f: any) => f.factKey === "assistant_name" && f.category === "preference"
       );
-      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const assistantName = assistantNameFact?.factValue || "FLO GURU";
 
       const locationFact = memoryFacts.find(
         (f: any) => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
@@ -660,7 +660,7 @@ export const appRouter = router({
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await createConversationThread({
         userId,
-        title: "Flow Guru Chat",
+        title: "FLO GURU Chat",
       });
 
       if (!threadId) {
@@ -736,7 +736,7 @@ export const appRouter = router({
       const assistantNameFact = memoryFacts.find(
         f => f.factKey === "assistant_name" && f.category === "preference"
       );
-      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const assistantName = assistantNameFact?.factValue || "FLO GURU";
       const userName = ctx.user?.name || "Brandon";
 
       const memoryContext = buildMemoryContext({
@@ -922,7 +922,7 @@ export const appRouter = router({
       const assistantNameFact = memoryFacts.find(
         (f: any) => f.factKey === "assistant_name" && f.category === "preference"
       );
-      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const assistantName = assistantNameFact?.factValue || "FLO GURU";
       const userName = ctx.user?.name || "Brandon";
 
       const locationFact = memoryFacts.find(

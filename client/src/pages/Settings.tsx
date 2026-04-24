@@ -363,7 +363,7 @@ export function Settings() {
                     onChange={e => { setPersonaName(e.target.value); setPersonaDirty(true); }}
                     placeholder="e.g. Aria, Max, Nova, Flow Guru"
                     className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors" />
-                  <p className="text-[10px] text-muted-foreground">Leave blank to use the default name "Flow Guru".</p>
+                  <p className="text-[10px] text-muted-foreground">Leave blank to use the default name "FLO GURU".</p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Personality Style</label>
@@ -461,7 +461,7 @@ export function Settings() {
                   onClick={() => {
                     const code = (referralQuery.data as any)?.referralCode;
                     if (code) {
-                      navigator.clipboard.writeText(`Join me on Flow Guru — the AI personal assistant that actually knows you. Sign up with my code ${code} at https://floguru.com`);
+                      navigator.clipboard.writeText(`Join me on FLO GURU — the AI personal assistant that actually knows you. Sign up with my code ${code} at https://floguru.com`);
                       toast.success('Share message copied!');
                     }
                   }}

@@ -46,7 +46,7 @@ export default function Home() {
   const [speechEnabled, setSpeechEnabled] = useState(true);
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>(undefined);
   const [inputValue, setInputValue] = useState('');
-  const [assistantName, setAssistantName] = useState('Flow Guru');
+  const [assistantName, setAssistantName] = useState('FLO GURU');
   const [weather, setWeather] = useState<any>(null);
   const [todayEvents, setTodayEvents] = useState<any[]>([]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
@@ -366,7 +366,7 @@ export default function Home() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <Sparkles className="text-primary w-6 h-6 animate-pulse" />
+          <img src="/floguru-logo.png" alt="FLO GURU" className="w-9 h-9 rounded-full object-cover shadow-sm" />
           <h1 className="text-lg font-bold tracking-tighter uppercase">{assistantName}</h1>
         </motion.div>
         
@@ -684,7 +684,7 @@ export default function Home() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Message Flow Guru..."
+              placeholder="Message FLO GURU..."
               className="relative w-full bg-card backdrop-blur-2xl border border-border rounded-[24px] px-7 py-5 text-[16px] focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground shadow-xl"
               onKeyDown={(e) => { if (e.key === 'Enter') handleSend(inputValue); }}
             />
