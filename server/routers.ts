@@ -466,6 +466,8 @@ export const appRouter = router({
         endAt: z.string(),
         location: z.string().optional(),
         allDay: z.boolean().default(false),
+        color: z.string().optional(),
+        reminderMinutes: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -477,6 +479,8 @@ export const appRouter = router({
           endAt: new Date(input.endAt),
           location: input.location ?? null,
           allDay: input.allDay ? 1 : 0,
+          color: input.color ?? 'blue',
+          reminderMinutes: input.reminderMinutes ?? '30,15,5',
         });
         return { id };
       }),
@@ -489,6 +493,8 @@ export const appRouter = router({
         endAt: z.string().optional(),
         location: z.string().nullable().optional(),
         allDay: z.boolean().optional(),
+        color: z.string().optional(),
+        reminderMinutes: z.string().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);

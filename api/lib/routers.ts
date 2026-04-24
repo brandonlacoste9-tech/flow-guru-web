@@ -1032,7 +1032,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const thread = await getThreadByShareToken(input.token);
         if (!thread) throw new Error('Shared conversation not found');
-        const messages = await listConversationMessages(thread.id, 100);
+        const messages = await listConversationMessages(thread.id);
         return { thread, messages };
       }),
   }),

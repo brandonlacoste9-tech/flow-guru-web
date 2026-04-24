@@ -505,7 +505,7 @@ export async function listLocalEvents(userId: number, startAfter?: Date, endBefo
 }
 
 export async function updateLocalEvent(userId: number, eventId: number, data: Partial<{
-  title: string; description: string | null; startAt: Date; endAt: Date; location: string | null; allDay: number; reminderMinutes: string | null;
+  title: string; description: string | null; startAt: Date; endAt: Date; location: string | null; allDay: number; color: string; reminderMinutes: string | null;
 }>): Promise<void> {
     try {
       const db = await getDb();
