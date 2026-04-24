@@ -15,6 +15,7 @@ import { WeatherForecastModal } from "@/components/WeatherForecastModal";
 import { NewsModal } from "@/components/NewsModal";
 import { useReminders } from "@/hooks/useReminders";
 import { prewarmAudio } from "@/hooks/useAlarmSound";
+import { OnboardingFlow } from "@/components/OnboardingFlow";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -66,6 +67,9 @@ export default function Home() {
     return parseInt(localStorage.getItem('guest_msg_count') || '0', 10);
   });
   const [showSignInBanner, setShowSignInBanner] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    return !localStorage.getItem('floguru_onboarded');
+  });
   const [wakeUpTime, setWakeUpTime] = useState<string | null>(null);
   const [alarmDays, setAlarmDays] = useState<string>('0,1,2,3,4,5,6');
   const [alarmSound, setAlarmSound] = useState<import('@/hooks/useAlarmSound').AlarmSoundType>(() => {
@@ -460,8 +464,8 @@ export default function Home() {
                 transition={{ duration: 0.6, ease: "easeOut" }}
               >
                  {/* FLO GURU Logo with gold leather glow */}
-                <div className="flex justify-center mb-6">
-                  <div className="relative flex items-center justify-center">
+                <div className="flex justify-center" style={{ marginBottom: '3.5rem', paddingBottom: '0.5rem' }}>
+                  <div className="relative flex items-center justify-center" style={{ width: '220px', height: '220px' }}>
                     {/* Wide outermost gold halo */}
                     <div
                       className="absolute rounded-full pointer-events-none"
@@ -490,12 +494,25 @@ export default function Home() {
                         filter: 'blur(8px)',
                       }}
                     />
+                    {/* Gold shimmer ring — only when AI is thinking */}
+                    {sendMutation.isPending && (
+                      <motion.div
+                        className="absolute rounded-full pointer-events-none"
+                        style={{
+                          width: '148px', height: '148px',
+                          border: '2px solid transparent',
+                          background: 'linear-gradient(#1a1208, #1a1208) padding-box, conic-gradient(from 0deg, rgba(255,220,80,0.9), rgba(212,160,23,0.4), rgba(255,220,80,0.9)) border-box',
+                        }}
+                        animate={{ rotate: 360 }}
+                        transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
+                      />
+                    )}
                     {/* Logo */}
                     <motion.img
                       src="/floguru-logo.png"
                       alt="FLO GURU"
                       className="relative w-28 h-28 rounded-full object-cover"
-                      style={{ boxShadow: '0 0 24px 8px rgba(212,160,23,0.6), 0 0 48px 16px rgba(180,120,10,0.35)' }}
+                      style={{ boxShadow: sendMutation.isPending ? '0 0 32px 12px rgba(255,220,80,0.7), 0 0 60px 20px rgba(180,120,10,0.45)' : '0 0 24px 8px rgba(212,160,23,0.6), 0 0 48px 16px rgba(180,120,10,0.35)' }}
                       animate={{
                         scale: isListening ? 1.08 : sendMutation.isPending ? [1, 1.04, 1] : isSpeaking ? [1, 1.05, 1] : 1,
                         rotate: sendMutation.isPending ? [0, 2, -2, 0] : 0,
@@ -531,7 +548,7 @@ export default function Home() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                   {/* Weather Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer"
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
                     onClick={() => weather && coords && setShowForecast(true)}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -570,7 +587,7 @@ export default function Home() {
 
                   {/* Calendar Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer"
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 }}
@@ -610,7 +627,7 @@ export default function Home() {
 
                   {/* News Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer"
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.6 }}
@@ -862,6 +879,12 @@ export default function Home() {
       </AnimatePresence>
 
       {/* ── Auth Modal ── */}
+      {showOnboarding && (
+        <OnboardingFlow
+          onComplete={() => setShowOnboarding(false)}
+          userName={user?.name?.split(' ')[0]}
+        />
+      )}
       {(showAuthModal || resetToken) && (
         <AuthModal
           resetToken={resetToken}
