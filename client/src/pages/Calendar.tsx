@@ -19,14 +19,14 @@ const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct
 // light/dark variants are applied based on the .dark class on <html>.
 export type CalendarThemeId =
   | "default"
-  | "dark-leather"
-  | "ocean"
-  | "forest"
-  | "rose"
-  | "slate"
-  | "lavender"
-  | "amber"
-  | "midnight";
+  | "medium-tan"
+  | "saddle"
+  | "cognac"
+  | "pink-tan"
+  | "dusty-rose"
+  | "slate-leather"
+  | "dark-espresso"
+  | "dark-leather";
 
 export type CalendarTheme = {
   id: CalendarThemeId;
@@ -51,25 +51,167 @@ export type CalendarTheme = {
 
 export const CALENDAR_THEMES: CalendarTheme[] = [
   {
+    // Light Tan — pale cream leather, warm dark-brown text
     id: "default",
-    label: "Parchment",
+    label: "Light Tan",
     swatch: "bg-amber-100",
     vars: {
-      "--cal-bg":           "light-dark(#f5f0e8, #1a1a1f)",
-      "--cal-header-bg":    "light-dark(rgba(245,240,232,0.97), rgba(26,26,31,0.97))",
-      "--cal-cell-bg":      "light-dark(#faf6ee, #1e1e24)",
-      "--cal-cell-other":   "light-dark(#ede8de, #17171c)",
-      "--cal-cell-today":   "light-dark(#e8dcc8, #2a2535)",
-      "--cal-cell-selected":"light-dark(#ddd0b8, #2d2840)",
-      "--cal-border":       "light-dark(rgba(160,130,90,0.30), rgba(255,255,255,0.08))",
-      "--cal-text":         "light-dark(#0d0804, #f0ece4)",
-      "--cal-text-muted":   "light-dark(#3d2810, #7a7060)",
-      "--cal-accent":       "light-dark(#7a5c2e, #c4a06a)",
-      "--cal-accent-fg":    "#ffffff",
-      "--cal-sidebar-bg":   "light-dark(rgba(240,234,222,0.85), rgba(20,20,25,0.85))",
+      "--cal-bg":           "#d4b896",
+      "--cal-header-bg":    "rgba(196,162,120,0.97)",
+      "--cal-cell-bg":      "#dcc4a0",
+      "--cal-cell-other":   "#c8a87c",
+      "--cal-cell-today":   "#b8906a",
+      "--cal-cell-selected":"#a87c58",
+      "--cal-border":       "rgba(100,65,30,0.25)",
+      "--cal-text":         "#2c1a08",
+      "--cal-text-muted":   "#6b4020",
+      "--cal-accent":       "#7a4a18",
+      "--cal-accent-fg":    "#f5e8d4",
+      "--cal-sidebar-bg":   "rgba(196,162,120,0.92)",
     },
   },
   {
+    // Medium Tan — warm caramel leather, deep espresso text
+    id: "medium-tan",
+    label: "Medium Tan",
+    swatch: "bg-amber-300",
+    vars: {
+      "--cal-bg":           "#b8905a",
+      "--cal-header-bg":    "rgba(168,124,72,0.97)",
+      "--cal-cell-bg":      "#c49a68",
+      "--cal-cell-other":   "#a87c50",
+      "--cal-cell-today":   "#946840",
+      "--cal-cell-selected":"#845830",
+      "--cal-border":       "rgba(80,45,10,0.28)",
+      "--cal-text":         "#1e0e02",
+      "--cal-text-muted":   "#5a3010",
+      "--cal-accent":       "#3e1e04",
+      "--cal-accent-fg":    "#f0dcc0",
+      "--cal-sidebar-bg":   "rgba(168,124,72,0.92)",
+    },
+  },
+  {
+    // Saddle — rich mid-brown leather, cream text
+    id: "saddle",
+    label: "Saddle",
+    swatch: "bg-yellow-800",
+    vars: {
+      "--cal-bg":           "#8b5e3c",
+      "--cal-header-bg":    "rgba(110,72,40,0.97)",
+      "--cal-cell-bg":      "#9a6a48",
+      "--cal-cell-other":   "#7a5030",
+      "--cal-cell-today":   "#6a4228",
+      "--cal-cell-selected":"#5c3820",
+      "--cal-border":       "rgba(40,20,5,0.30)",
+      "--cal-text":         "#f5e8d4",
+      "--cal-text-muted":   "#d4b896",
+      "--cal-accent":       "#f0d4a8",
+      "--cal-accent-fg":    "#3e1e04",
+      "--cal-sidebar-bg":   "rgba(110,72,40,0.92)",
+    },
+  },
+  {
+    // Cognac — deep amber-brown, warm gold text
+    id: "cognac",
+    label: "Cognac",
+    swatch: "bg-orange-800",
+    vars: {
+      "--cal-bg":           "#7a3e18",
+      "--cal-header-bg":    "rgba(96,46,16,0.97)",
+      "--cal-cell-bg":      "#8a4a22",
+      "--cal-cell-other":   "#6a3010",
+      "--cal-cell-today":   "#5a2808",
+      "--cal-cell-selected":"#4e2004",
+      "--cal-border":       "rgba(255,200,120,0.20)",
+      "--cal-text":         "#fce8c0",
+      "--cal-text-muted":   "#e0b870",
+      "--cal-accent":       "#f5c842",
+      "--cal-accent-fg":    "#3e1e04",
+      "--cal-sidebar-bg":   "rgba(96,46,16,0.92)",
+    },
+  },
+  {
+    // Pink Tan — blush leather, warm rose-brown text
+    id: "pink-tan",
+    label: "Pink Tan",
+    swatch: "bg-rose-200",
+    vars: {
+      "--cal-bg":           "#e8c4b0",
+      "--cal-header-bg":    "rgba(220,188,168,0.97)",
+      "--cal-cell-bg":      "#f0d0bc",
+      "--cal-cell-other":   "#d8b09a",
+      "--cal-cell-today":   "#c89a82",
+      "--cal-cell-selected":"#b8846c",
+      "--cal-border":       "rgba(120,60,40,0.22)",
+      "--cal-text":         "#3a1808",
+      "--cal-text-muted":   "#7a3c24",
+      "--cal-accent":       "#8c3a20",
+      "--cal-accent-fg":    "#fce8dc",
+      "--cal-sidebar-bg":   "rgba(220,188,168,0.92)",
+    },
+  },
+  {
+    // Dusty Rose Leather — muted mauve-tan, deep plum-brown text
+    id: "dusty-rose",
+    label: "Dusty Rose",
+    swatch: "bg-rose-400",
+    vars: {
+      "--cal-bg":           "#c49090",
+      "--cal-header-bg":    "rgba(180,130,130,0.97)",
+      "--cal-cell-bg":      "#d0a0a0",
+      "--cal-cell-other":   "#b47878",
+      "--cal-cell-today":   "#a06060",
+      "--cal-cell-selected":"#8c5050",
+      "--cal-border":       "rgba(80,30,30,0.25)",
+      "--cal-text":         "#280808",
+      "--cal-text-muted":   "#6a2828",
+      "--cal-accent":       "#5c1818",
+      "--cal-accent-fg":    "#fce8e8",
+      "--cal-sidebar-bg":   "rgba(180,130,130,0.92)",
+    },
+  },
+  {
+    // Slate Leather — cool grey-tan, dark charcoal-brown text
+    id: "slate-leather",
+    label: "Slate Leather",
+    swatch: "bg-slate-400",
+    vars: {
+      "--cal-bg":           "#a09080",
+      "--cal-header-bg":    "rgba(140,124,108,0.97)",
+      "--cal-cell-bg":      "#b0a090",
+      "--cal-cell-other":   "#8c7c6c",
+      "--cal-cell-today":   "#7a6858",
+      "--cal-cell-selected":"#6a5848",
+      "--cal-border":       "rgba(40,28,18,0.28)",
+      "--cal-text":         "#180e06",
+      "--cal-text-muted":   "#4a3828",
+      "--cal-accent":       "#2e1e10",
+      "--cal-accent-fg":    "#ecdcc8",
+      "--cal-sidebar-bg":   "rgba(140,124,108,0.92)",
+    },
+  },
+  {
+    // Dark Espresso — deep dark leather, warm cream text
+    id: "dark-espresso",
+    label: "Dark Espresso",
+    swatch: "bg-stone-800",
+    vars: {
+      "--cal-bg":           "#2c1a0a",
+      "--cal-header-bg":    "rgba(34,20,8,0.97)",
+      "--cal-cell-bg":      "#382210",
+      "--cal-cell-other":   "#221408",
+      "--cal-cell-today":   "#4a2e14",
+      "--cal-cell-selected":"#5a3a1e",
+      "--cal-border":       "rgba(200,160,100,0.18)",
+      "--cal-text":         "#f0e0c8",
+      "--cal-text-muted":   "#b89060",
+      "--cal-accent":       "#d4a060",
+      "--cal-accent-fg":    "#1e0e02",
+      "--cal-sidebar-bg":   "rgba(28,16,6,0.95)",
+    },
+  },
+  {
+    // Dark Leather — rich black-brown, antique gold text
     id: "dark-leather",
     label: "Dark Leather",
     swatch: "bg-amber-900",
@@ -86,139 +228,6 @@ export const CALENDAR_THEMES: CalendarTheme[] = [
       "--cal-accent":       "#c4903a",
       "--cal-accent-fg":    "#1a1208",
       "--cal-sidebar-bg":   "rgba(16,10,2,0.90)",
-    },
-  },
-  {
-    id: "ocean",
-    label: "Ocean",
-    swatch: "bg-sky-400",
-    vars: {
-      "--cal-bg":           "light-dark(#e8f4fd, #0d1b2a)",
-      "--cal-header-bg":    "light-dark(rgba(232,244,253,0.97), rgba(13,27,42,0.97))",
-      "--cal-cell-bg":      "light-dark(#f0f8ff, #0f1f30)",
-      "--cal-cell-other":   "light-dark(#daeef8, #0a1520)",
-      "--cal-cell-today":   "light-dark(#c8e4f5, #1a3a55)",
-      "--cal-cell-selected":"light-dark(#b0d4ee, #1e4060)",
-      "--cal-border":       "light-dark(rgba(60,140,200,0.25), rgba(100,180,240,0.12))",
-      "--cal-text":         "light-dark(#051525, #d0eaff)",
-      "--cal-text-muted":   "light-dark(#1a5070, #5a8aaa)",
-      "--cal-accent":       "light-dark(#0284c7, #38bdf8)",
-      "--cal-accent-fg":    "#ffffff",
-      "--cal-sidebar-bg":   "light-dark(rgba(224,240,252,0.90), rgba(13,27,42,0.90))",
-    },
-  },
-  {
-    id: "forest",
-    label: "Forest",
-    swatch: "bg-emerald-500",
-    vars: {
-      "--cal-bg":           "light-dark(#e4f5eb, #0d1f14)",
-      "--cal-header-bg":    "light-dark(rgba(228,245,235,0.97), rgba(13,31,20,0.97))",
-      "--cal-cell-bg":      "light-dark(#edf8f1, #0f2218)",
-      "--cal-cell-other":   "light-dark(#d8eedf, #0a1a10)",
-      "--cal-cell-today":   "light-dark(#c0e4cc, #1a3d28)",
-      "--cal-cell-selected":"light-dark(#a8d8b8, #1e4530)",
-      "--cal-border":       "light-dark(rgba(30,140,70,0.25), rgba(60,180,100,0.12))",
-      "--cal-text":         "light-dark(#03140a, #c8f0d8)",
-      "--cal-text-muted":   "light-dark(#144d28, #4a8060)",
-      "--cal-accent":       "light-dark(#059669, #34d399)",
-      "--cal-accent-fg":    "#ffffff",
-      "--cal-sidebar-bg":   "light-dark(rgba(218,240,226,0.90), rgba(13,31,20,0.90))",
-    },
-  },
-  {
-    id: "rose",
-    label: "Rose",
-    swatch: "bg-rose-400",
-    vars: {
-      "--cal-bg":           "light-dark(#fce8ec, #1f0d10)",
-      "--cal-header-bg":    "light-dark(rgba(252,232,236,0.97), rgba(31,13,16,0.97))",
-      "--cal-cell-bg":      "light-dark(#fef0f3, #221015)",
-      "--cal-cell-other":   "light-dark(#f5d8de, #180a0d)",
-      "--cal-cell-today":   "light-dark(#f8c0ca, #3d1a20)",
-      "--cal-cell-selected":"light-dark(#f4a8b5, #451e25)",
-      "--cal-border":       "light-dark(rgba(200,50,75,0.25), rgba(240,80,100,0.12))",
-      "--cal-text":         "light-dark(#1e0208, #ffd0d8)",
-      "--cal-text-muted":   "light-dark(#5c1020, #905060)",
-      "--cal-accent":       "light-dark(#e11d48, #fb7185)",
-      "--cal-accent-fg":    "#ffffff",
-      "--cal-sidebar-bg":   "light-dark(rgba(245,220,228,0.90), rgba(31,13,16,0.90))",
-    },
-  },
-  {
-    id: "slate",
-    label: "Slate",
-    swatch: "bg-slate-400",
-    vars: {
-      "--cal-bg":           "light-dark(#e8ecf0, #0f1117)",
-      "--cal-header-bg":    "light-dark(rgba(232,236,240,0.97), rgba(15,17,23,0.97))",
-      "--cal-cell-bg":      "light-dark(#f0f3f6, #111318)",
-      "--cal-cell-other":   "light-dark(#dde2e8, #0c0e13)",
-      "--cal-cell-today":   "light-dark(#c8d2de, #1e2330)",
-      "--cal-cell-selected":"light-dark(#b8c4d4, #222838)",
-      "--cal-border":       "light-dark(rgba(80,100,140,0.25), rgba(100,120,160,0.12))",
-      "--cal-text":         "light-dark(#050a12, #e2e8f0)",
-      "--cal-text-muted":   "light-dark(#1e3048, #4a5568)",
-      "--cal-accent":       "light-dark(#334e68, #94a3b8)",
-      "--cal-accent-fg":    "#ffffff",
-      "--cal-sidebar-bg":   "light-dark(rgba(222,228,236,0.90), rgba(15,17,23,0.90))",
-    },
-  },
-  {
-    id: "lavender",
-    label: "Lavender",
-    swatch: "bg-violet-400",
-    vars: {
-      "--cal-bg":           "light-dark(#ece6ff, #120d1f)",
-      "--cal-header-bg":    "light-dark(rgba(236,230,255,0.97), rgba(18,13,31,0.97))",
-      "--cal-cell-bg":      "light-dark(#f2eeff, #151020)",
-      "--cal-cell-other":   "light-dark(#e0d8f8, #0e0a18)",
-      "--cal-cell-today":   "light-dark(#cfc0f5, #2a1f45)",
-      "--cal-cell-selected":"light-dark(#bfaaf0, #301e50)",
-      "--cal-border":       "light-dark(rgba(110,60,210,0.25), rgba(140,80,240,0.12))",
-      "--cal-text":         "light-dark(#0d0220, #e8d8ff)",
-      "--cal-text-muted":   "light-dark(#3a1a70, #6050a0)",
-      "--cal-accent":       "light-dark(#6d28d9, #a78bfa)",
-      "--cal-accent-fg":    "#ffffff",
-      "--cal-sidebar-bg":   "light-dark(rgba(226,218,252,0.90), rgba(18,13,31,0.90))",
-    },
-  },
-  {
-    id: "amber",
-    label: "Amber",
-    swatch: "bg-amber-400",
-    vars: {
-      "--cal-bg":           "light-dark(#f5e8c0, #1f1800)",
-      "--cal-header-bg":    "light-dark(rgba(245,232,192,0.97), rgba(31,24,0,0.97))",
-      "--cal-cell-bg":      "light-dark(#faf0cc, #221a00)",
-      "--cal-cell-other":   "light-dark(#ecdda8, #180f00)",
-      "--cal-cell-today":   "light-dark(#e0cc88, #3d2e00)",
-      "--cal-cell-selected":"light-dark(#d4c070, #453400)",
-      "--cal-border":       "light-dark(rgba(160,110,0,0.28), rgba(220,160,0,0.12))",
-      "--cal-text":         "light-dark(#140c00, #ffe8a0)",
-      "--cal-text-muted":   "light-dark(#4a2e00, #806020)",
-      "--cal-accent":       "light-dark(#b45309, #fbbf24)",
-      "--cal-accent-fg":    "#ffffff",
-      "--cal-sidebar-bg":   "light-dark(rgba(236,220,180,0.90), rgba(31,24,0,0.90))",
-    },
-  },
-  {
-    id: "midnight",
-    label: "Midnight",
-    swatch: "bg-indigo-900",
-    vars: {
-      "--cal-bg":           "light-dark(#dde0ff, #08091a)",
-      "--cal-header-bg":    "light-dark(rgba(221,224,255,0.97), rgba(8,9,26,0.97))",
-      "--cal-cell-bg":      "light-dark(#e8eaff, #0a0b1e)",
-      "--cal-cell-other":   "light-dark(#d0d4f8, #060710)",
-      "--cal-cell-today":   "light-dark(#b8bcf0, #1a1e40)",
-      "--cal-cell-selected":"light-dark(#a8aee8, #1e2248)",
-      "--cal-border":       "light-dark(rgba(40,50,190,0.25), rgba(60,80,220,0.12))",
-      "--cal-text":         "light-dark(#020415, #d0d4ff)",
-      "--cal-text-muted":   "light-dark(#141a60, #303880)",
-      "--cal-accent":       "light-dark(#3730a3, #6366f1)",
-      "--cal-accent-fg":    "#ffffff",
-      "--cal-sidebar-bg":   "light-dark(rgba(210,214,252,0.90), rgba(8,9,26,0.90))",
     },
   },
 ];
