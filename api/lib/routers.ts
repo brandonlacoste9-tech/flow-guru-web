@@ -405,12 +405,14 @@ export const appRouter = router({
   assistant: router({
     bootstrap: publicProcedure.query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
-      const profile = await getUserMemoryProfile(userId);
-      const memoryFacts = await listUserMemoryFacts(userId);
-      const thread = await findLatestConversationThread(userId);
+      const [profile, memoryFacts, thread, providerConnections] = await Promise.all([
+        getUserMemoryProfile(userId),
+        listUserMemoryFacts(userId),
+        findLatestConversationThread(userId),
+        listProviderConnections(userId),
+      ]);
       const safeThread = thread && thread.userId === userId ? thread : null;
       const messages = safeThread ? await listConversationMessages(safeThread.id) : [];
-      const providerConnections = await listProviderConnections(userId);
 
       // Find user's assistant name
       const assistantNameFact = memoryFacts.find(
@@ -584,9 +586,11 @@ export const appRouter = router({
         content: input.message,
       });
 
-      const profile = await getUserMemoryProfile(userId);
-      const memoryFacts = await listUserMemoryFacts(userId);
-      const history = await listConversationMessages(threadId);
+      const [profile, memoryFacts, history] = await Promise.all([
+        getUserMemoryProfile(userId),
+        listUserMemoryFacts(userId),
+        listConversationMessages(threadId),
+      ]);
 
       // --- Name change detection (fast path, before planner) ---
       const nameChangeMatch = input.message.match(
@@ -783,7 +787,7 @@ export const appRouter = router({
               content: systemPrompt,
             },
             ...actionSystemMessages,
-            ...history.map((m: any) => ({
+            ...history.slice(-15).map((m: any) => ({
               role: m.role as "user" | "assistant",
               content: m.content as string,
             })),
@@ -804,29 +808,21 @@ export const appRouter = router({
       });
       await touchConversationThread(threadId);
 
-      let memoryUpdate = {
-        profileUpdated: false,
-        factsAdded: 0,
-      };
+      // PERF: Fire-and-forget memory extraction to return response immediately
+      extractAndPersistMemory({
+        userId,
+        userName,
+        userMessage: input.message,
+        assistantReply,
+      }).catch(err => console.warn("[Flow Guru] Background memory extraction failed:", err));
 
-      try {
-        memoryUpdate = await extractAndPersistMemory({
-          userId,
-          userName,
-          userMessage: input.message,
-          assistantReply,
-        });
-      } catch (error) {
-        console.warn("[Flow Guru] Memory extraction failed, but the message send completed.", error);
-      }
-
-      const messages = await listConversationMessages(threadId);
+      const finalMessages = await listConversationMessages(threadId);
 
       return {
         threadId,
         reply: assistantReply,
-        messages,
-        memoryUpdate,
+        messages: finalMessages,
+        memoryUpdate: { profileUpdated: false, factsAdded: 0 }, // Handled in background
         actionResult,
       };
     }),
