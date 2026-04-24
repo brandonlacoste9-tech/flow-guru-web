@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'wouter';
 
-type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'referral';
+type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'referral' | 'integrations';
 
 const RADIO_URLS: Record<string, string> = {
   'radio-focus': 'https://ice6.somafm.com/groovesalad-128-mp3',
@@ -155,6 +155,7 @@ export function Settings() {
     { id: 'memory' as Tab, label: 'Memory', icon: Brain },
     { id: 'persona' as Tab, label: 'Persona', icon: Wand2 },
     { id: 'instructions' as Tab, label: 'Instructions', icon: MessageSquare },
+    { id: 'integrations' as Tab, label: 'Integrations', icon: Share2 },
     { id: 'referral' as Tab, label: 'Referral', icon: Gift },
   ];
 
@@ -423,6 +424,68 @@ export function Settings() {
             </motion.div>
           )}
 
+          {activeTab === 'integrations' && (
+            <motion.div key="integrations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+              <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Share2 size={14} className="text-primary" />
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Service Integrations</h2>
+                </div>
+                <p className="text-xs text-muted-foreground -mt-2">Connect your external accounts to allow your assistant to manage your schedule and music.</p>
+                
+                <div className="space-y-3">
+                  {/* Spotify */}
+                  <div className="flex items-center justify-between p-4 bg-background border border-border rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#1DB954]/10 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.216.354-.678.468-1.032.252-2.86-1.748-6.458-2.143-10.697-1.174-.405.093-.812-.162-.905-.567-.093-.405.162-.812.567-.905 4.636-1.06 8.597-.613 11.77 1.332.355.216.469.678.252 1.032zm1.465-3.266c-.272.443-.848.583-1.291.311-3.273-2.012-8.261-2.593-12.13-1.418-.496.15-.1.026-.646-.246-.15-.496.104-.1.026-.646.246 4.316-1.31 9.805-.66 13.513 1.616.443.272.583.848.311 1.291zm.143-3.41c-3.926-2.332-10.4-2.55-14.17-1.405-.603.183-1.242-.163-1.425-.766-.183-.603.163-1.242.766-1.425 4.32-1.313 11.474-1.06 16.002 1.626.541.321.716 1.022.395 1.563-.32.541-1.022.716-1.563.395l-.005.005z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Spotify</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Music & Playlists</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => window.location.href = '/api/integrations/spotify/start'}
+                      className="px-4 py-2 rounded-xl bg-secondary text-xs font-bold hover:bg-primary hover:text-primary-foreground transition-all"
+                    >
+                      Connect
+                    </button>
+                  </div>
+
+                  {/* Google Calendar */}
+                  <div className="flex items-center justify-between p-4 bg-background border border-border rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm-7-7h5v5h-5v-5z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Google Calendar</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Schedule & Events</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => window.location.href = '/api/integrations/google-calendar/start'}
+                      className="px-4 py-2 rounded-xl bg-secondary text-xs font-bold hover:bg-primary hover:text-primary-foreground transition-all"
+                    >
+                      Connect
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
+                  <AlertCircle size={14} className="text-primary shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Flow Guru uses end-to-end encryption for your service tokens. We never store your passwords, and you can revoke access at any time from your Google or Spotify account settings.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
           {activeTab === 'referral' && (
             <motion.div key="referral" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
               <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
