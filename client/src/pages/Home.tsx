@@ -305,16 +305,47 @@ export default function Home() {
     { startAt: todayStart.toISOString(), endAt: todayEnd.toISOString() },
     { refetchInterval: 60000, staleTime: 30000 }
   );
-  // Merge bootstrap todayEvents (includes Google Calendar) with live local events
+
+  // Fetch real Google Calendar events via API
+  const [googleCalEvents, setGoogleCalEvents] = useState<any[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchGcal = async () => {
+      try {
+        const resp = await fetch('/api/integrations/google-calendar/events', { credentials: 'include' });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (!cancelled && data.connected && data.events) {
+            setGoogleCalEvents(data.events.map((e: any) => ({
+              title: e.summary,
+              start: e.startISO,
+              allDay: e.allDay,
+              color: 'blue',
+              source: 'google',
+            })));
+            setIsGoogleConnected(true);
+          }
+        }
+      } catch { /* silent */ }
+    };
+    fetchGcal();
+    const interval = setInterval(fetchGcal, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // Merge local events + Google Calendar events
   const liveLocalEvents = (todayLocalEventsQuery.data ?? []).map((e: any) => ({
     title: e.title,
     start: e.startAt ? new Date(e.startAt).toISOString() : null,
     allDay: Boolean(e.allDay),
     color: e.color ?? 'blue',
+    source: 'local',
   }));
-  // Combine: live local events + Google Calendar events from bootstrap, deduplicate by title+start
-  const googleEvents = todayEvents.filter((e: any) => !liveLocalEvents.some((l: any) => l.title === e.title && l.start === e.start));
-  const allTodayEvents = [...liveLocalEvents, ...googleEvents].sort((a: any, b: any) => {
+  // Combine: live local events + Google Calendar events (real API), deduplicate by title+start
+  const bootstrapGoogleEvents = todayEvents.filter((e: any) => !liveLocalEvents.some((l: any) => l.title === e.title && l.start === e.start));
+  const mergedGoogleEvents = googleCalEvents.length > 0 ? googleCalEvents : bootstrapGoogleEvents;
+  const dedupedGoogle = mergedGoogleEvents.filter((e: any) => !liveLocalEvents.some((l: any) => l.title === e.title && l.start === e.start));
+  const allTodayEvents = [...liveLocalEvents, ...dedupedGoogle].sort((a: any, b: any) => {
     if (!a.start) return 1; if (!b.start) return -1;
     return new Date(a.start).getTime() - new Date(b.start).getTime();
   });
@@ -597,7 +628,17 @@ export default function Home() {
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Today</span>
                       </div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-primary">Open Calendar</span>
+                      <span
+                        className="text-[10px] uppercase font-bold tracking-wider text-primary cursor-pointer"
+                        onClick={(e) => {
+                          if (isGoogleConnected) {
+                            e.stopPropagation();
+                            window.open('https://calendar.google.com/calendar/u/0/r', '_blank');
+                          }
+                        }}
+                      >
+                        {isGoogleConnected ? 'Open Google Calendar' : 'Open Calendar'}
+                      </span>
                     </div>
                     
                     {allTodayEvents.length > 0 ? (
