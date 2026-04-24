@@ -454,10 +454,40 @@ export default function Home() {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.6, ease: "easeOut" }}
               >
-                <OrbVisualizer 
-                  state={isListening ? 'listening' : sendMutation.isPending ? 'thinking' : isSpeaking ? 'speaking' : 'idle'} 
-                />
-
+                 {/* FLO GURU Logo with leather glow */}
+                <div className="flex justify-center mb-6">
+                  <div className="relative">
+                    {/* Outer glow layers */}
+                    <div className={cn(
+                      "absolute inset-0 rounded-full blur-3xl transition-all duration-700",
+                      isListening ? "bg-amber-400/50 scale-150" :
+                      sendMutation.isPending ? "bg-yellow-600/40 scale-125 animate-pulse" :
+                      isSpeaking ? "bg-amber-500/45 scale-140 animate-pulse" :
+                      "bg-amber-700/30 scale-125"
+                    )} style={{ transform: isListening ? 'scale(1.6)' : isSpeaking ? 'scale(1.45)' : sendMutation.isPending ? 'scale(1.3)' : 'scale(1.25)' }} />
+                    <div className={cn(
+                      "absolute inset-0 rounded-full blur-xl transition-all duration-500",
+                      isListening ? "bg-amber-300/40" :
+                      sendMutation.isPending ? "bg-yellow-500/30 animate-pulse" :
+                      isSpeaking ? "bg-amber-400/35 animate-pulse" :
+                      "bg-amber-600/20"
+                    )} />
+                    {/* Logo */}
+                    <motion.img
+                      src="/floguru-logo.png"
+                      alt="FLO GURU"
+                      className="relative w-28 h-28 rounded-full object-cover shadow-2xl"
+                      animate={{
+                        scale: isListening ? 1.08 : sendMutation.isPending ? [1, 1.04, 1] : isSpeaking ? [1, 1.05, 1] : 1,
+                        rotate: sendMutation.isPending ? [0, 2, -2, 0] : 0,
+                      }}
+                      transition={{
+                        scale: { duration: 0.3 },
+                        rotate: sendMutation.isPending ? { repeat: Infinity, duration: 0.8 } : { duration: 0.3 },
+                      }}
+                    />
+                  </div>
+                </div>
                 {/* Time & Greeting */}
                 <div className="mb-8">
                   <motion.h3 
@@ -623,9 +653,25 @@ export default function Home() {
           {view === 'chat' && (
             <div className="space-y-6 pt-6">
               <div className="flex justify-center mb-8">
-                <OrbVisualizer 
-                  state={isListening ? 'listening' : sendMutation.isPending ? 'thinking' : isSpeaking ? 'speaking' : 'idle'} 
-                />
+                <div className="relative">
+                  <div className={cn(
+                    "absolute inset-0 rounded-full blur-3xl transition-all duration-700",
+                    isListening ? "bg-amber-400/50" :
+                    sendMutation.isPending ? "bg-yellow-600/40 animate-pulse" :
+                    isSpeaking ? "bg-amber-500/45 animate-pulse" :
+                    "bg-amber-700/25"
+                  )} style={{ transform: isListening ? 'scale(1.6)' : isSpeaking ? 'scale(1.45)' : sendMutation.isPending ? 'scale(1.3)' : 'scale(1.2)' }} />
+                  <div className="absolute inset-0 rounded-full blur-xl bg-amber-600/15" />
+                  <motion.img
+                    src="/floguru-logo.png"
+                    alt="FLO GURU"
+                    className="relative w-16 h-16 rounded-full object-cover shadow-xl"
+                    animate={{
+                      scale: isListening ? 1.08 : sendMutation.isPending ? [1, 1.04, 1] : isSpeaking ? [1, 1.05, 1] : 1,
+                    }}
+                    transition={{ scale: { duration: 0.3 }, repeat: (sendMutation.isPending || isSpeaking) ? Infinity : 0 }}
+                  />
+                </div>
               </div>
 
               <AnimatePresence initial={false}>
