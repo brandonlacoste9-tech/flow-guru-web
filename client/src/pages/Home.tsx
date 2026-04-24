@@ -397,24 +397,24 @@ export default function Home() {
       </div>
 
       {/* Header */}
-      <header className="px-6 pt-5 pb-3 flex justify-between items-center z-50">
+      <header className="px-4 sm:px-6 pt-5 pb-3 flex justify-between items-center z-50">
         <motion.div 
-          className="flex items-center gap-2.5"
+          className="flex items-center gap-2"
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <img src="/floguru-logo.png" alt="FLO GURU" className="w-9 h-9 rounded-full object-cover shadow-sm" />
-          <h1 className="text-lg font-bold tracking-tighter uppercase">FLO GURU</h1>
+          <img src="/floguru-logo.png" alt="FLO GURU" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shadow-sm" />
+          <h1 className="text-base sm:text-lg font-bold tracking-tighter uppercase">FLO GURU</h1>
         </motion.div>
         
         <motion.div 
-          className="flex items-center gap-2"
+          className="flex items-center gap-1.5 sm:gap-2"
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="hidden sm:flex gap-1.5 mr-2">
+          <div className="hidden md:flex gap-1.5 mr-2">
             {isGoogleConnected && <Calendar className="w-3.5 h-3.5 text-primary/60" />}
             {isSpotifyConnected && <Volume2 className="w-3.5 h-3.5 text-primary/60" />}
           </div>
@@ -423,15 +423,15 @@ export default function Home() {
             <button 
               onClick={() => startFreshMutation.mutate()}
               title="Start New Session"
-              className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground"
             >
-              {startFreshMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <MessageSquarePlus size={14} />}
+              {startFreshMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <MessageSquarePlus size={14} />}
             </button>
           )}
 
           <button onClick={() => navigate("/calendar")}
             title="Open Calendar"
-            className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
             <Calendar size={14} />
           </button>
 
@@ -444,64 +444,60 @@ export default function Home() {
               localStorage.setItem('voiceGender', next);
               toast.success(`Voice switched to ${next === 'male' ? 'Brian (male)' : 'Sarah (female)'}`);
             }}
-            title={`Voice: ${voiceGender === 'male' ? 'Male (Brian)' : 'Female (Sarah)'} — click to switch`}
-            className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground"
           >
             {voiceGender === 'male' ? <User size={14} /> : <UserRound size={14} />}
           </button>
 
           <button onClick={() => navigate('/settings')}
-            title="AI Settings"
-            className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
             <Settings size={14} />
           </button>
 
           <button onClick={() => setSpeechEnabled(!speechEnabled)}
-            className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">
             {speechEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
           </button>
           {user ? (
             <button onClick={() => logout()}
-              title="Sign out"
-              className="w-9 h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-destructive/10 hover:border-destructive/30 transition-all text-muted-foreground hover:text-destructive shadow-sm">
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-destructive/10 hover:border-destructive/30 transition-all text-muted-foreground hover:text-destructive shadow-sm">
               <LogOut size={14} />
             </button>
           ) : (
             <button
               onClick={() => setShowAuthModal(true)}
-              title="Sign in to save your history"
-              className="flex items-center gap-1.5 px-3 h-9 rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 transition-all text-primary text-xs font-semibold shadow-sm">
-              <User size={13} />
-              Sign in
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 h-8 sm:h-9 rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 transition-all text-primary text-[10px] sm:text-xs font-semibold shadow-sm">
+              <User size={12} />
+              <span className="hidden xs:inline">Sign in</span>
             </button>
           )}
         </motion.div>
       </header>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto px-5 scrollbar-hide z-10">
+      <main className="flex-1 overflow-y-auto px-4 sm:px-5 scrollbar-hide z-10">
         <div className="max-w-2xl mx-auto pb-36">
 
           {/* Dashboard */}
           <AnimatePresence>
             {view === 'dashboard' && (
               <motion.div 
-                className="pt-8"
+                className="pt-4 sm:pt-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.6, ease: "easeOut" }}
               >
                  {/* FLO GURU Logo with gold leather glow */}
-                <div className="flex justify-center" style={{ marginBottom: '3.5rem', paddingBottom: '0.5rem' }}>
-                  <div className="relative flex items-center justify-center" style={{ width: '220px', height: '220px' }}>
+                <div className="flex justify-center" style={{ marginBottom: '2.5rem', paddingBottom: '0.5rem' }}>
+                  <div className="relative flex items-center justify-center" style={{ width: '180px', height: '180px' }}>
                     {/* Wide outermost gold halo */}
                     <div
                       className="absolute rounded-full pointer-events-none"
                       style={{
-                        width: '220px', height: '220px',
+                        width: '180px', height: '180px',
                         background: 'radial-gradient(circle, rgba(212,160,23,0.45) 0%, rgba(180,120,10,0.25) 40%, transparent 70%)',
-                        filter: 'blur(28px)',
+                        filter: 'blur(24px)',
                         animation: 'pulse 3s ease-in-out infinite',
                       }}
                     />
@@ -509,18 +505,18 @@ export default function Home() {
                     <div
                       className="absolute rounded-full pointer-events-none"
                       style={{
-                        width: '170px', height: '170px',
+                        width: '140px', height: '140px',
                         background: 'radial-gradient(circle, rgba(255,200,50,0.55) 0%, rgba(210,150,20,0.35) 45%, transparent 70%)',
-                        filter: 'blur(16px)',
+                        filter: 'blur(14px)',
                       }}
                     />
                     {/* Inner tight gold corona */}
                     <div
                       className="absolute rounded-full pointer-events-none"
                       style={{
-                        width: '130px', height: '130px',
+                        width: '110px', height: '110px',
                         background: 'radial-gradient(circle, rgba(255,220,80,0.70) 0%, rgba(220,170,30,0.45) 50%, transparent 70%)',
-                        filter: 'blur(8px)',
+                        filter: 'blur(6px)',
                       }}
                     />
                     {/* Gold shimmer ring — only when AI is thinking */}
@@ -528,7 +524,7 @@ export default function Home() {
                       <motion.div
                         className="absolute rounded-full pointer-events-none"
                         style={{
-                          width: '148px', height: '148px',
+                          width: '124px', height: '124px',
                           border: '2px solid transparent',
                           background: 'linear-gradient(#1a1208, #1a1208) padding-box, conic-gradient(from 0deg, rgba(255,220,80,0.9), rgba(212,160,23,0.4), rgba(255,220,80,0.9)) border-box',
                         }}
@@ -540,7 +536,7 @@ export default function Home() {
                     <motion.img
                       src="/floguru-logo.png"
                       alt="FLO GURU"
-                      className="relative w-28 h-28 rounded-full object-cover"
+                      className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover"
                       style={{ boxShadow: sendMutation.isPending ? '0 0 32px 12px rgba(255,220,80,0.7), 0 0 60px 20px rgba(180,120,10,0.45)' : '0 0 24px 8px rgba(212,160,23,0.6), 0 0 48px 16px rgba(180,120,10,0.35)' }}
                       animate={{
                         scale: isListening ? 1.08 : sendMutation.isPending ? [1, 1.04, 1] : isSpeaking ? [1, 1.05, 1] : 1,
@@ -554,9 +550,9 @@ export default function Home() {
                   </div>
                 </div>
                 {/* Time & Greeting */}
-                <div className="mb-8">
+                <div className="mb-6 sm:mb-8 text-center sm:text-left">
                   <motion.h3 
-                    className="text-[4rem] font-bold tracking-tighter leading-none mb-2 tabular-nums"
+                    className="text-5xl sm:text-[4rem] font-bold tracking-tighter leading-none mb-2 tabular-nums"
                     initial={{ opacity: 0, filter: "blur(10px)" }}
                     animate={{ opacity: 1, filter: "blur(0px)" }}
                     transition={{ delay: 0.1, duration: 0.8 }}
@@ -564,7 +560,7 @@ export default function Home() {
                     {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </motion.h3>
                   <motion.h2 
-                    className="text-2xl font-semibold tracking-tight text-muted-foreground ml-1"
+                    className="text-xl sm:text-2xl font-semibold tracking-tight text-muted-foreground ml-0 sm:ml-1"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.3 }}
@@ -574,27 +570,27 @@ export default function Home() {
                 </div>
 
                 {/* Live cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-8">
                   {/* Weather Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 sm:p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
                     onClick={() => weather && coords && setShowForecast(true)}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
                   >
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-2 sm:mb-3">
                       <Cloud className="w-4 h-4 text-primary" />
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{weather?.locationName || "Weather"}</span>
+                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest truncate">{weather?.locationName || "Weather"}</span>
                     </div>
                     {weather ? (
                       <>
                         <div className="flex items-baseline gap-2">
-                          <p className="text-4xl font-bold tracking-tight">{weather.tempC}°</p>
+                          <p className="text-3xl sm:text-4xl font-bold tracking-tight">{weather.tempC}°</p>
                         </div>
-                        <p className="text-sm text-muted-foreground capitalize mt-1 font-medium">{weather.label} <span className="text-border">•</span> Feels like {weather.feelsLikeC}°</p>
-                        {coords && <p className="text-[10px] uppercase font-bold tracking-wider text-primary mt-2">Tap for forecast →</p>}
+                        <p className="text-xs sm:text-sm text-muted-foreground capitalize mt-1 font-medium">{weather.label} <span className="text-border">•</span> Feels like {weather.feelsLikeC}°</p>
+                        {coords && <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-2">Tap for forecast →</p>}
                       </>
                     ) : (
                       <div className="h-16 flex flex-col justify-center">
@@ -616,20 +612,20 @@ export default function Home() {
 
                   {/* Calendar Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 sm:p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 }}
                     onClick={() => navigate("/calendar")}
                   >
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Today</span>
+                        <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Today</span>
                       </div>
                       <span
-                        className="text-[10px] uppercase font-bold tracking-wider text-primary cursor-pointer"
+                        className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary cursor-pointer hover:underline"
                         onClick={(e) => {
                           if (isGoogleConnected) {
                             e.stopPropagation();
@@ -637,49 +633,49 @@ export default function Home() {
                           }
                         }}
                       >
-                        {isGoogleConnected ? 'Open Google Calendar' : 'Open Calendar'}
+                        {isGoogleConnected ? 'Open Google' : 'Open'}
                       </span>
                     </div>
                     
                     {allTodayEvents.length > 0 ? (
-                      <div className="space-y-2.5 mt-2">
-                        {allTodayEvents.slice(0, 5).map((e: any, i: number) => (
+                      <div className="space-y-2 sm:space-y-2.5 mt-1 sm:mt-2">
+                        {allTodayEvents.slice(0, 4).map((e: any, i: number) => (
                           <div key={i} className="flex items-center justify-between group/event">
-                            <div className="flex items-center gap-2.5 overflow-hidden">
-                              <div className={cn("w-2 h-2 rounded-full shrink-0", EVENT_COLOR_MAP[e.color] ?? 'bg-primary/50')} />
-                              <p className="text-sm font-medium truncate text-foreground group-hover/event:text-primary transition-colors">{e.title}</p>
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <div className={cn("w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0", EVENT_COLOR_MAP[e.color] ?? 'bg-primary/50')} />
+                              <p className="text-xs sm:text-sm font-medium truncate text-foreground group-hover/event:text-primary transition-colors">{e.title}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground shrink-0 font-medium ml-2">{formatEventTime(e.start, e.allDay)}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground shrink-0 font-medium ml-2">{formatEventTime(e.start, e.allDay)}</p>
                           </div>
                         ))}
-                        {allTodayEvents.length > 5 && (
-                          <p className="text-xs text-muted-foreground pt-1">+{allTodayEvents.length - 5} more</p>
+                        {allTodayEvents.length > 4 && (
+                          <p className="text-[10px] sm:text-xs text-muted-foreground pt-0.5">+{allTodayEvents.length - 4} more</p>
                         )}
                       </div>
                     ) : (
                       <div className="h-14 flex flex-col justify-center">
-                        <p className="text-[15px] font-medium text-foreground">Schedule is clear.</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">No events today</p>
+                        <p className="text-sm sm:text-[15px] font-medium text-foreground">Schedule is clear.</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">No events today</p>
                       </div>
                     )}
                   </motion.div>
 
                   {/* News Card */}
                   <motion.div 
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 sm:p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.6 }}
                     onClick={() => setShowNews(true)}
                   >
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all" />
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-2 sm:mb-3">
                       <Newspaper className="w-4 h-4 text-primary" />
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Top News</span>
+                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Top News</span>
                     </div>
                     <p className="text-sm font-semibold text-foreground">Today's Headlines</p>
-                    <p className="text-xs text-muted-foreground mt-1">General · Tech · Business</p>
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-primary mt-3">Tap to read →</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">General · Tech · Business</p>
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">Tap to read →</p>
                   </motion.div>
 
                   {/* Music Player Card */}
@@ -700,7 +696,7 @@ export default function Home() {
 
                 {/* Suggestion chips */}
                 <motion.div 
-                  className="flex flex-wrap gap-2.5"
+                  className="flex flex-wrap gap-2 sm:gap-2.5"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.6 }}
@@ -714,7 +710,7 @@ export default function Home() {
                       transition={{ delay: 0.7 + (idx * 0.1) }}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      className="bg-card border border-border backdrop-blur-md text-sm text-muted-foreground px-4 py-2.5 rounded-2xl hover:bg-secondary hover:text-foreground transition-all font-medium"
+                      className="bg-card border border-border backdrop-blur-md text-[13px] sm:text-sm text-muted-foreground px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl hover:bg-secondary hover:text-foreground transition-all font-medium"
                     >
                       {s}
                     </motion.button>
@@ -726,21 +722,21 @@ export default function Home() {
 
           {/* Messages */}
           {view === 'chat' && (
-            <div className="space-y-6 pt-6">
-              <div className="flex justify-center mb-8">
+            <div className="space-y-6 pt-4 sm:pt-6">
+              <div className="flex justify-center mb-6 sm:mb-8">
                 <div className="relative">
                   <div className={cn(
-                    "absolute inset-0 rounded-full blur-3xl transition-all duration-700",
+                    "absolute inset-0 rounded-full blur-2xl sm:blur-3xl transition-all duration-700",
                     isListening ? "bg-amber-400/50" :
                     sendMutation.isPending ? "bg-yellow-600/40 animate-pulse" :
                     isSpeaking ? "bg-amber-500/45 animate-pulse" :
                     "bg-amber-700/25"
-                  )} style={{ transform: isListening ? 'scale(1.6)' : isSpeaking ? 'scale(1.45)' : sendMutation.isPending ? 'scale(1.3)' : 'scale(1.2)' }} />
+                  )} style={{ transform: isListening ? 'scale(1.4)' : isSpeaking ? 'scale(1.3)' : sendMutation.isPending ? 'scale(1.2)' : 'scale(1.1)' }} />
                   <div className="absolute inset-0 rounded-full blur-xl bg-amber-600/15" />
                   <motion.img
                     src="/floguru-logo.png"
                     alt="FLO GURU"
-                    className="relative w-16 h-16 rounded-full object-cover shadow-xl"
+                    className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover shadow-xl"
                     animate={{
                       scale: isListening ? 1.08 : sendMutation.isPending ? [1, 1.04, 1] : isSpeaking ? [1, 1.05, 1] : 1,
                     }}
@@ -759,7 +755,7 @@ export default function Home() {
                     transition={{ type: "spring", stiffness: 260, damping: 26 }}
                   >
                     <div className={cn(
-                      "px-5 py-3.5 rounded-3xl text-[15px] leading-relaxed max-w-[85%] shadow-sm",
+                      "px-4 sm:px-5 py-3 sm:py-3.5 rounded-3xl text-sm sm:text-[15px] leading-relaxed max-w-[90%] sm:max-w-[85%] shadow-sm",
                       message.role === 'user'
                         ? "bg-primary text-primary-foreground rounded-tr-sm shadow-lg shadow-primary/20"
                         : "bg-card backdrop-blur-2xl text-foreground rounded-tl-sm border border-border shadow-xl"
@@ -776,7 +772,7 @@ export default function Home() {
                       <motion.div
                         initial={{ opacity: 0, y: 5 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="w-full max-w-[90%]"
+                        className="w-full max-w-[95%] sm:max-w-[90%]"
                       >
                         <ActionResultCard result={message.actionResult} />
                       </motion.div>
@@ -791,9 +787,9 @@ export default function Home() {
       </main>
 
       {/* Input bar */}
-      <footer className="p-6 fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+      <footer className="p-4 sm:p-6 fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
         <motion.div 
-          className="max-w-2xl mx-auto flex items-end gap-3 pointer-events-auto"
+          className="max-w-2xl mx-auto flex items-end gap-2 sm:gap-3 pointer-events-auto"
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, damping: 28, delay: 0.2 }}
@@ -806,7 +802,7 @@ export default function Home() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Message FLO GURU..."
-              className="relative w-full bg-card backdrop-blur-2xl border border-border rounded-[24px] px-7 py-5 text-[16px] focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground shadow-xl"
+              className="relative w-full bg-card backdrop-blur-2xl border border-border rounded-[24px] px-5 sm:px-7 py-4 sm:py-5 text-sm sm:text-[16px] focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground shadow-xl"
               onKeyDown={(e) => { if (e.key === 'Enter') handleSend(inputValue); }}
             />
           </div>
@@ -821,9 +817,9 @@ export default function Home() {
                 exit={{ scale: 0.5, opacity: 0 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="w-[60px] h-[60px] rounded-[24px] bg-primary flex items-center justify-center shadow-lg shadow-primary/20 text-primary-foreground shrink-0 border border-border"
+                className="w-[52px] h-[52px] sm:w-[60px] sm:h-[60px] rounded-[24px] bg-primary flex items-center justify-center shadow-lg shadow-primary/20 text-primary-foreground shrink-0 border border-border"
               >
-                <Send size={22} className="ml-0.5" />
+                <Send size={20} className="sm:ml-0.5" />
               </motion.button>
             ) : (
               <motion.div 
@@ -845,13 +841,13 @@ export default function Home() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className={cn(
-                    "relative w-[60px] h-[60px] rounded-[24px] flex items-center justify-center transition-all shadow-lg z-10 border",
+                    "relative w-[52px] h-[52px] sm:w-[60px] sm:h-[60px] rounded-[24px] flex items-center justify-center transition-all shadow-lg z-10 border",
                     isListening 
                       ? "bg-red-500 text-white shadow-red-500/20 border-red-400/50" 
                       : "bg-card backdrop-blur-2xl border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {isListening ? <MicOff size={22} /> : <Mic size={22} />}
+                  {isListening ? <MicOff size={20} /> : <Mic size={20} />}
                 </motion.button>
               </motion.div>
             )}

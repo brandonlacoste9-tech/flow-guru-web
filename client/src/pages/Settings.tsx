@@ -170,28 +170,28 @@ export function Settings() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl px-6 py-4">
-        <div className="max-w-2xl mx-auto flex items-center gap-4">
-          <button onClick={() => navigate('/')} className="w-9 h-9 rounded-2xl border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl px-4 sm:px-6 py-3 sm:py-4">
+        <div className="max-w-2xl mx-auto flex items-center gap-3 sm:gap-4">
+          <button onClick={() => navigate('/')} className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground shrink-0">
             <ArrowLeft size={16} />
           </button>
-          <div>
-            <h1 className="text-base font-bold tracking-tight">AI Settings</h1>
-            <p className="text-xs text-muted-foreground">Train and personalise your assistant</p>
+          <div className="min-w-0">
+            <h1 className="text-sm sm:text-base font-bold tracking-tight truncate">AI Settings</h1>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Train and personalise your assistant</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 py-8">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Scrollable tab bar */}
-        <div className="flex gap-1.5 mb-8 bg-secondary/40 p-1 rounded-2xl overflow-x-auto">
+        <div className="flex gap-1 mb-6 sm:mb-8 bg-secondary/40 p-1 rounded-2xl overflow-x-auto no-scrollbar touch-pan-x">
           {TABS.map(tab => {
             const Icon = tab.icon;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={cn('flex-1 min-w-[80px] flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap',
+                className={cn('flex-1 min-w-[85px] sm:min-w-[100px] flex items-center justify-center gap-1.5 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap px-2',
                   activeTab === tab.id ? 'bg-card shadow-sm text-foreground border border-border' : 'text-muted-foreground hover:text-foreground')}>
-                <Icon size={13} />{tab.label}
+                <Icon size={12} className="sm:w-3.5 sm:h-3.5" />{tab.label}
               </button>
             );
           })}
@@ -200,52 +200,52 @@ export function Settings() {
         <AnimatePresence mode="wait">
           {activeTab === 'profile' && (
             <motion.div key="profile" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-              <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
                 <div className="flex items-center gap-2 mb-1">
                   <User size={14} className="text-primary" />
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Personal Profile</h2>
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Personal Profile</h2>
                 </div>
-                <p className="text-xs text-muted-foreground -mt-2">Tell your assistant about yourself so it can give better, more personalised responses.</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">Tell your assistant about yourself so it can give better, more personalised responses.</p>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Wake-up Time</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Wake-up Time</label>
                   <input type="time" value={wakeUpTime} onChange={e => { setWakeUpTime(e.target.value); setProfileDirty(true); }}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors" />
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2 sm:py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Daily Routine</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Daily Routine</label>
                   <textarea rows={3} value={dailyRoutine} onChange={e => { setDailyRoutine(e.target.value); setProfileDirty(true); }}
                     placeholder="e.g. I wake up at 6am, work out, then start work at 9am. I take a lunch break at noon..."
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2 sm:py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Preferences & Interests</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Preferences & Interests</label>
                   <textarea rows={3} value={preferencesSummary} onChange={e => { setPreferencesSummary(e.target.value); setProfileDirty(true); }}
                     placeholder="e.g. I love hip-hop, tech, fitness. I prefer concise answers. I'm building a SaaS startup..."
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2 sm:py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Sound</label>
-                  <div className="flex gap-2">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Sound</label>
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <select value={alarmSound} onChange={e => { setAlarmSound(e.target.value); setProfileDirty(true); }}
                       className="flex-1 bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors">
                       <option value="chime">🔔 Chime (default)</option>
                       <option value="none">🔇 Silent (voice only)</option>
-                      <option value="radio-focus">🎵 Radio — Focus (Groove Salad)</option>
-                      <option value="radio-chill">🎵 Radio — Chill (Lush)</option>
-                      <option value="radio-energy">🎵 Radio — Energy (Beat Blender)</option>
-                      <option value="radio-sleep">🎵 Radio — Sleep (Sleep Bot)</option>
-                      <option value="radio-space">🎵 Radio — Space (Deep Space One)</option>
+                      <option value="radio-focus">🎵 Radio — Focus (SomaFM)</option>
+                      <option value="radio-chill">🎵 Radio — Chill (SomaFM)</option>
+                      <option value="radio-energy">🎵 Radio — Energy (SomaFM)</option>
+                      <option value="radio-sleep">🎵 Radio — Sleep (SomaFM)</option>
+                      <option value="radio-space">🎵 Radio — Space (SomaFM)</option>
                     </select>
                     <button onClick={handleTestSound}
-                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-semibold text-primary hover:bg-primary/10 transition-colors shrink-0">
-                      <Volume2 size={14} /> Test
+                      className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-semibold text-primary hover:bg-primary/10 transition-colors shrink-0">
+                      <Volume2 size={14} /> Test Sound
                     </button>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Click Test to preview the selected alarm sound.</p>
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">Click Test to preview the selected alarm sound.</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Days</label>
-                  <div className="flex gap-1.5">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Days</label>
+                  <div className="grid grid-cols-4 xs:grid-cols-7 gap-1 sm:gap-1.5">
                     {(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] as const).map((day, idx) => {
                       const active = alarmDays.split(',').map(Number).includes(idx);
                       return (
@@ -256,18 +256,18 @@ export function Settings() {
                             setAlarmDays(next.join(','));
                             setProfileDirty(true);
                           }}
-                          className={cn('flex-1 py-2 rounded-xl text-xs font-bold transition-all border',
+                          className={cn('py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all border',
                             active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
                           {day}
                         </button>
                       );
                     })}
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Select which days of the week the wake-up alarm fires.</p>
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">Select which days the wake-up alarm fires.</p>
                 </div>
                 <button disabled={!profileDirty || saveProfileMutation.isPending}
                   onClick={() => saveProfileMutation.mutate({ wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays } as any)}
-                  className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
+                  className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
                     profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
                   <Save size={14} />{saveProfileMutation.isPending ? 'Saving...' : 'Save Profile'}
                 </button>
@@ -277,22 +277,22 @@ export function Settings() {
 
           {activeTab === 'memory' && (
             <motion.div key="memory" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-              <div className="bg-card border border-border rounded-3xl p-6">
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6">
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <Brain size={14} className="text-primary" />
-                    <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Memory Manager</h2>
+                    <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Memory Manager</h2>
                   </div>
-                  <button onClick={() => setShowAddFact(v => !v)} className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-primary hover:underline">
+                  <button onClick={() => setShowAddFact(v => !v)} className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-primary hover:underline">
                     <Plus size={12} /> Add
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground mb-5">Everything your assistant has learned about you. Remove anything you don't want it to remember.</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground mb-5 leading-relaxed">Everything your assistant has learned about you. Remove anything you don't want it to remember.</p>
                 <AnimatePresence>
                   {showAddFact && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
                       <div className="bg-background border border-border rounded-2xl p-4 space-y-3">
-                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Add a memory</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Add a memory</p>
                         <textarea
                           rows={2}
                           value={newFactValue}
@@ -309,13 +309,13 @@ export function Settings() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => { setNewFactValue(''); setShowAddFact(false); }}
-                            className="flex-1 border border-border py-2 rounded-xl text-sm font-semibold text-muted-foreground hover:bg-accent/10 transition-colors">
+                            className="flex-1 border border-border py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent/10 transition-colors">
                             Cancel
                           </button>
                           <button
                             disabled={!newFactValue.trim() || addFactMutation.isPending}
                             onClick={() => addFactMutation.mutate({ factKey: 'note', factValue: newFactValue.trim() })}
-                            className="flex-1 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+                            className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
                             <Save size={13} />
                             {addFactMutation.isPending ? 'Saving...' : 'Save Memory'}
                           </button>
@@ -331,17 +331,17 @@ export function Settings() {
                     <p className="text-sm text-muted-foreground">No memories yet. Chat with your assistant and it will start learning about you.</p>
                   </div>
                 )}
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {facts.map((fact: any) => (
                     <motion.div key={fact.id} layout initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
-                      className="flex items-start gap-3 bg-background border border-border rounded-2xl px-4 py-3 group">
+                      className="flex items-start gap-3 bg-background border border-border rounded-2xl px-4 py-3.5 group">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">{fact.factKey ?? fact.category}</p>
-                        <p className="text-sm text-foreground mt-0.5 leading-snug">{fact.factValue}</p>
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-primary/70">{fact.factKey ?? fact.category}</p>
+                        <p className="text-[13px] sm:text-sm text-foreground mt-0.5 leading-snug">{fact.factValue}</p>
                       </div>
                       <button onClick={() => deleteFactMutation.mutate({ factId: fact.id })}
-                        className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100">
-                        <Trash2 size={13} />
+                        className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors sm:opacity-0 sm:group-hover:opacity-100">
+                        <Trash2 size={14} />
                       </button>
                     </motion.div>
                   ))}
@@ -352,36 +352,36 @@ export function Settings() {
 
           {activeTab === 'persona' && (
             <motion.div key="persona" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-              <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
                 <div className="flex items-center gap-2 mb-1">
                   <Wand2 size={14} className="text-primary" />
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Assistant Persona</h2>
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Assistant Persona</h2>
                 </div>
-                <p className="text-xs text-muted-foreground -mt-2">Give your assistant a custom name and personality style. This shapes how it speaks to you in every conversation.</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">Give your assistant a custom name and personality style. This shapes how it speaks to you in every conversation.</p>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Assistant Name</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Assistant Name</label>
                   <input type="text" value={personaName} maxLength={64}
                     onChange={e => { setPersonaName(e.target.value); setPersonaDirty(true); }}
                     placeholder="e.g. Aria, Max, Nova, Flow Guru"
                     className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors" />
-                  <p className="text-[10px] text-muted-foreground">Leave blank to use the default name "FLO GURU".</p>
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">Leave blank to use the default name "FLO GURU".</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Personality Style</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Personality Style</label>
+                  <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                     {PERSONA_STYLES.map(opt => (
                       <button key={opt.value} onClick={() => { setPersonaStyle(opt.value); setPersonaDirty(true); }}
                         className={cn('flex flex-col items-start gap-0.5 px-4 py-3 rounded-2xl border text-left transition-all',
                           personaStyle === opt.value ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-background text-muted-foreground hover:border-primary/40')}>
-                        <span className="text-sm font-semibold">{opt.label}</span>
-                        <span className="text-[10px]">{opt.desc}</span>
+                        <span className="text-[13px] sm:text-sm font-semibold">{opt.label}</span>
+                        <span className="text-[9px] sm:text-[10px] opacity-70">{opt.desc}</span>
                       </button>
                     ))}
                   </div>
                 </div>
                 <button disabled={!personaDirty || savePersonaMutation.isPending}
                   onClick={() => savePersonaMutation.mutate({ personaName, personaStyle })}
-                  className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
+                  className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
                     personaDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
                   <Save size={14} />{savePersonaMutation.isPending ? 'Saving...' : 'Save Persona'}
                 </button>
@@ -391,35 +391,35 @@ export function Settings() {
 
           {activeTab === 'instructions' && (
             <motion.div key="instructions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-              <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
                 <div className="flex items-center gap-2 mb-1">
                   <MessageSquare size={14} className="text-primary" />
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Custom Instructions</h2>
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Custom Instructions</h2>
                 </div>
-                <p className="text-xs text-muted-foreground -mt-2">These instructions are applied to every conversation. Use them to define how your assistant should behave.</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">These instructions are applied to every conversation. Use them to define how your assistant should behave.</p>
                 <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
                   <CheckCircle2 size={14} className="text-primary shrink-0 mt-0.5" />
-                  <p className="text-xs text-foreground leading-relaxed">
+                  <p className="text-[11px] sm:text-xs text-foreground leading-relaxed">
                     <span className="font-bold">Honesty is always enforced.</span> Your assistant will never lie, fabricate facts, or return mock data — regardless of what is written here.
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Instructions</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Instructions</label>
                   <textarea rows={8} value={instructions} onChange={e => { setInstructions(e.target.value); setInstructionsDirty(true); }}
                     placeholder={"Examples:\n- Always call me Brandon\n- Keep all responses under 2 sentences\n- You are my personal productivity coach\n- Always suggest a next action after answering\n- Speak to me like a close friend"}
                     className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none font-mono" />
-                  <p className="text-[10px] text-muted-foreground text-right">{instructions.length}/2000</p>
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground text-right">{instructions.length}/2000</p>
                 </div>
                 <button disabled={!instructionsDirty || saveInstructionsMutation.isPending}
                   onClick={() => saveInstructionsMutation.mutate({ instructions })}
-                  className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
+                  className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
                     instructionsDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
                   <Save size={14} />{saveInstructionsMutation.isPending ? 'Saving...' : 'Save Instructions'}
                 </button>
               </div>
               <div className="flex items-start gap-3 bg-card border border-border rounded-2xl px-4 py-3">
                 <AlertCircle size={14} className="text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-xs text-muted-foreground leading-relaxed">Instructions take effect on the next message you send. They apply to every conversation going forward.</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">Instructions take effect on the next message you send. They apply to every conversation going forward.</p>
               </div>
             </motion.div>
           )}
@@ -431,36 +431,36 @@ export function Settings() {
           )}
           {activeTab === 'referral' && (
             <motion.div key="referral" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-              <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
                 <div className="flex items-center gap-2 mb-1">
                   <Gift size={14} className="text-primary" />
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Referral Program</h2>
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Referral Program</h2>
                 </div>
-                <p className="text-xs text-muted-foreground -mt-2">Share your referral code with friends. When they sign up using your code, you both earn bonus credits.</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">Share your referral code with friends. When they sign up using your code, you both earn bonus credits.</p>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Referral Code</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Referral Code</label>
                   {(referralQuery.data as any)?.referralCode ? (
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-sm font-mono font-bold tracking-widest text-primary">
+                      <div className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-sm font-mono font-bold tracking-[0.2em] text-primary truncate">
                         {(referralQuery.data as any).referralCode}
                       </div>
                       <button
                         onClick={() => { navigator.clipboard.writeText((referralQuery.data as any).referralCode); toast.success('Copied to clipboard!'); }}
-                        className="w-11 h-11 rounded-xl border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground">
+                        className="w-11 h-11 rounded-xl border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground shrink-0">
                         <Copy size={14} />
                       </button>
                     </div>
                   ) : (
                     <div className="bg-background border border-border rounded-xl px-4 py-3 text-sm text-muted-foreground">
-                      {referralQuery.isLoading ? 'Loading...' : 'Sign in to get your referral code.'}
+                      {referralQuery.isLoading ? 'Loading...' : 'Sign in to get your code.'}
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
                   <Sparkles size={14} className="text-primary shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-foreground">Credits Balance</p>
-                    <p className="text-xs text-muted-foreground">{(referralQuery.data as any)?.credits ?? 0} credits earned from referrals</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-foreground">Credits Balance</p>
+                    <p className="text-[11px] sm:text-xs text-muted-foreground">{(referralQuery.data as any)?.credits ?? 0} credits earned from referrals</p>
                   </div>
                 </div>
                 <button
@@ -471,13 +471,13 @@ export function Settings() {
                       toast.success('Share message copied!');
                     }
                   }}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold bg-primary text-primary-foreground hover:opacity-90 transition-all">
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold bg-primary text-primary-foreground hover:opacity-90 transition-all">
                   <Share2 size={14} />Share Your Code
                 </button>
               </div>
               <div className="flex items-start gap-3 bg-card border border-border rounded-2xl px-4 py-3">
                 <Gift size={14} className="text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-xs text-muted-foreground leading-relaxed">Referral credits can be used toward premium features. Credits are added automatically when your friend signs up using your code.</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">Referral credits can be used toward premium features. Credits are added automatically when your friend signs up using your code.</p>
               </div>
             </motion.div>
           )}
@@ -515,26 +515,26 @@ function IntegrationsPanel() {
   };
 
   return (
-    <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
+    <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
       <div className="flex items-center gap-2 mb-1">
         <Share2 size={14} className="text-primary" />
-        <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Service Integrations</h2>
+        <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Service Integrations</h2>
       </div>
-      <p className="text-xs text-muted-foreground -mt-2">Connect your external accounts to allow your assistant to manage your schedule and music.</p>
+      <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">Connect your external accounts to allow your assistant to manage your schedule and music.</p>
 
       <div className="space-y-3">
         {/* Spotify */}
-        <div className="flex items-center justify-between p-4 bg-background border border-border rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#1DB954]/10 flex items-center justify-center">
+        <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between p-4 bg-background border border-border rounded-2xl gap-3">
+          <div className="flex items-center gap-3 min-w-0 w-full">
+            <div className="w-10 h-10 rounded-full bg-[#1DB954]/10 flex items-center justify-center shrink-0">
               <svg className="w-5 h-5 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.216.354-.678.468-1.032.252-2.86-1.748-6.458-2.143-10.697-1.174-.405.093-.812-.162-.905-.567-.093-.405.162-.812.567-.905 4.636-1.06 8.597-.613 11.77 1.332.355.216.469.678.252 1.032zm1.465-3.266c-.272.443-.848.583-1.291.311-3.273-2.012-8.261-2.593-12.13-1.418-.496.15-.1.026-.646-.246-.15-.496.104-.1.026-.646.246 4.316-1.31 9.805-.66 13.513 1.616.443.272.583.848.311 1.291zm.143-3.41c-3.926-2.332-10.4-2.55-14.17-1.405-.603.183-1.242-.163-1.425-.766-.183-.603.163-1.242.766-1.425 4.32-1.313 11.474-1.06 16.002 1.626.541.321.716 1.022.395 1.563-.32.541-1.022.716-1.563.395l-.005.005z"/>
               </svg>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold">Spotify</p>
               {status.spotify ? (
-                <p className="text-[10px] text-[#1DB954] uppercase tracking-wider font-semibold">Connected as {status.spotifyLabel ?? 'Spotify'}</p>
+                <p className="text-[10px] text-[#1DB954] uppercase tracking-wider font-semibold truncate">Connected as {status.spotifyLabel ?? 'User'}</p>
               ) : (
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Music & Playlists</p>
               )}
@@ -543,14 +543,14 @@ function IntegrationsPanel() {
           {status.spotify ? (
             <button
               onClick={() => disconnect('spotify')}
-              className="px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all"
+              className="w-full xs:w-auto px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
             >
               Disconnect
             </button>
           ) : (
             <button
               onClick={() => window.location.href = '/api/integrations/spotify/start'}
-              className="px-4 py-2 rounded-xl bg-secondary text-xs font-bold hover:bg-primary hover:text-primary-foreground transition-all"
+              className="w-full xs:w-auto px-4 py-2 rounded-xl bg-secondary text-xs font-bold hover:bg-primary hover:text-primary-foreground transition-all shrink-0"
             >
               Connect
             </button>
@@ -558,17 +558,17 @@ function IntegrationsPanel() {
         </div>
 
         {/* Google Calendar */}
-        <div className="flex items-center justify-between p-4 bg-background border border-border rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+        <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between p-4 bg-background border border-border rounded-2xl gap-3">
+          <div className="flex items-center gap-3 min-w-0 w-full">
+            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
               <svg className="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm-7-7h5v5h-5v-5z"/>
               </svg>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold">Google Calendar</p>
               {status.googleCalendar ? (
-                <p className="text-[10px] text-blue-500 uppercase tracking-wider font-semibold">Connected as {status.googleCalendarLabel ?? 'Google'}</p>
+                <p className="text-[10px] text-blue-500 uppercase tracking-wider font-semibold truncate">Connected as {status.googleCalendarLabel ?? 'User'}</p>
               ) : (
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Schedule & Events</p>
               )}
@@ -577,14 +577,14 @@ function IntegrationsPanel() {
           {status.googleCalendar ? (
             <button
               onClick={() => disconnect('google-calendar')}
-              className="px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all"
+              className="w-full xs:w-auto px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
             >
               Disconnect
             </button>
           ) : (
             <button
               onClick={() => window.location.href = '/api/integrations/google-calendar/start'}
-              className="px-4 py-2 rounded-xl bg-secondary text-xs font-bold hover:bg-primary hover:text-primary-foreground transition-all"
+              className="px-4 py-2 rounded-xl bg-secondary text-xs font-bold hover:bg-primary hover:text-primary-foreground transition-all shrink-0 w-full xs:w-auto"
             >
               Connect
             </button>

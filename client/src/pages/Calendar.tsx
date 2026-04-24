@@ -877,9 +877,10 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, th
       {/* Weekday headers */}
       <div className="grid grid-cols-7" style={{ borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
         {WEEKDAYS_SHORT.map(d => (
-          <div key={d} className="py-2.5 text-center text-sm font-bold uppercase tracking-wider"
+          <div key={d} className="py-2 sm:py-2.5 text-center text-[10px] sm:text-sm font-bold uppercase tracking-wider"
             style={{ color: "var(--cal-text-muted)" }}>
-            {d}
+            <span className="hidden sm:inline">{d}</span>
+            <span className="sm:hidden">{d[0]}</span>
           </div>
         ))}
       </div>
@@ -893,7 +894,7 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, th
           const hasEvents = dayEvents.length > 0 && isCurrentMonth;
           return (
             <div key={i} onClick={() => onDayClick(day)}
-              className="p-1.5 cursor-pointer transition-colors overflow-hidden"
+              className="p-0.5 sm:p-1.5 cursor-pointer transition-colors overflow-hidden flex flex-col items-center sm:items-stretch"
               style={{
                 borderBottom: "1px solid var(--cal-border)",
                 borderRight: "1px solid var(--cal-border)",
@@ -904,16 +905,14 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, th
                   : isCurrentMonth
                   ? "var(--cal-cell-bg)"
                   : "var(--cal-cell-other)",
-              }}
-              onMouseEnter={e => { if (!isSelected && !isToday) (e.currentTarget as HTMLElement).style.filter = "brightness(0.96)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.filter = ""; }}>
-              <div className="flex justify-center mb-1">
+              }}>
+              <div className="flex justify-center mb-0.5 sm:mb-1">
                 <span
                   className="flex items-center justify-center rounded-full font-medium transition-all"
                   style={{
-                    width: hasEvents ? "2.25rem" : "2rem",
-                    height: hasEvents ? "2.25rem" : "2rem",
-                    fontSize: "1rem",
+                    width: hasEvents ? "1.75rem" : "1.5rem",
+                    height: hasEvents ? "1.75rem" : "1.5rem",
+                    fontSize: "0.75rem",
                     fontWeight: isToday || isSelected || hasEvents ? 700 : 400,
                     backgroundColor: isToday ? "var(--cal-accent)" : "transparent",
                     color: isToday
@@ -924,18 +923,25 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, th
                       ? "var(--cal-text)"
                       : "var(--cal-text-muted)",
                   }}>
-                  {day.getDate()}
+                  <span className="sm:text-base text-[11px]">{day.getDate()}</span>
                 </span>
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 hidden sm:block">
                 {dayEvents.slice(0, 3).map(e => (
                   <EventChip key={e.id} event={e} onClick={ev => { ev.stopPropagation(); onEventClick(e); }} isDarkTheme={DARK_THEME_IDS.has(themeId)}/>
                 ))}
                 {dayEvents.length > 3 && (
-                  <div className="text-xs pl-1 font-semibold" style={{ color: "var(--cal-text-muted)" }}>
+                  <div className="text-[10px] pl-1 font-semibold" style={{ color: "var(--cal-text-muted)" }}>
                     +{dayEvents.length - 3} more
                   </div>
                 )}
+              </div>
+              {/* Mobile dots */}
+              <div className="flex flex-wrap justify-center gap-0.5 sm:hidden mt-auto pb-1">
+                {dayEvents.slice(0, 3).map(e => {
+                  const color = getColor(e.color);
+                  return <div key={e.id} className={cn("w-1 h-1 rounded-full", color.dot)} />
+                })}
               </div>
             </div>
           );
@@ -967,14 +973,17 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="grid" style={{ gridTemplateColumns: "56px repeat(7, 1fr)", borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
+      <div className="grid" style={{ gridTemplateColumns: "minmax(40px, 56px) repeat(7, 1fr)", borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
         <div className="py-2"/>
         {weekDays.map((d, i) => {
           const isToday = isSameDay(d, today);
           return (
-            <div key={i} className="py-2 text-center">
-              <div className="text-sm font-bold uppercase" style={{ color: "var(--cal-text-muted)" }}>{WEEKDAYS_SHORT[d.getDay()]}</div>
-              <div className="w-9 h-9 mx-auto mt-0.5 flex items-center justify-center rounded-full text-base font-bold"
+            <div key={i} className="py-1.5 sm:py-2 text-center">
+              <div className="text-[10px] sm:text-sm font-bold uppercase" style={{ color: "var(--cal-text-muted)" }}>
+                <span className="sm:hidden">{WEEKDAYS_SHORT[d.getDay()][0]}</span>
+                <span className="hidden sm:inline">{WEEKDAYS_SHORT[d.getDay()]}</span>
+              </div>
+              <div className="w-7 h-7 sm:w-9 sm:h-9 mx-auto mt-0.5 flex items-center justify-center rounded-full text-sm sm:text-base font-bold"
                 style={{
                   backgroundColor: isToday ? "var(--cal-accent)" : "transparent",
                   color: isToday ? "var(--cal-accent-fg)" : "var(--cal-text)",
@@ -986,11 +995,11 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
         })}
       </div>
       <div className="flex-1 overflow-y-auto">
-        <div className="relative grid" style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}>
+        <div className="relative grid" style={{ gridTemplateColumns: "minmax(40px, 56px) repeat(7, 1fr)" }}>
           <div className="col-start-1">
             {hours.map(h => (
-              <div key={h} className="h-14 flex items-start justify-end pr-2 pt-0.5">
-                {h > 0 && <span className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h-12} PM`}</span>}
+              <div key={h} className="h-14 flex items-start justify-end pr-1 sm:pr-2 pt-0.5">
+                {h > 0 && <span className="text-[10px] sm:text-xs" style={{ color: "var(--cal-text-muted)" }}>{h === 12 ? "12P" : h < 12 ? `${h}A` : `${h-12}P`}</span>}
               </div>
             ))}
           </div>
@@ -1008,9 +1017,9 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
                 return (
                   <div key={e.id} onClick={ev => { ev.stopPropagation(); onEventClick(e); }}
                     style={getEventStyle(e)}
-                    className={cn("absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity overflow-hidden z-10 shadow-sm", color.bg, color.text)}>
-                    {e.title}
-                    <div className="text-[11px] opacity-80">{formatTime(new Date(e.startAt))}</div>
+                    className={cn("absolute left-0.5 right-0.5 rounded-lg px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity overflow-hidden z-10 shadow-sm leading-tight", color.bg, color.text)}>
+                    <div className="truncate">{e.title}</div>
+                    <div className="text-[8px] sm:text-[11px] opacity-80 sm:mt-0.5">{formatTime(new Date(e.startAt)).replace(":00","")}</div>
                   </div>
                 );
               })}
@@ -1239,63 +1248,65 @@ export default function Calendar() {
       style={{ ...themeStyle, background: "var(--cal-bg)", color: "var(--cal-text)" }}
     >
       {/* ── Top Header ── */}
-      <header className="px-4 py-2 flex items-center gap-2 z-30 shrink-0 backdrop-blur-md"
+      <header className="px-2 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1 sm:gap-2 z-30 shrink-0 backdrop-blur-md"
         style={{ borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
         {/* Back */}
         <button onClick={() => navigate("/")}
-          className="w-9 h-9 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)] shrink-0"
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)] shrink-0"
           style={{ color: "var(--cal-text-muted)" }}>
           <ArrowLeft size={16}/>
         </button>
 
         {/* Logo */}
-        <div className="flex items-center gap-2 mr-2">
+        <div className="flex items-center gap-2 mr-1 sm:mr-2 shrink-0">
           <CalendarIcon size={20} style={{ color: "var(--cal-accent)" }}/>
-          <span className="font-bold text-base hidden sm:block" style={{ color: "var(--cal-text)" }}>Calendar</span>
+          <span className="font-bold text-base hidden lg:block" style={{ color: "var(--cal-text)" }}>Calendar</span>
         </div>
 
         {/* Today button */}
         <button onClick={goToToday}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors hover:bg-[var(--cal-cell-today)] shrink-0"
+          className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors hover:bg-[var(--cal-cell-today)] shrink-0"
           style={{ border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}>
           Today
         </button>
 
         {/* Prev / Next */}
-        <div className="flex gap-0.5">
-          <button onClick={navigate_prev} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
-            style={{ color: "var(--cal-text)" }}><ChevronLeft size={16}/></button>
-          <button onClick={navigate_next} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
-            style={{ color: "var(--cal-text)" }}><ChevronRight size={16}/></button>
+        <div className="flex gap-0.5 shrink-0">
+          <button onClick={navigate_prev} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+            style={{ color: "var(--cal-text)" }}><ChevronLeft size={14} className="sm:w-4 sm:h-4"/></button>
+          <button onClick={navigate_next} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+            style={{ color: "var(--cal-text)" }}><ChevronRight size={14} className="sm:w-4 sm:h-4"/></button>
         </div>
 
         {/* Title */}
-        <h1 className="text-base font-semibold flex-1 truncate" style={{ color: "var(--cal-text)" }}>{headerTitle}</h1>
+        <h1 className="text-xs sm:text-sm md:text-base font-semibold flex-1 truncate px-1" style={{ color: "var(--cal-text)" }}>{headerTitle}</h1>
 
         {/* Search */}
         <div className="flex items-center gap-1">
           {showSearch && (
-            <motion.input initial={{ width: 0, opacity: 0 }} animate={{ width: 180, opacity: 1 }}
+            <motion.input initial={{ width: 0, opacity: 0 }} animate={{ width: window.innerWidth < 640 ? 100 : 180, opacity: 1 }}
               value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search events…" autoFocus
-              className="rounded-lg px-3 py-1.5 text-sm outline-none"
+              placeholder="Search…" autoFocus
+              className="rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm outline-none"
               style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
           )}
           <button onClick={() => { setShowSearch(s => !s); setSearchQuery(""); }}
-            className="w-9 h-9 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)] shrink-0"
             style={{ color: "var(--cal-text-muted)" }}>
             <Search size={16}/>
           </button>
         </div>
 
         {/* Theme picker */}
-        <ThemePicker themeId={themeId} onSelect={applyTheme}/>
+        <div className="shrink-0">
+          <ThemePicker themeId={themeId} onSelect={applyTheme}/>
+        </div>
 
         {/* View mode toggle */}
         <div className="flex rounded-lg p-0.5 shrink-0" style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
           {(["month","week","day"] as ViewMode[]).map(v => (
             <button key={v} onClick={() => setViewMode(v)}
-              className="px-3 py-1 rounded-md text-xs font-semibold capitalize transition-all"
+              className="px-1.5 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-semibold capitalize transition-all"
               style={{
                 background: viewMode === v ? "var(--cal-cell-bg)" : "transparent",
                 color: viewMode === v ? "var(--cal-text)" : "var(--cal-text-muted)",
@@ -1308,9 +1319,9 @@ export default function Calendar() {
 
         {/* Add event */}
         <button onClick={() => { setForm(blankForm(selectedDay)); setShowForm(true); }}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold transition-opacity hover:opacity-90 shrink-0 shadow-sm"
+          className="flex items-center justify-center w-8 h-8 sm:w-auto sm:px-3.5 sm:py-2 rounded-full text-sm font-semibold transition-opacity hover:opacity-90 shrink-0 shadow-sm"
           style={{ background: "var(--cal-accent)", color: "var(--cal-accent-fg)" }}>
-          <Plus size={14}/><span className="hidden sm:inline">New</span>
+          <Plus size={14}/><span className="hidden sm:inline ml-1.5">New</span>
         </button>
       </header>
 

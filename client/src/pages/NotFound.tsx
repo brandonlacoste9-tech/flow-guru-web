@@ -16,7 +16,7 @@ export default function NotFound() {
       />
 
       <div
-        className="relative w-full max-w-md mx-4 rounded-3xl p-10 text-center"
+        className="relative w-full max-w-md mx-4 rounded-3xl p-8 sm:p-10 text-center"
         style={{
           background: "linear-gradient(160deg, #1e1208 0%, #140c04 100%)",
           border: "1px solid rgba(180,130,60,0.35)",

@@ -315,7 +315,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   /* ── Render ─────────────────────────────────────────────────────── */
 
   return (
-    <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 shadow-xl">
+    <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-3 sm:p-4 shadow-xl">
       {/* Source Selector (only if Spotify is connected) */}
       {spotify.connected && (
         <div className="flex gap-1 mb-3 bg-secondary/30 rounded-xl p-0.5 w-fit ml-auto">
@@ -325,7 +325,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
               setMode("spotify");
             }}
             className={cn(
-              "px-3 py-1 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider",
+              "px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all uppercase tracking-wider",
               mode === "spotify" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -337,7 +337,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
               setMode("radio");
             }}
             className={cn(
-              "px-3 py-1 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider",
+              "px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all uppercase tracking-wider",
               mode === "radio" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -351,7 +351,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
           {/* Spotify View */}
           {/* Playlist tabs (scrollable) */}
           {spotify.playlists.length > 0 && (
-            <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1 overflow-x-auto no-scrollbar">
+            <div className="flex gap-1.5 mb-4 bg-secondary/50 rounded-2xl p-1 overflow-x-auto no-scrollbar touch-pan-x">
               {spotify.playlists.slice(0, 5).map((pl) => (
                 <button
                   key={pl.id}
@@ -360,13 +360,13 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
                     spotifyPlay(`spotify:playlist:${pl.id}`);
                   }}
                   className={cn(
-                    "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all duration-200 leading-none whitespace-nowrap px-2",
+                    "flex-1 py-2 sm:py-1.5 rounded-xl text-[10px] sm:text-[11px] font-semibold transition-all duration-200 leading-none whitespace-nowrap px-3 sm:px-2",
                     playlistTab === pl.id
                       ? "bg-[#1DB954] text-white shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {pl.name.length > 12 ? pl.name.slice(0, 12) + '…' : pl.name}
+                  {pl.name.length > 14 ? pl.name.slice(0, 14) + '…' : pl.name}
                 </button>
               ))}
             </div>
@@ -377,16 +377,16 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
             <button
               onClick={() => spotify.nowPlaying?.isPlaying ? spotifyPause() : spotifyPlay()}
               className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
+                "w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
                 spotify.nowPlaying?.isPlaying
                   ? "bg-[#1DB954] text-white shadow-lg shadow-[#1DB954]/30 scale-105"
                   : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
               )}
             >
               {spotify.nowPlaying?.isPlaying ? (
-                <Pause className="w-4 h-4" />
+                <Pause className="w-4 h-4 sm:w-5 sm:h-5" />
               ) : (
-                <Play className="w-4 h-4 ml-0.5" />
+                <Play className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" />
               )}
             </button>
 
@@ -394,26 +394,24 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
               {spotify.nowPlaying ? (
                 <div className="flex items-center gap-2">
                   {spotify.nowPlaying.albumArt && (
-                    <img src={spotify.nowPlaying.albumArt} alt="" className="w-8 h-8 rounded-lg shadow-md shrink-0" />
+                    <img src={spotify.nowPlaying.albumArt} alt="" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow-md shrink-0" />
                   )}
                   <div className="min-w-0">
-                    <p className="text-foreground text-[14px] font-semibold leading-tight truncate">{spotify.nowPlaying.name}</p>
-                    <p className="text-muted-foreground text-[11px] truncate">{spotify.nowPlaying.artists.join(', ')}</p>
+                    <p className="text-foreground text-[13px] sm:text-[14px] font-semibold leading-tight truncate">{spotify.nowPlaying.name}</p>
+                    <p className="text-muted-foreground text-[10px] sm:text-[11px] truncate">{spotify.nowPlaying.artists.join(', ')}</p>
                   </div>
                 </div>
               ) : (
                 <div className="min-w-0">
                   <p className="text-foreground text-[14px] font-semibold leading-tight">Spotify</p>
-                  <p className="text-muted-foreground text-[11px]">Pick a playlist to start</p>
+                  <p className="text-muted-foreground text-[11px]">Pick a playlist</p>
                 </div>
               )}
             </div>
 
             {/* Volume control for Spotify */}
-            <div className="flex items-center gap-1.5 shrink-0 ml-1">
-              <div className="w-6 h-6 flex items-center justify-center text-muted-foreground">
-                <Volume2 className="w-3.5 h-3.5" />
-              </div>
+            <div className="hidden xs:flex items-center gap-1.5 shrink-0 ml-1">
+              <Volume2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
               <input 
                 type="range" 
                 min={0} 
@@ -421,7 +419,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
                 step={5} 
                 value={spotifyVolume} 
                 onChange={(e) => spotifySetVolume(parseInt(e.target.value))}
-                className="w-16 h-1 accent-[#1DB954] cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-[#1DB954]"
+                className="w-12 sm:w-16 h-1 accent-[#1DB954] cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-[#1DB954]"
                 style={{ background: `linear-gradient(to right, #1DB954 ${spotifyVolume}%, hsl(var(--secondary)) ${spotifyVolume}%)` }}
               />
             </div>
@@ -429,7 +427,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
             <AnimatePresence>
               {spotify.nowPlaying?.isPlaying && (
                 <motion.div
-                  className="flex gap-[3px] items-end h-4 mr-1"
+                  className="flex gap-[2px] sm:gap-[3px] items-end h-3 sm:h-4 mr-0.5 sm:mr-1"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -437,9 +435,9 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
                   {([0, 0.12, 0.24] as const).map((delay, i) => (
                     <motion.div
                       key={i}
-                      className="w-[3px] bg-[#1DB954]/60 rounded-full"
-                      style={{ height: 4 }}
-                      animate={{ height: [4, 14, 4] }}
+                      className="w-[2px] sm:w-[3px] bg-[#1DB954]/60 rounded-full"
+                      style={{ height: 3 }}
+                      animate={{ height: [3, 14, 3] }}
                       transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }}
                     />
                   ))}
@@ -468,14 +466,14 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
             <AnimatePresence>
               {spotify.nowPlaying?.isPlaying && (
                 <motion.div className="flex items-center gap-1.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <div className="w-1.5 h-1.5 bg-[#1DB954] rounded-full animate-pulse" />
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Playing</span>
+                  <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-[#1DB954] rounded-full animate-pulse" />
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Playing</span>
                 </motion.div>
               )}
             </AnimatePresence>
             <div className="flex items-center gap-1.5 ml-auto">
               <svg className="w-3 h-3 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.216.354-.678.468-1.032.252-2.86-1.748-6.458-2.143-10.697-1.174-.405.093-.812-.162-.905-.567-.093-.405.162-.812.567-.905 4.636-1.06 8.597-.613 11.77 1.332.355.216.469.678.252 1.032z"/></svg>
-              <p className="text-muted-foreground/60 text-[10px]">Spotify Premium</p>
+              <p className="text-muted-foreground/60 text-[9px] sm:text-[10px]">Spotify Premium</p>
             </div>
           </div>
         </>
@@ -488,7 +486,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
                 key={s.id}
                 onClick={() => switchStation(s.id)}
                 className={cn(
-                  "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all duration-200 leading-none",
+                  "flex-1 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-[11px] font-semibold transition-all duration-200 leading-none",
                   activeId === s.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -501,23 +499,23 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
             <button
               onClick={toggle}
               className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
+                "w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
                 isPlaying || buffering ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
               )}
             >
-              {buffering ? <motion.div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }} /> : isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+              {buffering ? <motion.div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }} /> : isPlaying ? <Pause className="w-4 h-4 sm:w-5 sm:h-5" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" />}
             </button>
 
             <div className="flex-1 min-w-0">
               <p className="text-foreground text-[14px] font-semibold leading-tight">{station.label}</p>
-              <p className="text-muted-foreground text-[11px] truncate">{station.desc}</p>
+              <p className="text-muted-foreground text-[10px] sm:text-[11px] truncate">{station.desc}</p>
             </div>
 
             <AnimatePresence>
               {isPlaying && (
-                <motion.div className="flex gap-[3px] items-end h-4 mr-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <motion.div className="flex gap-[2px] sm:gap-[3px] items-end h-3 sm:h-4 mr-0.5 sm:mr-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   {([0, 0.12, 0.24] as const).map((delay, i) => (
-                    <motion.div key={i} className="w-[3px] bg-primary/60 rounded-full" style={{ height: 4 }} animate={{ height: [4, 14, 4] }} transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }} />
+                    <motion.div key={i} className="w-[2px] sm:w-[3px] bg-primary/60 rounded-full" style={{ height: 3 }} animate={{ height: [4, 14, 4] }} transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }} />
                   ))}
                 </motion.div>
               )}
@@ -527,7 +525,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
               <button onClick={toggleMute} className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
                 {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
               </button>
-              <input type="range" min={0} max={1} step={0.02} value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="w-16 h-1 accent-primary cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary" style={{ background: `linear-gradient(to right, hsl(var(--primary)) ${(isMuted ? 0 : volume) * 100}%, hsl(var(--secondary)) ${(isMuted ? 0 : volume) * 100}%)` }} />
+              <input type="range" min={0} max={1} step={0.02} value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="w-12 sm:w-16 h-1 accent-primary cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary" style={{ background: `linear-gradient(to right, hsl(var(--primary)) ${(isMuted ? 0 : volume) * 100}%, hsl(var(--secondary)) ${(isMuted ? 0 : volume) * 100}%)` }} />
             </div>
           </div>
 
@@ -535,12 +533,12 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
             <AnimatePresence>
               {(isPlaying || buffering) && (
                 <motion.div className="flex items-center gap-1.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Live</span>
+                  <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Live</span>
                 </motion.div>
               )}
             </AnimatePresence>
-            <p className="text-muted-foreground/60 text-[10px] ml-auto">SomaFM · free internet radio</p>
+            <p className="text-muted-foreground/60 text-[9px] sm:text-[10px] ml-auto">SomaFM · free internet radio</p>
           </div>
         </>
       )}
