@@ -5,10 +5,11 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Play, Pause, Volume2, VolumeX } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Music2, SkipForward } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
+/* ── SomaFM fallback stations ─────────────────────────────────────── */
 type StationId = "focus" | "chill" | "energy" | "sleep" | "space";
 
 const STATIONS: { id: StationId; label: string; desc: string; urls: string[] }[] = [
@@ -64,6 +65,30 @@ const STATIONS: { id: StationId; label: string; desc: string; urls: string[] }[]
   },
 ];
 
+/* ── Types ─────────────────────────────────────────────────────────── */
+type SpotifyNowPlaying = {
+  trackId: string;
+  name: string;
+  artists: string[];
+  albumArt: string | null;
+  isPlaying: boolean;
+  progressMs: number;
+  durationMs: number;
+};
+
+type SpotifyPlaylist = {
+  id: string;
+  name: string;
+  image: string | null;
+  trackCount: number;
+};
+
+type SpotifyState = {
+  connected: boolean;
+  nowPlaying: SpotifyNowPlaying | null;
+  playlists: SpotifyPlaylist[];
+};
+
 export type MusicPlayerHandle = {
   play: (stationId?: StationId) => void;
   pause: () => void;
@@ -75,6 +100,60 @@ interface MusicPlayerProps {
 
 export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   ({ onStateChange }, ref) => {
+  /* ── Spotify state ──────────────────────────────────────────────── */
+  const [spotify, setSpotify] = useState<SpotifyState>({ connected: false, nowPlaying: null, playlists: [] });
+  const [spotifyLoading, setSpotifyLoading] = useState(true);
+  const [playlistTab, setPlaylistTab] = useState<string | null>(null);
+
+  const fetchSpotifyState = async () => {
+    try {
+      const resp = await fetch('/api/integrations/spotify/state', { credentials: 'include' });
+      if (resp.ok) {
+        const data = await resp.json();
+        setSpotify(data);
+        if (data.connected && data.nowPlaying?.isPlaying) {
+          onStateChange?.(true, data.nowPlaying.name);
+        }
+      }
+    } catch { /* silent */ }
+    setSpotifyLoading(false);
+  };
+
+  useEffect(() => {
+    fetchSpotifyState();
+    const interval = setInterval(fetchSpotifyState, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const spotifyPlay = async (contextUri?: string) => {
+    try {
+      const body: any = {};
+      if (contextUri) body.contextUri = contextUri;
+      await fetch('/api/integrations/spotify/play', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      // Re-fetch state after a short delay
+      setTimeout(fetchSpotifyState, 1000);
+    } catch { /* silent */ }
+  };
+
+  const spotifyPause = async () => {
+    try {
+      // Use the Spotify Web API pause endpoint via our proxy
+      await fetch('/api/integrations/spotify/play', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause' }),
+      });
+      setTimeout(fetchSpotifyState, 1000);
+    } catch { /* silent */ }
+  };
+
+  /* ── SomaFM state ──────────────────────────────────────────────── */
   const [activeId, setActiveId] = useState<StationId>("focus");
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.8);
@@ -189,6 +268,161 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
 
   useEffect(() => () => stopAudio(), []);
 
+  /* ── Progress bar helper ────────────────────────────────────────── */
+  const formatTime = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  /* ── Render ─────────────────────────────────────────────────────── */
+
+  // If Spotify is connected, show the Spotify player
+  if (spotify.connected) {
+    const np = spotify.nowPlaying;
+    const progress = np ? Math.min((np.progressMs / np.durationMs) * 100, 100) : 0;
+
+    return (
+      <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 shadow-xl">
+        {/* Playlist tabs (scrollable) */}
+        {spotify.playlists.length > 0 && (
+          <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1 overflow-x-auto no-scrollbar">
+            {spotify.playlists.slice(0, 5).map((pl) => (
+              <button
+                key={pl.id}
+                onClick={() => {
+                  setPlaylistTab(pl.id);
+                  spotifyPlay(`spotify:playlist:${pl.id}`);
+                }}
+                className={cn(
+                  "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all duration-200 leading-none whitespace-nowrap px-2",
+                  playlistTab === pl.id
+                    ? "bg-[#1DB954] text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {pl.name.length > 12 ? pl.name.slice(0, 12) + '…' : pl.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Now Playing */}
+        <div className="flex items-center gap-3">
+          {/* Play/Pause */}
+          <button
+            onClick={() => np?.isPlaying ? spotifyPause() : spotifyPlay()}
+            className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
+              np?.isPlaying
+                ? "bg-[#1DB954] text-white shadow-lg shadow-[#1DB954]/30 scale-105"
+                : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+            )}
+          >
+            {np?.isPlaying ? (
+              <Pause className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4 ml-0.5" />
+            )}
+          </button>
+
+          {/* Track info */}
+          <div className="flex-1 min-w-0">
+            {np ? (
+              <>
+                <div className="flex items-center gap-2">
+                  {np.albumArt && (
+                    <img src={np.albumArt} alt="" className="w-8 h-8 rounded-lg shadow-md shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-foreground text-[14px] font-semibold leading-tight truncate">{np.name}</p>
+                    <p className="text-muted-foreground text-[11px] truncate">{np.artists.join(', ')}</p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="min-w-0">
+                <p className="text-foreground text-[14px] font-semibold leading-tight">Spotify</p>
+                <p className="text-muted-foreground text-[11px]">Pick a playlist to start</p>
+              </div>
+            )}
+          </div>
+
+          {/* Equalizer bars */}
+          <AnimatePresence>
+            {np?.isPlaying && (
+              <motion.div
+                className="flex gap-[3px] items-end h-4 mr-1"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                {([0, 0.12, 0.24] as const).map((delay, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-[3px] bg-[#1DB954]/60 rounded-full"
+                    style={{ height: 4 }}
+                    animate={{ height: [4, 14, 4] }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 0.55,
+                      delay,
+                      ease: "easeInOut",
+                    }}
+                  />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Progress bar */}
+        {np && (
+          <div className="mt-3 space-y-1">
+            <div className="w-full h-1 bg-secondary rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-[#1DB954] rounded-full"
+                style={{ width: `${progress}%` }}
+                transition={{ duration: 0.5 }}
+              />
+            </div>
+            <div className="flex justify-between text-[9px] text-muted-foreground font-medium">
+              <span>{formatTime(np.progressMs)}</span>
+              <span>{formatTime(np.durationMs)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between mt-2 pt-2.5 border-t border-border">
+          <AnimatePresence>
+            {np?.isPlaying && (
+              <motion.div
+                className="flex items-center gap-1.5"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <div className="w-1.5 h-1.5 bg-[#1DB954] rounded-full animate-pulse" />
+                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                  Playing
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <svg className="w-3 h-3 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.216.354-.678.468-1.032.252-2.86-1.748-6.458-2.143-10.697-1.174-.405.093-.812-.162-.905-.567-.093-.405.162-.812.567-.905 4.636-1.06 8.597-.613 11.77 1.332.355.216.469.678.252 1.032z"/>
+            </svg>
+            <p className="text-muted-foreground/60 text-[10px]">Spotify Premium</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SomaFM fallback (not connected to Spotify) ───────────────────
   return (
     <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 shadow-xl">
       {/* Station tabs */}
