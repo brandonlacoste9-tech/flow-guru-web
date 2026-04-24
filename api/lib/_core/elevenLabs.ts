@@ -63,6 +63,50 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
 }
 
 /**
+ * Convert text to speech using ElevenLabs and return a stream for faster playback
+ */
+export async function textToSpeechStream(options: TtsOptions): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = ENV.elevenLabsApiKey;
+  if (!apiKey && !ENV.useLocalAi) {
+    throw new Error("ElevenLabs API key is not configured.");
+  }
+
+  const voiceId = options.voiceId || DEFAULT_VOICE_ID;
+  const url = ENV.useLocalAi ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
+
+  const body: any = ENV.useLocalAi 
+    ? { model: "en-us-librispeech-low.onnx", input: options.text } // LocalAI TTS payload
+    : {
+        text: options.text,
+        model_id: options.modelId || DEFAULT_TTS_MODEL,
+        voice_settings: {
+          stability: options.stability ?? 0.5,
+          similarity_boost: options.similarityBoost ?? 0.75,
+        },
+      };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...(ENV.useLocalAi ? {} : { "xi-api-key": apiKey }),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`ElevenLabs TTS failed: ${response.status} ${error}`);
+  }
+
+  if (!response.body) {
+    throw new Error("Response body is null");
+  }
+
+  return response.body;
+}
+
+/**
  * Convert speech to another voice using ElevenLabs Speech-to-Speech
  */
 export async function speechToSpeech(options: SpeechToSpeechOptions): Promise<Buffer> {

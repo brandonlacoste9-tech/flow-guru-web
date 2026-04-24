@@ -183,20 +183,30 @@ export default function Home() {
     onError: (err) => toast.error("Failed to start new session")
   });
 
-  const speakMutation = trpc.assistant.speak.useMutation({
-    onSuccess: (result) => {
-      const audio = new Audio(result.audioDataUri);
-      audio.onended = () => setIsSpeaking(false);
-      audio.onerror = () => setIsSpeaking(false);
-      audio.play().catch(() => setIsSpeaking(false));
-    },
-    onError: () => {
+  // Streaming endpoint replaced speakMutation
+  const playAudioStream = (url: string, cleanText: string) => {
+    const audio = new Audio(url);
+    audio.onended = () => setIsSpeaking(false);
+    audio.onerror = () => {
       setIsSpeaking(false);
-      // Fallback to browser TTS if ElevenLabs is unavailable
       if (!('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
-    }
-  });
+      const utt = new SpeechSynthesisUtterance(cleanText);
+      utt.rate = 1.05;
+      utt.pitch = 1.0;
+      window.speechSynthesis.speak(utt);
+    };
+    audio.play().catch(() => {
+      setIsSpeaking(false);
+      // Fallback
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(cleanText);
+      utt.rate = 1.05;
+      utt.pitch = 1.0;
+      window.speechSynthesis.speak(utt);
+    });
+  };
 
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
@@ -276,21 +286,9 @@ export default function Home() {
       .replace(/\n+/g, ' ')
       .trim();
     setIsSpeaking(true);
-    speakMutation.mutate(
-      { text: clean, voiceId: VOICE_IDS[voiceGenderRef.current] },
-      {
-        onError: () => {
-          setIsSpeaking(false);
-          // Fallback to browser TTS if ElevenLabs is unavailable
-          if (!('speechSynthesis' in window)) return;
-          window.speechSynthesis.cancel();
-          const utt = new SpeechSynthesisUtterance(clean);
-          utt.rate = 1.05;
-          utt.pitch = 1.0;
-          window.speechSynthesis.speak(utt);
-        },
-      }
-    );
+    
+    const url = `/api/speak?text=${encodeURIComponent(clean)}&voiceId=${VOICE_IDS[voiceGenderRef.current]}`;
+    playAudioStream(url, clean);
   };
 
   const formatEventTime = (iso: string | null, allDay: boolean) => {

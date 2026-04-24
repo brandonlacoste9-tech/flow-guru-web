@@ -623,22 +623,15 @@ export const appRouter = router({
       let proactiveGreeting: string | null = null;
       if (messages.length === 0) {
         try {
-          const userName = ctx.user?.name || "there";
-          const memoryContext = buildMemoryContext({ userName, profile, facts: memoryFacts });
-          const weatherContext = weather ? `${weather.tempC}°C and ${weather.label} in ${weather.locationName}` : "unknown weather";
+          const userName = ctx.user?.name?.split(' ')[0] || "there";
+          const weatherContext = weather ? `${weather.tempC}°C and ${weather.label} in ${weather.locationName}` : "";
           const eventsContext = todayEvents.length > 0 
-            ? todayEvents.map(e => `- ${e.title} at ${e.start ? new Date(e.start).toLocaleTimeString() : 'all day'}`).join("\n")
-            : "no events today";
+            ? `You have ${todayEvents.length} event${todayEvents.length > 1 ? 's' : ''} today.`
+            : "Your schedule is clear today.";
 
-          const greetingResponse = await invokeLLM({
-            messages: [
-              {
-                role: "system",
-                content: `You are ${assistantName}, a premium personal assistant. Generate a short (1-2 sentence) warm greeting for ${userName}. Mention their weather (${weatherContext}) and one brief thing about their day (${eventsContext}) if relevant. Sound like a close friend. DO NOT use placeholders.`,
-              }
-            ]
-          });
-          proactiveGreeting = extractAssistantText(greetingResponse.choices[0]?.message.content ?? "");
+          const timeGreeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening";
+          
+          proactiveGreeting = `${timeGreeting}, ${userName}. ${weatherContext ? `It's currently ${weatherContext}. ` : ''}${eventsContext}`;
         } catch (e) {
           console.error("[Flow Guru] Failed to generate proactive greeting", e);
         }
