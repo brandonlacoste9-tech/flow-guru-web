@@ -454,29 +454,43 @@ export default function Home() {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.6, ease: "easeOut" }}
               >
-                 {/* FLO GURU Logo with leather glow */}
+                 {/* FLO GURU Logo with gold leather glow */}
                 <div className="flex justify-center mb-6">
-                  <div className="relative">
-                    {/* Outer glow layers */}
-                    <div className={cn(
-                      "absolute inset-0 rounded-full blur-3xl transition-all duration-700",
-                      isListening ? "bg-amber-400/50 scale-150" :
-                      sendMutation.isPending ? "bg-yellow-600/40 scale-125 animate-pulse" :
-                      isSpeaking ? "bg-amber-500/45 scale-140 animate-pulse" :
-                      "bg-amber-700/30 scale-125"
-                    )} style={{ transform: isListening ? 'scale(1.6)' : isSpeaking ? 'scale(1.45)' : sendMutation.isPending ? 'scale(1.3)' : 'scale(1.25)' }} />
-                    <div className={cn(
-                      "absolute inset-0 rounded-full blur-xl transition-all duration-500",
-                      isListening ? "bg-amber-300/40" :
-                      sendMutation.isPending ? "bg-yellow-500/30 animate-pulse" :
-                      isSpeaking ? "bg-amber-400/35 animate-pulse" :
-                      "bg-amber-600/20"
-                    )} />
+                  <div className="relative flex items-center justify-center">
+                    {/* Wide outermost gold halo */}
+                    <div
+                      className="absolute rounded-full pointer-events-none"
+                      style={{
+                        width: '220px', height: '220px',
+                        background: 'radial-gradient(circle, rgba(212,160,23,0.45) 0%, rgba(180,120,10,0.25) 40%, transparent 70%)',
+                        filter: 'blur(28px)',
+                        animation: 'pulse 3s ease-in-out infinite',
+                      }}
+                    />
+                    {/* Mid gold ring glow */}
+                    <div
+                      className="absolute rounded-full pointer-events-none"
+                      style={{
+                        width: '170px', height: '170px',
+                        background: 'radial-gradient(circle, rgba(255,200,50,0.55) 0%, rgba(210,150,20,0.35) 45%, transparent 70%)',
+                        filter: 'blur(16px)',
+                      }}
+                    />
+                    {/* Inner tight gold corona */}
+                    <div
+                      className="absolute rounded-full pointer-events-none"
+                      style={{
+                        width: '130px', height: '130px',
+                        background: 'radial-gradient(circle, rgba(255,220,80,0.70) 0%, rgba(220,170,30,0.45) 50%, transparent 70%)',
+                        filter: 'blur(8px)',
+                      }}
+                    />
                     {/* Logo */}
                     <motion.img
                       src="/floguru-logo.png"
                       alt="FLO GURU"
-                      className="relative w-28 h-28 rounded-full object-cover shadow-2xl"
+                      className="relative w-28 h-28 rounded-full object-cover"
+                      style={{ boxShadow: '0 0 24px 8px rgba(212,160,23,0.6), 0 0 48px 16px rgba(180,120,10,0.35)' }}
                       animate={{
                         scale: isListening ? 1.08 : sendMutation.isPending ? [1, 1.04, 1] : isSpeaking ? [1, 1.05, 1] : 1,
                         rotate: sendMutation.isPending ? [0, 2, -2, 0] : 0,
