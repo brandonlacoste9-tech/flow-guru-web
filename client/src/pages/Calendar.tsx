@@ -262,14 +262,15 @@ const EVENT_COLORS = [
   { id: "teal",   label: "Peacock",    bg: "bg-teal-500",    text: "text-white",       dot: "bg-teal-500",    lightBg: "#f0fdfa", lightText: "#134e4a", lightBorder: "#99f6e4", darkBg: "rgba(19,78,74,0.4)",  darkText: "#5eead4", darkBorder: "rgba(20,184,166,0.3)" },
 ];
 
+// Themes that use dark backgrounds — use light/cream text on chips
+const DARK_THEME_IDS = new Set<CalendarThemeId>(["saddle","cognac","dark-espresso","dark-leather"]);
 function getColor(colorId?: string | null) {
   return EVENT_COLORS.find(c => c.id === colorId) ?? EVENT_COLORS[0];
 }
-
 // Render an event chip with inline styles so it works in any theme
-function EventChip({ event, onClick }: { event: any; onClick?: (e: React.MouseEvent) => void }) {
+function EventChip({ event, onClick, isDarkTheme }: { event: any; onClick?: (e: React.MouseEvent) => void; isDarkTheme?: boolean }) {
   const color = getColor(event.color);
-  const isDark = document.documentElement.classList.contains("dark");
+  const isDark = isDarkTheme ?? false;
   return (
     <div
       onClick={onClick}
@@ -485,7 +486,7 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
   });
 
   const color = getColor(isEditing ? editColor : event.color);
-  const isDark = document.documentElement.classList.contains("dark");
+  const isDark = false; // Calendar uses fixed leather colors, not dark mode
 
   const handleSave = () => {
     if (!editTitle.trim()) { toast.error("Title is required"); return; }
@@ -846,9 +847,9 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
 }
 
 // ─── Month View ───────────────────────────────────────────────────────────────
-function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick }: {
+function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, themeId }: {
   viewDate: Date; selectedDay: Date; events: any[];
-  onDayClick: (d: Date) => void; onEventClick: (e: any) => void;
+  onDayClick: (d: Date) => void; onEventClick: (e: any) => void; themeId: CalendarThemeId;
 }) {
   const today = new Date();
   const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
@@ -919,7 +920,7 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick }: 
               </div>
               <div className="space-y-0.5">
                 {dayEvents.slice(0, 3).map(e => (
-                  <EventChip key={e.id} event={e} onClick={ev => { ev.stopPropagation(); onEventClick(e); }}/>
+                  <EventChip key={e.id} event={e} onClick={ev => { ev.stopPropagation(); onEventClick(e); }} isDarkTheme={DARK_THEME_IDS.has(themeId)}/>
                 ))}
                 {dayEvents.length > 3 && (
                   <div className="text-xs pl-1 font-semibold" style={{ color: "var(--cal-text-muted)" }}>
@@ -1225,7 +1226,7 @@ export default function Calendar() {
 
   return (
     <div
-      className="h-screen text-foreground flex flex-col font-['Outfit'] overflow-hidden"
+      className="h-screen flex flex-col font-['Outfit'] overflow-hidden"
       style={{ ...themeStyle, background: "var(--cal-bg)", color: "var(--cal-text)" }}
     >
       {/* ── Top Header ── */}
@@ -1350,7 +1351,7 @@ export default function Calendar() {
               transition={{ duration: 0.15 }}>
               {viewMode === "month" && (
                 <MonthView viewDate={viewDate} selectedDay={selectedDay} events={filteredEvents}
-                  onDayClick={handleDayClick} onEventClick={setSelectedEvent}/>
+                  onDayClick={handleDayClick} onEventClick={setSelectedEvent} themeId={themeId}/>
               )}
               {viewMode === "week" && (
                 <WeekView viewDate={viewDate} events={filteredEvents}
