@@ -17,6 +17,13 @@ export const users = pgTable("fg_users", {
   promoCode: varchar("promoCode", { length: 64 }),
   resetToken: varchar("resetToken", { length: 128 }),
   resetTokenExpiresAt: timestamp("resetTokenExpiresAt"),
+  // Referral & credits
+  referralCode: varchar("referralCode", { length: 32 }),
+  referredBy: varchar("referredBy", { length: 32 }),
+  credits: integer("credits").default(0).notNull(),
+  // Assistant persona
+  personaName: varchar("personaName", { length: 64 }),
+  personaStyle: varchar("personaStyle", { length: 64 }),
   role: roleEnum("role").default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
@@ -60,6 +67,7 @@ export const conversationThreads = pgTable(
     id: serial("id").primaryKey(),
     userId: integer("userId").notNull(),
     title: varchar("title", { length: 255 }).default("Flow Guru Chat").notNull(),
+    shareToken: varchar("shareToken", { length: 64 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
     lastMessageAt: timestamp("lastMessageAt").defaultNow().notNull(),

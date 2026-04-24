@@ -109,6 +109,12 @@ ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
 ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "promoCode" VARCHAR(64);
 ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "resetToken" VARCHAR(128);
 ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "resetTokenExpiresAt" TIMESTAMP;
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "referralCode" VARCHAR(32);
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "referredBy" VARCHAR(32);
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "credits" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "personaName" VARCHAR(64);
+ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "personaStyle" VARCHAR(64);
+ALTER TABLE fg_threads ADD COLUMN IF NOT EXISTS "shareToken" VARCHAR(64);
 `;
 
 async function ensureSchemaOnce(): Promise<void> {
@@ -525,4 +531,82 @@ export async function deleteLocalEvent(userId: number, eventId: number): Promise
     } catch (err) {
       console.error("[DB] deleteLocalEvent failed:", err);
     }
+}
+
+// ─── Persona ────────────────────────────────────────────────────────────────
+export async function updateUserPersona(userId: number, personaName: string, personaStyle: string): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await ensureTables(db);
+    await db.update(schema.users).set({ personaName, personaStyle, updatedAt: new Date() }).where(eq(schema.users.id, userId));
+  } catch (err: any) {
+    console.error("[DB] updateUserPersona failed:", err.message);
+  }
+}
+
+export async function getUserById(id: number): Promise<schema.User | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    await ensureTables(db);
+    const results = await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1);
+    return results[0] || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// ─── Referral ────────────────────────────────────────────────────────────────
+export async function getUserByReferralCode(code: string): Promise<schema.User | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    await ensureTables(db);
+    const results = await (db as any).execute(
+      `SELECT * FROM fg_users WHERE "referralCode" = '${code.replace(/'/g, "''")}' LIMIT 1`
+    );
+    return (results.rows || results)[0] || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function addCredits(userId: number, amount: number): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await ensureTables(db);
+    await (db as any).execute(`UPDATE fg_users SET credits = credits + ${amount} WHERE id = ${userId}`);
+  } catch (err: any) {
+    console.error("[DB] addCredits failed:", err.message);
+  }
+}
+
+// ─── Share Token ─────────────────────────────────────────────────────────────
+export async function setThreadShareToken(threadId: number, userId: number, token: string): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await ensureTables(db);
+    await db.update(schema.conversationThreads)
+      .set({ shareToken: token, updatedAt: new Date() })
+      .where(and(eq(schema.conversationThreads.id, threadId), eq(schema.conversationThreads.userId, userId)));
+  } catch (err: any) {
+    console.error("[DB] setThreadShareToken failed:", err.message);
+  }
+}
+
+export async function getThreadByShareToken(token: string): Promise<schema.ConversationThread | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    await ensureTables(db);
+    const results = await (db as any).execute(
+      `SELECT * FROM fg_threads WHERE "shareToken" = '${token.replace(/'/g, "''")}' LIMIT 1`
+    );
+    return (results.rows || results)[0] || null;
+  } catch (err) {
+    return null;
+  }
 }

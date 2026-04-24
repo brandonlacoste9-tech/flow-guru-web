@@ -28,6 +28,12 @@ import {
   resolveAssistantUserId,
   touchConversationThread,
   upsertUserMemoryProfile,
+  updateUserPersona,
+  getUserById,
+  getUserByReferralCode,
+  addCredits,
+  setThreadShareToken,
+  getThreadByShareToken,
 } from "./db.js";
 
 const sendMessageInput = z.object({
@@ -604,11 +610,13 @@ export const appRouter = router({
         };
       }
 
-      // --- Resolve custom assistant name from memory ---
+      // --- Resolve custom assistant name from memory or persona settings ---
       const assistantNameFact = memoryFacts.find(
         f => f.factKey === "assistant_name" && f.category === "preference"
       );
-      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const userRecord = await getUserById(userId);
+      const assistantName = assistantNameFact?.factValue || userRecord?.personaName || "Flow Guru";
+      const personaStyle = userRecord?.personaStyle || '';
       const userName = ctx.user?.name || "Brandon";
 
       const memoryContext = buildMemoryContext({
@@ -648,7 +656,7 @@ export const appRouter = router({
         "- Only state things you are confident are true. Uncertainty must be expressed explicitly.",
         "",
         "PERSONALITY & TONE:",
-        "- Be encouraging, high-energy, and effortlessly smooth. You're here to keep them in the zone.",
+        ...(personaStyle ? [`- Your personality style is: ${personaStyle}. Embody this style in every response.`] : ["- Be encouraging, high-energy, and effortlessly smooth. You're here to keep them in the zone."]),
         "- Speak with a natural, conversational flow. Avoid robotic lists or choppy structures.",
         "- Use the user's name naturally. Reference their habits and saved memory (preferences, routine) in almost every reply.",
         "- Use human fillers like 'Ah', 'Got it', 'Actually', or 'Honestly' occasionally to keep the vibe casual and smooth.",
@@ -976,6 +984,56 @@ export const appRouter = router({
           }]);
         }
         return { success: true };
+      }),
+    // Save assistant persona
+    savePersona: publicProcedure
+      .input(z.object({
+        personaName: z.string().max(64).optional().default(''),
+        personaStyle: z.string().max(64).optional().default(''),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await updateUserPersona(userId, input.personaName, input.personaStyle);
+        return { success: true };
+      }),
+    // Get current persona
+    getPersona: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const user = await getUserById(userId);
+      return {
+        personaName: user?.personaName ?? '',
+        personaStyle: user?.personaStyle ?? '',
+      };
+    }),
+    // Get referral info for current user
+    getReferralInfo: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const user = await getUserById(userId);
+      return {
+        referralCode: user?.referralCode ?? null,
+        credits: user?.credits ?? 0,
+      };
+    }),
+  }),
+  share: router({
+    // Generate a share token for a thread
+    createShareLink: publicProcedure
+      .input(z.object({ threadId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { randomBytes } = await import('crypto');
+        const token = randomBytes(16).toString('hex');
+        await setThreadShareToken(input.threadId, userId, token);
+        return { token, url: `/share/${token}` };
+      }),
+    // Get shared thread messages (public)
+    getSharedThread: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const thread = await getThreadByShareToken(input.token);
+        if (!thread) throw new Error('Shared conversation not found');
+        const messages = await listConversationMessages(thread.id, 100);
+        return { thread, messages };
       }),
   }),
   news: router({

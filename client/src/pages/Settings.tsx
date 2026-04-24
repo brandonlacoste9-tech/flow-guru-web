@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2 } from 'lucide-react';
+import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Gift, Copy, Share2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'wouter';
 
-type Tab = 'profile' | 'memory' | 'instructions';
+type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'referral';
 
 const RADIO_URLS: Record<string, string> = {
   'radio-focus': 'https://ice6.somafm.com/groovesalad-128-mp3',
@@ -75,9 +75,12 @@ export function Settings() {
   const [newFactValue, setNewFactValue] = useState('');
   const [showAddFact, setShowAddFact] = useState(false);
 
+  const [personaName, setPersonaName] = useState('');
+  const [personaStyle, setPersonaStyle] = useState('');
+  const [personaDirty, setPersonaDirty] = useState(false);
+
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
 
-  // React Query v5: onSuccess on useQuery is removed — use useEffect watching .data instead
   useEffect(() => {
     const data = profileQuery.data as any;
     if (!data) return;
@@ -90,6 +93,15 @@ export function Settings() {
   }, [profileQuery.data]);
 
   const factsQuery = trpc.settings.getMemoryFacts.useQuery();
+  const personaQuery = trpc.settings.getPersona.useQuery(undefined);
+  const referralQuery = trpc.settings.getReferralInfo.useQuery(undefined);
+
+  useEffect(() => {
+    const data = personaQuery.data as any;
+    if (!data) return;
+    setPersonaName(data.personaName ?? '');
+    setPersonaStyle(data.personaStyle ?? '');
+  }, [personaQuery.data]);
 
   const saveProfileMutation = trpc.settings.saveProfile.useMutation({
     onSuccess: () => { toast.success('Profile saved!'); setProfileDirty(false); profileQuery.refetch(); },
@@ -99,6 +111,11 @@ export function Settings() {
   const saveInstructionsMutation = trpc.settings.saveCustomInstructions.useMutation({
     onSuccess: () => { toast.success('Custom instructions saved!'); setInstructionsDirty(false); },
     onError: () => toast.error('Failed to save instructions.'),
+  });
+
+  const savePersonaMutation = trpc.settings.savePersona.useMutation({
+    onSuccess: () => { toast.success('Persona saved!'); setPersonaDirty(false); personaQuery.refetch(); },
+    onError: () => toast.error('Failed to save persona.'),
   });
 
   const deleteFactMutation = trpc.settings.deleteMemoryFact.useMutation({
@@ -136,7 +153,18 @@ export function Settings() {
   const TABS = [
     { id: 'profile' as Tab, label: 'Profile', icon: User },
     { id: 'memory' as Tab, label: 'Memory', icon: Brain },
+    { id: 'persona' as Tab, label: 'Persona', icon: Wand2 },
     { id: 'instructions' as Tab, label: 'Instructions', icon: MessageSquare },
+    { id: 'referral' as Tab, label: 'Referral', icon: Gift },
+  ];
+
+  const PERSONA_STYLES = [
+    { value: '', label: '⚡ Default', desc: 'High-energy & smooth' },
+    { value: 'professional and concise', label: '💼 Professional', desc: 'Formal & to the point' },
+    { value: 'casual and friendly like a best friend', label: '😎 Casual', desc: 'Relaxed & conversational' },
+    { value: 'motivational and inspiring like a life coach', label: '🔥 Motivational', desc: 'Pumped up & inspiring' },
+    { value: 'witty and humorous with clever jokes', label: '😂 Witty', desc: 'Funny & clever' },
+    { value: 'calm, zen, and mindful', label: '🧘 Zen', desc: 'Calm & mindful' },
   ];
 
   return (
@@ -154,14 +182,15 @@ export function Settings() {
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-8">
-        <div className="flex gap-2 mb-8 bg-secondary/40 p-1 rounded-2xl">
+        {/* Scrollable tab bar */}
+        <div className="flex gap-1.5 mb-8 bg-secondary/40 p-1 rounded-2xl overflow-x-auto">
           {TABS.map(tab => {
             const Icon = tab.icon;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={cn('flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all',
+                className={cn('flex-1 min-w-[80px] flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap',
                   activeTab === tab.id ? 'bg-card shadow-sm text-foreground border border-border' : 'text-muted-foreground hover:text-foreground')}>
-                <Icon size={14} />{tab.label}
+                <Icon size={13} />{tab.label}
               </button>
             );
           })}
@@ -320,6 +349,45 @@ export function Settings() {
             </motion.div>
           )}
 
+          {activeTab === 'persona' && (
+            <motion.div key="persona" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+              <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Wand2 size={14} className="text-primary" />
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Assistant Persona</h2>
+                </div>
+                <p className="text-xs text-muted-foreground -mt-2">Give your assistant a custom name and personality style. This shapes how it speaks to you in every conversation.</p>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Assistant Name</label>
+                  <input type="text" value={personaName} maxLength={64}
+                    onChange={e => { setPersonaName(e.target.value); setPersonaDirty(true); }}
+                    placeholder="e.g. Aria, Max, Nova, Flow Guru"
+                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors" />
+                  <p className="text-[10px] text-muted-foreground">Leave blank to use the default name "Flow Guru".</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Personality Style</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PERSONA_STYLES.map(opt => (
+                      <button key={opt.value} onClick={() => { setPersonaStyle(opt.value); setPersonaDirty(true); }}
+                        className={cn('flex flex-col items-start gap-0.5 px-4 py-3 rounded-2xl border text-left transition-all',
+                          personaStyle === opt.value ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-background text-muted-foreground hover:border-primary/40')}>
+                        <span className="text-sm font-semibold">{opt.label}</span>
+                        <span className="text-[10px]">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button disabled={!personaDirty || savePersonaMutation.isLoading}
+                  onClick={() => savePersonaMutation.mutate({ personaName, personaStyle })}
+                  className={cn('w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
+                    personaDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
+                  <Save size={14} />{savePersonaMutation.isLoading ? 'Saving...' : 'Save Persona'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'instructions' && (
             <motion.div key="instructions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
               <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
@@ -351,6 +419,59 @@ export function Settings() {
               <div className="flex items-start gap-3 bg-card border border-border rounded-2xl px-4 py-3">
                 <AlertCircle size={14} className="text-muted-foreground shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground leading-relaxed">Instructions take effect on the next message you send. They apply to every conversation going forward.</p>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'referral' && (
+            <motion.div key="referral" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+              <div className="bg-card border border-border rounded-3xl p-6 space-y-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Gift size={14} className="text-primary" />
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Referral Program</h2>
+                </div>
+                <p className="text-xs text-muted-foreground -mt-2">Share your referral code with friends. When they sign up using your code, you both earn bonus credits.</p>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Referral Code</label>
+                  {(referralQuery.data as any)?.referralCode ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-sm font-mono font-bold tracking-widest text-primary">
+                        {(referralQuery.data as any).referralCode}
+                      </div>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText((referralQuery.data as any).referralCode); toast.success('Copied to clipboard!'); }}
+                        className="w-11 h-11 rounded-xl border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground">
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-background border border-border rounded-xl px-4 py-3 text-sm text-muted-foreground">
+                      {referralQuery.isLoading ? 'Loading...' : 'Sign in to get your referral code.'}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
+                  <Sparkles size={14} className="text-primary shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-foreground">Credits Balance</p>
+                    <p className="text-xs text-muted-foreground">{(referralQuery.data as any)?.credits ?? 0} credits earned from referrals</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const code = (referralQuery.data as any)?.referralCode;
+                    if (code) {
+                      navigator.clipboard.writeText(`Join me on Flow Guru — the AI personal assistant that actually knows you. Sign up with my code ${code} at https://floguru.com`);
+                      toast.success('Share message copied!');
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold bg-primary text-primary-foreground hover:opacity-90 transition-all">
+                  <Share2 size={14} />Share Your Code
+                </button>
+              </div>
+              <div className="flex items-start gap-3 bg-card border border-border rounded-2xl px-4 py-3">
+                <Gift size={14} className="text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground leading-relaxed">Referral credits can be used toward premium features. Credits are added automatically when your friend signs up using your code.</p>
               </div>
             </motion.div>
           )}

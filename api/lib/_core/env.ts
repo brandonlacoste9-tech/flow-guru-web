@@ -17,7 +17,7 @@ export const ENV = {
   localAiUrl: process.env.LOCAL_AI_URL || "http://localhost:8080",
   useLocalAi: process.env.USE_LOCAL_AI === "true",
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
-  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  googleClientSecret: process.env.GOOGLE_SECRET_KEY ?? "",
   spotifyClientId: process.env.SPOTIFY_CLIENT_ID ?? "",
   spotifyClientSecret: process.env.SPOTIFY_CLIENT_SECRET ?? "",
   theNewsApiKey: clean(process.env.THENEWSAPI_API_KEY),
