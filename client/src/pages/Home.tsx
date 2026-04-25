@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper, ListTodo } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc-client";
 import { toast } from "sonner";
@@ -93,6 +93,7 @@ export default function Home() {
   const geoFetchedRef = useRef(false);
 
   // Load wake-up time and alarm sound from profile for reminders
+  const utils = trpc.useUtils();
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
   useEffect(() => {
     const data = profileQuery.data as any;
@@ -287,7 +288,10 @@ export default function Home() {
       .trim();
     setIsSpeaking(true);
     
-    const url = `/api/speak?text=${encodeURIComponent(clean)}&voiceId=${VOICE_IDS[voiceGenderRef.current]}`;
+    const profileVoiceId = (profileQuery.data as any)?.voiceId;
+    const finalVoiceId = profileVoiceId || VOICE_IDS[voiceGenderRef.current];
+    
+    const url = `/api/speak?text=${encodeURIComponent(clean)}&voiceId=${finalVoiceId}`;
     playAudioStream(url, clean);
   };
 
@@ -365,6 +369,41 @@ export default function Home() {
   const userName = user?.name?.split(' ')[0] || "Brandon";
 
   // AI reminders — checks calendar events and wake-up time every minute
+  const handleBriefing = async () => {
+    toast.promise(utils.assistant.getBriefing.fetch(), {
+      loading: 'Gathering your morning briefing...',
+      success: (data) => {
+        const calCount = data.calendar.length;
+        const listCount = data.lists.reduce((acc, l) => acc + l.items.length, 0);
+        const w = data.weather;
+        
+        let prompt = `Good morning, ${data.userName}! I'm ${data.assistantName}, and I've got your briefing ready. `;
+        if (w) {
+          const temp = Math.round(w.current?.temperatureC || w.tempC || 0);
+          const label = w.current?.weatherLabel || w.label || 'fair';
+          prompt += `It's currently ${temp}°C and ${label} in ${w.location || w.locationName || 'your area'}. `;
+        }
+        
+        if (calCount > 0) {
+          prompt += `You have ${calCount} event${calCount > 1 ? 's' : ''} on your calendar today. `;
+        } else {
+          prompt += `Your calendar is clear for today. `;
+        }
+        
+        if (listCount > 0) {
+          prompt += `Don't forget, you also have ${listCount} item${listCount > 1 ? 's' : ''} across your lists that need attention. `;
+        }
+        
+        prompt += `How can I help you get started?`;
+        
+        speakText(prompt);
+        setMessages(prev => [...prev, { id: Date.now(), role: 'assistant', content: prompt }]);
+        return 'Briefing complete!';
+      },
+      error: 'Failed to generate briefing.',
+    });
+  };
+
   const { alarmState, dismissAlarm, snoozeAlarm } = useReminders({
     enabled: speechEnabled,
     userName,
@@ -373,6 +412,7 @@ export default function Home() {
     voiceGender,
     alarmSound,
     alarmDays,
+    onWakeUp: handleBriefing,
   });
 
   const handleConnectCalendar = () => {
@@ -447,6 +487,12 @@ export default function Home() {
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground"
           >
             {voiceGender === 'male' ? <User size={14} /> : <UserRound size={14} />}
+          </button>
+          
+          <button onClick={() => navigate("/lists")}
+            title="Your Lists"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
+            <ListTodo size={14} />
           </button>
 
           <button onClick={() => navigate('/settings')}
@@ -676,6 +722,24 @@ export default function Home() {
                     <p className="text-sm font-semibold text-foreground">Today's Headlines</p>
                     <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">General · Tech · Business</p>
                     <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">Tap to read →</p>
+                  </motion.div>
+
+                  {/* Lists Card */}
+                  <motion.div 
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 sm:p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.65 }}
+                    onClick={() => navigate("/lists")}
+                  >
+                    <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
+                    <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                      <ListTodo className="w-4 h-4 text-primary" />
+                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Smart Lists</span>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">Groceries & Todos</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Organize your day</p>
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">View all →</p>
                   </motion.div>
 
                   {/* Music Player Card */}

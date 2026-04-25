@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { Calendar, Cloud, MapPin, Newspaper, Music, Globe, Bot, Sparkles, AlertCircle } from "lucide-react";
+import { Calendar, Cloud, MapPin, Newspaper, Music, Globe, Bot, Sparkles, AlertCircle, ListTodo } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Mirrors server `AssistantActionResult` without importing server code into the client bundle. */
@@ -20,6 +20,7 @@ function getActionIcon(action: string) {
   if (action?.includes("music")) return Music;
   if (action?.includes("browser")) return Globe;
   if (action?.includes("subagent")) return Bot;
+  if (action?.includes("list")) return ListTodo;
   return Sparkles;
 }
 
@@ -102,6 +103,23 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
         <p className="text-muted-foreground text-[16px] leading-relaxed">
           No story cards were available for this news result yet.
         </p>
+      );
+    }
+  } else if (result.action === "list.manage") {
+    const items = (data as { items?: any[] }).items;
+    if (Array.isArray(items) && items.length > 0) {
+      body = (
+        <div className="space-y-2 mt-2">
+          {items.slice(0, 5).map((item, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+              <p className={cn("text-[15px] font-medium", item.completed && "line-through opacity-50")}>
+                {item.content}
+              </p>
+            </div>
+          ))}
+          {items.length > 5 && <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest pl-3.5">+{items.length - 5} more</p>}
+        </div>
       );
     }
   }

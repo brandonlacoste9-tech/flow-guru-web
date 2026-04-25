@@ -31,6 +31,8 @@ import {
   touchConversationThread,
   upsertUserMemoryProfile,
   getUserById,
+  listUserLists,
+  getListItems,
 } from "./db";
 
 const sendMessageInput = z.object({
@@ -137,6 +139,23 @@ const ASSISTANT_TOOLS: Tool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "manageList",
+      description: "Manage personal lists (e.g., Grocery, Todo, Ideas)",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["create", "add", "remove", "clear", "list", "rename", "update", "remind"], description: "The action to perform" },
+          listName: { type: "string", description: "Name of the list (e.g. 'Grocery')" },
+          itemContent: { type: "string", description: "The item to add, remove, or set reminder for" },
+          time: { type: "string", description: "Natural language time (e.g. '5pm', 'tomorrow at 9am')" },
+        },
+        required: ["action", "listName"],
+      },
+    },
+  },
 ];
 
 // ─── Tool stub handler ────────────────────────────────────────────────────────
@@ -219,6 +238,7 @@ function buildMemoryContext(params: {
         dailyRoutine: string | null;
         preferencesSummary: string | null;
         recurringEventsSummary: string | null;
+        buddyPersonality: string | null;
       }
     | null
     | undefined;
@@ -235,12 +255,18 @@ function buildMemoryContext(params: {
         .join("\n")
     : "- No saved personal facts yet.";
 
-  return [
+  let context = [
     `User name: ${params.userName ?? "Unknown"}`,
     `Wake-up time: ${params.profile?.wakeUpTime ?? "Unknown"}`,
     `Daily routine: ${params.profile?.dailyRoutine ?? "Unknown"}`,
-    `Preferences summary: ${params.profile?.preferencesSummary ?? "Unknown"}`,
-    `Recurring events summary: ${params.profile?.recurringEventsSummary ?? "Unknown"}`,
+  ].join("\n");
+
+  if (params.profile?.preferencesSummary) context += `\nPreferences: ${params.profile.preferencesSummary}`;
+  if (params.profile?.buddyPersonality) context += `\nYour Assigned Personality: ${params.profile.buddyPersonality}`;
+  if (params.profile?.recurringEventsSummary) context += `\nRecurring Events: ${params.profile.recurringEventsSummary}`;
+
+  return [
+    context,
     "Known memory facts:",
     factLines,
   ].join("\n");
@@ -715,7 +741,7 @@ export const appRouter = router({
 
       const systemPrompt = [
         `You are ${assistantName}, ${userName}'s personal assistant.`,
-        "You sound like a close friend. Short, warm, direct. Never robotic.",
+        profile?.buddyPersonality ? `Your personality profile: ${profile.buddyPersonality}` : "You sound like a close friend. Short, warm, direct. Never robotic.",
         "",
         "RULES:",
         "- Reply in 1-2 sentences max. Be concise.",
@@ -916,6 +942,54 @@ export const appRouter = router({
           audioDataUri: `data:audio/mpeg;base64,${buffer.toString("base64")}`,
         };
       }),
+    getBriefing: publicProcedure
+      .query(async ({ ctx }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const [profile, memoryFacts, allLists] = await Promise.all([
+          getUserMemoryProfile(userId),
+          listUserMemoryFacts(userId),
+          listUserLists(userId),
+        ]);
+
+        const locationFact = memoryFacts.find(f => f.factKey === "location" || f.factKey === "city");
+        const userLocation = locationFact?.factValue || null;
+
+        const now = new Date();
+        const endOfDay = new Date(now);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Weather
+        let weather = null;
+        if (userLocation) {
+          try {
+            const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
+            const plan = await planAssistantAction({ message: "current weather", memoryContext: `Location: ${userLocation}` });
+            const result = await executeAssistantAction(plan, { userId, message: "current weather", memoryContext: `Location: ${userLocation}` });
+            if (result.status === "executed") weather = result.data;
+          } catch {}
+        }
+
+        // Calendar
+        const calendar = await listLocalEvents(userId, now, endOfDay);
+
+        // Lists
+        const listSnapshots = [];
+        for (const list of allLists) {
+          const items = await getListItems(userId, list.id);
+          const pending = items.filter(i => !i.completed);
+          if (pending.length > 0) {
+            listSnapshots.push({ name: list.name, items: pending.map(i => i.content) });
+          }
+        }
+
+        return {
+          weather,
+          calendar: calendar.map(e => ({ title: e.title, start: e.startAt })),
+          lists: listSnapshots,
+          assistantName: getAssistantName(memoryFacts),
+          userName: ctx.user?.name || "Brandon",
+        };
+      }),
   }),
   settings: router({
     getProfile: publicProcedure.query(async ({ ctx }) => {
@@ -930,6 +1004,8 @@ export const appRouter = router({
         customInstructions,
         alarmSound: (profile as any)?.alarmSound ?? 'chime',
         alarmDays: (profile as any)?.alarmDays ?? '0,1,2,3,4,5,6',
+        voiceId: (profile as any)?.voiceId ?? '',
+        buddyPersonality: (profile as any)?.buddyPersonality ?? '',
       };
     }),
     saveProfile: publicProcedure
@@ -939,6 +1015,8 @@ export const appRouter = router({
         preferencesSummary: z.string().optional(),
         alarmSound: z.string().optional(),
         alarmDays: z.string().optional(),
+        voiceId: z.string().optional(),
+        buddyPersonality: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -948,9 +1026,15 @@ export const appRouter = router({
           preferencesSummary: input.preferencesSummary ?? null,
           alarmSound: input.alarmSound ?? null,
           alarmDays: input.alarmDays ?? null,
+          voiceId: input.voiceId ?? null,
+          buddyPersonality: input.buddyPersonality ?? null,
         });
         return { success: true };
       }),
+    getVoices: publicProcedure.query(async () => {
+      const { getVoices } = await import("./_core/elevenLabs");
+      return await getVoices();
+    }),
     getMemoryFacts: publicProcedure.query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       return await listUserMemoryFacts(userId);
@@ -1047,6 +1131,102 @@ export const appRouter = router({
         } catch (e) {
           return { articles: [] };
         }
+      }),
+  }),
+  push: router({
+    register: publicProcedure
+      .input(z.object({
+        subscription: z.object({
+          endpoint: z.string(),
+          keys: z.object({
+            p256dh: z.string(),
+            auth: z.string(),
+          }),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { upsertPushSubscription } = await import("./db");
+        await upsertPushSubscription(userId, input.subscription);
+        return { success: true };
+      }),
+  }),
+  list: router({
+    all: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const { listUserLists } = await import("./db");
+      return await listUserLists(userId);
+    }),
+    items: publicProcedure
+      .input(z.object({ listId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { getListItems } = await import("./db");
+        return await getListItems(userId, input.listId);
+      }),
+    create: publicProcedure
+      .input(z.object({ name: z.string().min(1).max(100), icon: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { createList } = await import("./db");
+        const id = await createList(userId, input.name, input.icon);
+        return { id };
+      }),
+    addItem: publicProcedure
+      .input(z.object({ listId: z.number(), content: z.string().min(1) }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { addListItem } = await import("./db");
+        const id = await addListItem(userId, input.listId, input.content);
+        return { id };
+      }),
+    toggleItem: publicProcedure
+      .input(z.object({ itemId: z.number(), completed: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { toggleListItem } = await import("./db");
+        await toggleListItem(userId, input.itemId, input.completed);
+        return { success: true };
+      }),
+    deleteItem: publicProcedure
+      .input(z.object({ itemId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { deleteListItem } = await import("./db");
+        await deleteListItem(userId, input.itemId);
+        return { success: true };
+      }),
+    deleteList: publicProcedure
+      .input(z.object({ listId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { deleteList } = await import("./db");
+        await deleteList(userId, input.listId);
+        return { success: true };
+      }),
+    updateList: publicProcedure
+      .input(z.object({ listId: z.number(), name: z.string().min(1).max(100) }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { updateList } = await import("./db");
+        await updateList(userId, input.listId, input.name);
+        return { success: true };
+      }),
+    updateItem: publicProcedure
+      .input(z.object({ itemId: z.number(), content: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { updateListItem } = await import("./db");
+        await updateListItem(userId, input.itemId, input.content);
+        return { success: true };
+      }),
+    setReminder: publicProcedure
+      .input(z.object({ itemId: z.number(), reminderAt: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { setListItemReminder } = await import("./db");
+        await setListItemReminder(userId, input.itemId, input.reminderAt ? new Date(input.reminderAt) : null);
+        return { success: true };
       }),
   }),
 });

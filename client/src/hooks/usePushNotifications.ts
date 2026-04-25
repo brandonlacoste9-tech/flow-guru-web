@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { trpc } from '@/lib/trpc-client';
 
 export type ReminderPayload = {
   title: string;
@@ -27,6 +28,37 @@ export function usePushNotifications() {
 
     setPermission(Notification.permission);
   }, []);
+
+  const registerMutation = trpc.push.register.useMutation();
+
+  // Handle subscription and registration
+  useEffect(() => {
+    if (!swReady || permission !== 'granted' || !swRef.current) return;
+
+    const subscribeAndRegister = async () => {
+      try {
+        const sub = await swRef.current!.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BHjQ-4anMIWuj2qfTO3hHmoyemSuchf_gqxKAyCqEkE56fC7iRAWrQwQ8Ts_wifuxW4NA2InsvSTYzg-7M_Eaxk',
+        });
+
+        const p256dh = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('p256dh')!) as any));
+        const auth = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('auth')!) as any));
+
+        await registerMutation.mutateAsync({
+          subscription: {
+            endpoint: sub.endpoint,
+            keys: { p256dh, auth },
+          },
+        });
+        console.log('[Push] Registered with backend');
+      } catch (err) {
+        console.warn('[Push] Subscription failed:', err);
+      }
+    };
+
+    subscribeAndRegister();
+  }, [swReady, permission]);
 
   // Request notification permission
   const requestPermission = async (): Promise<boolean> => {

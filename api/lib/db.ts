@@ -38,7 +38,34 @@ CREATE TABLE IF NOT EXISTS fg_threads (
     title VARCHAR(255) DEFAULT 'Flow Guru Chat' NOT NULL,
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL,
-    "lastMessageAt" TIMESTAMP DEFAULT NOW() NOT NULL
+    "lastMessageAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "shareToken" VARCHAR(64)
+);
+CREATE TABLE IF NOT EXISTS fg_push_subscriptions (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_lists (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
+    "icon" VARCHAR(64),
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_list_items (
+    id SERIAL PRIMARY KEY,
+    "listId" INTEGER NOT NULL,
+    "userId" INTEGER NOT NULL,
+    "content" TEXT NOT NULL,
+    "completed" INTEGER DEFAULT 0 NOT NULL,
+    "reminderAt" TIMESTAMP,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
 CREATE TABLE IF NOT EXISTS fg_messages (
     id SERIAL PRIMARY KEY,
@@ -54,10 +81,12 @@ CREATE TABLE IF NOT EXISTS fg_profiles (
     "wakeUpTime" VARCHAR(64),
     "dailyRoutine" TEXT,
     "preferencesSummary" TEXT,
-    "recurringEventsSummary" TEXT,
-    "alarmSound" VARCHAR(64) DEFAULT 'chime',
-    "alarmDays" VARCHAR(32) DEFAULT '0,1,2,3,4,5,6',
-    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "recurringEventsSummary" text,
+    "alarmSound" varchar(64) DEFAULT 'chime',
+    "alarmDays" varchar(32) DEFAULT '0,1,2,3,4,5,6',
+    "voiceId" varchar(64),
+    "buddyPersonality" text,
+    "createdAt" timestamp DEFAULT now() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
 CREATE TABLE IF NOT EXISTS fg_facts (
@@ -161,7 +190,15 @@ export async function getDb() {
   }
 
   // postgres.js doesn't support channel_binding — strip it from the URL
-  const dbUrl = rawUrl.replace(/[?&]channel_binding=[^&]*/g, '').replace(/\?$/, '');
+  let dbUrl = rawUrl;
+  try {
+    const url = new URL(rawUrl);
+    url.searchParams.delete('channel_binding');
+    dbUrl = url.toString();
+  } catch (e) {
+    // Fallback to simple replace if URL parsing fails
+    dbUrl = rawUrl.replace(/[?&]channel_binding=[^&]*/g, '').replace(/\?&/, '?').replace(/\?$/, '');
+  }
   console.log('[DB] Connecting to:', dbUrl.replace(/:[^:@]+@/, ':***@'));
 
   try {
@@ -609,4 +646,122 @@ export async function getThreadByShareToken(token: string): Promise<schema.Conve
   } catch (err) {
     return null;
   }
+}
+// ─── Push Notifications ──────────────────────────────────────────────────────
+export async function upsertPushSubscription(userId: number, subscription: { endpoint: string; keys: { p256dh: string; auth: string } }): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await ensureTables(db);
+    
+    // Check if subscription already exists for this endpoint
+    const existing = await db.select().from(schema.pushSubscriptions)
+      .where(eq(schema.pushSubscriptions.endpoint, subscription.endpoint))
+      .limit(1);
+
+    const values = {
+      userId,
+      endpoint: subscription.endpoint,
+      p256dh: subscription.keys.p256dh,
+      auth: subscription.keys.auth,
+    };
+
+    if (existing.length > 0) {
+      await db.update(schema.pushSubscriptions).set(values).where(eq(schema.pushSubscriptions.id, existing[0].id));
+    } else {
+      await db.insert(schema.pushSubscriptions).values(values);
+    }
+  } catch (err: any) {
+    console.error("[DB] upsertPushSubscription failed:", err.message);
+  }
+}
+
+// ─── Lists & Items ───────────────────────────────────────────────────────────
+export async function listUserLists(userId: number): Promise<schema.List[]> {
+  try {
+    const db = await getDb();
+    if (!db) return [];
+    await ensureTables(db);
+    return await db.select().from(schema.lists).where(eq(schema.lists.userId, userId)).orderBy(desc(schema.lists.createdAt));
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function getListItems(userId: number, listId: number): Promise<schema.ListItem[]> {
+  try {
+    const db = await getDb();
+    if (!db) return [];
+    await ensureTables(db);
+    return await db.select().from(schema.listItems)
+      .where(and(eq(schema.listItems.userId, userId), eq(schema.listItems.listId, listId)))
+      .orderBy(schema.listItems.createdAt);
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function createList(userId: number, name: string, icon?: string): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  await ensureTables(db);
+  const results = await db.insert(schema.lists).values({ userId, name, icon: icon || 'list' }).returning({ id: schema.lists.id });
+  return results[0]?.id || null;
+}
+
+export async function addListItem(userId: number, listId: number, content: string): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  await ensureTables(db);
+  const results = await db.insert(schema.listItems).values({ userId, listId, content, completed: 0 }).returning({ id: schema.listItems.id });
+  return results[0]?.id || null;
+}
+
+export async function toggleListItem(userId: number, itemId: number, completed: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await ensureTables(db);
+  await db.update(schema.listItems).set({ completed: completed ? 1 : 0, updatedAt: new Date() })
+    .where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
+}
+
+export async function deleteListItem(userId: number, itemId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await ensureTables(db);
+  await db.delete(schema.listItems).where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
+}
+
+export async function deleteList(userId: number, listId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await ensureTables(db);
+  // Delete all items first
+  await db.delete(schema.listItems).where(and(eq(schema.listItems.listId, listId), eq(schema.listItems.userId, userId)));
+  // Delete the list
+  await db.delete(schema.lists).where(and(eq(schema.lists.id, listId), eq(schema.lists.userId, userId)));
+}
+
+export async function updateList(userId: number, listId: number, name: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await ensureTables(db);
+  await db.update(schema.lists).set({ name, updatedAt: new Date() })
+    .where(and(eq(schema.lists.id, listId), eq(schema.lists.userId, userId)));
+}
+
+export async function updateListItem(userId: number, itemId: number, content: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await ensureTables(db);
+  await db.update(schema.listItems).set({ content, updatedAt: new Date() })
+    .where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
+}
+
+export async function setListItemReminder(userId: number, itemId: number, reminderAt: Date | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await ensureTables(db);
+  await db.update(schema.listItems).set({ reminderAt, updatedAt: new Date() })
+    .where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
 }

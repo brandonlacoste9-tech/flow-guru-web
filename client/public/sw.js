@@ -26,7 +26,22 @@ self.addEventListener('push', (event) => {
     actions: data.actions || [],
   };
 
-  event.waitUntil(self.registration.showNotification(data.title || 'Flow Guru', options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(data.title || 'Flow Guru', options),
+      // Also notify clients to play sound if app is open
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        for (const client of clientList) {
+          client.postMessage({ 
+            type: 'PLAY_ALARM', 
+            alarmSound: data.alarmSound || 'chime',
+            label: data.title,
+            spokenMsg: data.body
+          });
+        }
+      })
+    ])
+  );
 });
 
 // Handle notification click — open or focus the app

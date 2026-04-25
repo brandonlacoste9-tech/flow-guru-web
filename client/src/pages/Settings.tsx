@@ -79,6 +79,10 @@ export function Settings() {
   const [personaStyle, setPersonaStyle] = useState('');
   const [personaDirty, setPersonaDirty] = useState(false);
 
+  const [voiceId, setVoiceId] = useState('');
+  const [buddyPersonality, setBuddyPersonality] = useState('');
+  const [voicePreviewLoading, setVoicePreviewLoading] = useState<string | null>(null);
+
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
 
   useEffect(() => {
@@ -90,6 +94,8 @@ export function Settings() {
     setDailyRoutine(data.dailyRoutine ?? '');
     setPreferencesSummary(data.preferencesSummary ?? '');
     setInstructions(data.customInstructions ?? '');
+    setVoiceId(data.voiceId ?? '');
+    setBuddyPersonality(data.buddyPersonality ?? '');
   }, [profileQuery.data]);
 
   const factsQuery = trpc.settings.getMemoryFacts.useQuery();
@@ -102,6 +108,31 @@ export function Settings() {
     setPersonaName(data.personaName ?? '');
     setPersonaStyle(data.personaStyle ?? '');
   }, [personaQuery.data]);
+
+  const voicesQuery = trpc.settings.getVoices.useQuery(undefined, {
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+
+  const speakMutation = trpc.assistant.speak.useMutation({
+    onSuccess: (data) => {
+      const audio = new Audio(data.audioDataUri);
+      audio.onended = () => setVoicePreviewLoading(null);
+      audio.play().catch(() => setVoicePreviewLoading(null));
+    },
+    onError: () => setVoicePreviewLoading(null),
+  });
+
+  function handlePreviewVoice(vId: string, previewUrl?: string) {
+    setVoicePreviewLoading(vId);
+    if (previewUrl) {
+      const audio = new Audio(previewUrl);
+      audio.onended = () => setVoicePreviewLoading(null);
+      audio.play().catch(() => setVoicePreviewLoading(null));
+    } else {
+      speakMutation.mutate({ text: "Hello! This is how I'll sound as your buddy.", voiceId: vId });
+    }
+  }
 
   const saveProfileMutation = trpc.settings.saveProfile.useMutation({
     onSuccess: () => { toast.success('Profile saved!'); setProfileDirty(false); profileQuery.refetch(); },
@@ -384,6 +415,53 @@ export function Settings() {
                   className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
                     personaDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
                   <Save size={14} />{savePersonaMutation.isPending ? 'Saving...' : 'Save Persona'}
+                </button>
+              </div>
+
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Volume2 size={14} className="text-primary" />
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Buddy Voice</h2>
+                </div>
+                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">Choose the voice that best fits your buddy's personality.</p>
+                
+                <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
+                  {voicesQuery.isLoading && <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" /></div>}
+                  {voicesQuery.data?.map((v: any) => (
+                    <div key={v.voice_id} className={cn(
+                      "flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer",
+                      voiceId === v.voice_id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                    )} onClick={() => { setVoiceId(v.voice_id); setProfileDirty(true); }}>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-semibold truncate">{v.name}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{v.labels?.gender || 'Voice'} • {v.labels?.accent || 'Natural'}</span>
+                      </div>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handlePreviewVoice(v.voice_id, v.preview_url); }}
+                        className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center hover:bg-primary/20 transition-all text-primary"
+                        disabled={voicePreviewLoading === v.voice_id}
+                      >
+                        {voicePreviewLoading === v.voice_id ? <Loader2 size={12} className="animate-spin" /> : <Volume2 size={12} />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Buddy Personality (AI Context)</label>
+                  <textarea rows={3} value={buddyPersonality} onChange={e => { setBuddyPersonality(e.target.value); setProfileDirty(true); }}
+                    placeholder="e.g. You are a supportive and sarcastic companion who loves tech and deep house music."
+                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">This tells the AI how to behave and what to remember about its own personality.</p>
+                </div>
+
+                <button disabled={!profileDirty || saveProfileMutation.isPending}
+                  onClick={() => saveProfileMutation.mutate({ 
+                    wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays, voiceId, buddyPersonality 
+                  })}
+                  className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
+                    profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
+                  <Save size={14} />{saveProfileMutation.isPending ? 'Saving...' : 'Save Settings'}
                 </button>
               </div>
             </motion.div>

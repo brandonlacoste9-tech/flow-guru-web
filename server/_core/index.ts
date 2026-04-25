@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 if (!process.env.VERCEL) {
   dotenv.config();
 }
-console.log('>>> FLOW GURU SERVER STARTING...');
+
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -61,9 +61,7 @@ export async function createMainApp() {
     next();
   });
 
-  registerStorageProxy(app);
-  registerOAuthRoutes(app);
-  registerProviderConnectionRoutes(app);
+  // 4. Integrations
   registerElevenLabsRoutes(app);
 
   // development mode uses Vite, production mode uses static files
@@ -75,36 +73,18 @@ export async function createMainApp() {
   } else {
     // ---- PRODUCTION STATIC SERVING (INLINED FOR VERCEL STABILITY) ----
     const distPath = path.resolve(process.cwd(), "dist", "public");
+    app.use(express.static(distPath));
+    registerStorageProxy(app);
+    registerOAuthRoutes(app);
+    registerProviderConnectionRoutes(app);
     
-    // Serve static files with aggressive caching
-    app.use(express.static(distPath, {
-      maxAge: '1y',
-      immutable: true,
-      index: false
-    }));
-    
-    // Fallback to index.html for SPA routing
-    app.get("*", (req, res, next) => {
-      // Don't catch API routes here
-      if (req.url.startsWith('/api/') || req.url.includes('trpc')) {
-        return next();
-      }
-      
+    app.use("*", (req, res) => {
       const indexPath = path.resolve(distPath, "index.html");
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
       } else {
         res.status(404).send("Front-end build not found. Please run 'npm run build' first.");
       }
-    });
-
-    // 5. Global Error Handler (Must be last)
-    app.use((err: any, req: any, res: any, next: any) => {
-      console.error("[Fatal Error]", err);
-      res.status(500).json({
-        message: "A server error occurred. Please check your environment variables.",
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
-      });
     });
 
     return { app, server: createServer(app) };
@@ -130,21 +110,29 @@ export default async function handler(req: any, res: any) {
 // Local development server
 if (process.env.NODE_ENV === "development" || !process.env.VERCEL) {
   const startLocalServer = async () => {
-    const { app, server } = await createMainApp();
-    const preferredPort = parseInt(process.env.PORT || "3000");
-    const port = await findAvailablePort(preferredPort);
+    console.log('>>> FLOW GURU SERVER STARTING...');
+    try {
+      const { app, server } = await createMainApp();
+      const preferredPort = parseInt(process.env.PORT || "3000");
+      const port = await findAvailablePort(preferredPort);
 
-    if (port !== preferredPort) {
-      console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+      if (port !== preferredPort) {
+        console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+      }
+
+      server.listen(port, () => {
+        console.log(`Server running on http://localhost:${port}/`);
+        
+        // Start background reminders (local dev only)
+        import("./reminders").then(m => m.startBackgroundReminders());
+      });
+    } catch (e) {
+      console.error('>>> SERVER START FAILED:', e);
     }
-
-    server.listen(port, () => {
-      console.log(`Server running on http://localhost:${port}/`);
-    });
   };
 
   // Only start server if not running in Vercel environment
   if (!process.env.VERCEL) {
-    startLocalServer().catch(console.error);
+    startLocalServer();
   }
 }

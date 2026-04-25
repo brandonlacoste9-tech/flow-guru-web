@@ -11,7 +11,8 @@ interface UseRemindersOptions {
   speakText: (text: string) => void;
   voiceGender: 'male' | 'female';
   alarmSound?: AlarmSoundType;
-  alarmDays?: string | null; // comma-separated day indices, 0=Sun..6=Sat, e.g. '1,2,3,4,5'
+  alarmDays?: string | null;
+  onWakeUp?: () => void;
 }
 
 export interface AlarmState {
@@ -44,6 +45,8 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   speakRef.current = speakText;
   userNameRef.current = userName;
   enabledRef.current = enabled;
+  const onWakeUpRef = useRef(onWakeUp);
+  onWakeUpRef.current = onWakeUp;
 
   // ── Alarm overlay state ──────────────────────────────────────────────────────
   const [alarmState, setAlarmState] = useState<AlarmState>({ firing: false, label: '' });
@@ -78,8 +81,14 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     stopAlarmSound();
     if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
     if (snoozeTimerRef.current) { clearTimeout(snoozeTimerRef.current); snoozeTimerRef.current = null; }
+    
+    // If it was a wake-up alarm, trigger briefing
+    if (alarmState.label.toLowerCase().includes('wake-up')) {
+      onWakeUpRef.current?.();
+    }
+    
     setAlarmState({ firing: false, label: '' });
-  }, []);
+  }, [alarmState.label]);
 
   /** Snooze the alarm for 9 minutes */
   const snoozeAlarm = useCallback(() => {
@@ -235,6 +244,30 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     } catch {
       // Silent fail — reminders are best-effort
     }
+
+    // ── List reminders ──
+    try {
+      const allLists = await utils.list.all.fetch();
+      for (const list of allLists) {
+        const items = await utils.list.items.fetch({ listId: list.id });
+        for (const item of items) {
+          if (item.completed || !item.reminderAt) continue;
+          const remindAt = new Date(item.reminderAt);
+          const diffMins = Math.round((remindAt.getTime() - now.getTime()) / 60000);
+          
+          if (diffMins >= -1 && diffMins <= 1) {
+            const key = `list-remind-${item.id}-${todayKey}`;
+            if (!firedReminders.has(key)) {
+              firedReminders.add(key);
+              const label = `List: ${list.name}`;
+              const msg = `Heads up! You wanted to be reminded about '${item.content}' on your ${list.name} list.`;
+              toast.info(`📝 ${item.content}`, { description: `Reminder from ${list.name}` });
+              fireAlarm(label, currentAlarmSound, msg);
+            }
+          }
+        }
+      }
+    } catch { /* silent */ }
   }, [utils, fireAlarm]); // Only depends on utils and fireAlarm — everything else read from refs
 
   // Set up the interval once — it never needs to be re-registered

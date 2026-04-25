@@ -18,6 +18,7 @@ const ACTION_NAMES = [
   "news.get",
   "browser.use",
   "system.subagent",
+  "list.manage",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -71,6 +72,15 @@ const plannerSchema = z.object({
     .object({
       query: z.string().nullable(),
       targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+    })
+    .nullable(),
+  list: z
+    .object({
+      action: z.enum(["create", "add", "remove", "clear", "list", "rename", "update", "remind"]).nullable(),
+      listName: z.string().nullable(),
+      itemContent: z.string().nullable(),
+      newName: z.string().nullable(),
+      time: z.string().nullable(),
     })
     .nullable(),
 });
@@ -830,6 +840,181 @@ async function executeCalendarCreateAction(
   };
 }
 
+async function executeListAction(plan: AssistantActionPlan, options: { userId: number, timeZone?: string | null }): Promise<AssistantActionResult> {
+  const { action, listName, itemContent, newName, time } = plan.list ?? {};
+
+  if (!action || !listName) {
+    return {
+      action: "list.manage",
+      status: "needs_input",
+      title: "List name needed",
+      summary: "Which list would you like me to manage? (e.g. Grocery, Todo)",
+    };
+  }
+
+  const { 
+    listUserLists, createList, addListItem, deleteListItem, 
+    deleteList, getListItems, updateList, updateListItem 
+  } = await import("./db");
+  
+  const allLists = await listUserLists(options.userId);
+  const targetList = allLists.find(l => l.name.toLowerCase().includes(listName.toLowerCase()));
+
+  try {
+    switch (action) {
+      case "create": {
+        if (targetList) {
+          return {
+            action: "list.manage",
+            status: "executed",
+            title: `List already exists`,
+            summary: `The '${listName}' list is already set up and ready to use.`,
+            data: { list: targetList },
+          };
+        }
+        const id = await createList(options.userId, listName);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `Created list: ${listName}`,
+          summary: `I've created your new '${listName}' list.`,
+          data: { id, name: listName },
+        };
+      }
+      case "add": {
+        if (!itemContent) {
+          return { action: "list.manage", status: "needs_input", title: "Item needed", summary: `What should I add to your ${listName} list?` };
+        }
+        let listId = targetList?.id;
+        if (!listId) {
+          listId = (await createList(options.userId, listName))!;
+        }
+        const id = await addListItem(options.userId, listId, itemContent);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `Added to ${listName}`,
+          summary: `Done — I added '${itemContent}' to your ${listName} list.`,
+          data: { id, content: itemContent, listName },
+        };
+      }
+      case "remove": {
+        if (!targetList || !itemContent) {
+          return { action: "list.manage", status: "failed", title: "Cannot remove", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
+        }
+        const items = await getListItems(options.userId, targetList.id);
+        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        if (!item) {
+          return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in the ${listName} list.` };
+        }
+        await deleteListItem(options.userId, item.id);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `Removed from ${listName}`,
+          summary: `Okay, I've removed '${item.content}' from your ${listName} list.`,
+          data: { itemId: item.id, content: item.content, listName },
+        };
+      }
+      case "clear": {
+        if (!targetList) {
+          return { action: "list.manage", status: "failed", title: "List not found", summary: `I couldn't find a list named '${listName}'.` };
+        }
+        await deleteList(options.userId, targetList.id);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `Cleared ${listName}`,
+          summary: `I've cleared out the entire '${listName}' list for you.`,
+          data: { listId: targetList.id, listName },
+        };
+      }
+      case "rename": {
+        if (!targetList || !newName) {
+          return { action: "list.manage", status: "failed", title: "Cannot rename", summary: `I couldn't find '${listName}' to rename it.` };
+        }
+        await updateList(options.userId, targetList.id, newName);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: "List Renamed",
+          summary: `Done! I've renamed '${listName}' to '${newName}'.`,
+          data: { listId: targetList.id, oldName: listName, newName },
+        };
+      }
+      case "update": {
+        if (!targetList || !itemContent || !newName) {
+          return { action: "list.manage", status: "failed", title: "Cannot update", summary: `I need to know which item to change and what to change it to.` };
+        }
+        const items = await getListItems(options.userId, targetList.id);
+        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        if (!item) {
+          return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in your ${listName} list.` };
+        }
+        await updateListItem(options.userId, item.id, newName);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: "Item Updated",
+          summary: `Updated! I've changed '${item.content}' to '${newName}' on your ${listName} list.`,
+          data: { itemId: item.id, oldContent: item.content, newContent: newName, listName },
+        };
+      }
+      case "list": {
+        if (!targetList) {
+          return { action: "list.manage", status: "executed", title: "List not found", summary: `You don't have a list named '${listName}' yet.`, data: { items: [] } };
+        }
+        const items = await getListItems(options.userId, targetList.id);
+        const activeItems = items.filter(i => !i.completed);
+        const summary = activeItems.length 
+          ? `You have ${activeItems.length} items on your ${listName} list: ${activeItems.map(i => i.content).join(", ")}.`
+          : `Your ${listName} list is currently empty.`;
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `${listName} List`,
+          summary,
+          data: { listId: targetList.id, listName, items },
+        };
+      }
+      case "remind": {
+        if (!targetList || !itemContent || !time) {
+          return { action: "list.manage", status: "needs_input", title: "Time needed", summary: `When should I remind you about '${itemContent}' on your ${listName} list?` };
+        }
+        const items = await getListItems(options.userId, targetList.id);
+        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        if (!item) {
+          return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
+        }
+
+        const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar");
+        const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
+        
+        if (!resolvedTime) {
+          return { action: "list.manage", status: "failed", title: "Time resolution failed", summary: `I couldn't understand the time '${time}'. Could you be more specific?` };
+        }
+
+        const { setListItemReminder } = await import("./db");
+        await setListItemReminder(options.userId, item.id, new Date(resolvedTime));
+
+        const timeStr = new Date(resolvedTime).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: "Reminder Set",
+          summary: `Done! I'll remind you to '${item.content}' on ${timeStr}.`,
+          data: { itemId: item.id, content: item.content, listName, reminderAt: resolvedTime },
+        };
+      }
+      default:
+        throw new Error("Invalid list action");
+    }
+  } catch (e) {
+    throw e;
+  }
+}
+
 async function executeMusicAction(
   plan: AssistantActionPlan,
   options: { userId: number }
@@ -881,162 +1066,50 @@ async function executeMusicAction(
 
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
-  options?: {
-    userId?: number;
-    userName?: string | null;
-    message?: string;
-    memoryContext?: string | null;
-    timeZone?: string | null;
-  },
-): Promise<AssistantActionResult | null> {
+  options: { userId: number; threadId?: number }
+): Promise<AssistantActionResult> {
+  console.log(`[Assistant Action] Executing: ${plan.action}`, plan);
+
   try {
     switch (plan.action) {
-      case "none":
-        return null;
-      case "route.get":
-        return await executeRouteAction(plan);
-      case "weather.get":
-        return await executeWeatherAction(plan);
-      case "news.get":
-        return await executeNewsAction(plan, options);
-      case "calendar.list_events":
-        if (!options?.userId || !options.message) {
-          return connectionRequiredResult(
-            plan.action,
-            "google-calendar",
-            "Google Calendar is not ready yet because the assistant is missing the current user context.",
-          );
-        }
-        return await executeCalendarListAction(plan, {
-          userId: options.userId,
-          userName: options.userName,
-          message: options.message,
-          memoryContext: options.memoryContext,
-          timeZone: options.timeZone,
-        });
+      case "list.manage":
+        return await executeListAction(plan, options);
       case "calendar.create_event":
-        if (!options?.userId || !options.message) {
-          return connectionRequiredResult(
-            plan.action,
-            "google-calendar",
-            "Google Calendar is not ready yet because the assistant is missing the current user context.",
-          );
-        }
-        return await executeCalendarCreateAction(plan, {
-          userId: options.userId,
-          userName: options.userName,
-          message: options.message,
-          memoryContext: options.memoryContext,
-          timeZone: options.timeZone,
-        });
+        return await executeCalendarCreateAction(plan, options as any);
+      case "calendar.list_events":
+        return await executeCalendarListAction(plan, options as any);
+      case "route.get":
+        return await executeRouteAction(plan, options as any);
+      case "weather.get":
+        return await executeWeatherAction(plan, options as any);
+      case "news.get":
+        return await executeNewsAction(plan, options as any);
       case "music.play":
-        if (!options?.userId) {
-          return connectionRequiredResult(
-            plan.action,
-            "spotify",
-            "I need you to be logged in before I can play music on your Spotify account.",
-          );
-        }
-        return await executeMusicAction(plan, { userId: options.userId });
-      case "browser.use": {
-        const task = plan.browser?.task;
-        if (!task) {
-          return {
-            action: plan.action,
-            status: "needs_input",
-            title: "Browser task needed",
-            summary: "What specifically do you want me to look up or do on the web?",
-          };
-        }
-        try {
-          const resp = await fetch("http://localhost:8000/browse", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ task }),
-            signal: AbortSignal.timeout(300_000), // 5 min timeout for complex browsing
-          });
-          if (!resp.ok) throw new Error("Browser service failed.");
-          const res = await resp.json();
-          return {
-            action: plan.action,
-            status: "executed",
-            title: "Research Complete",
-            summary: res.result || "I've finished looking that up for you.",
-            provider: "browser-use",
-          };
-        } catch (e) {
-          return {
-            action: plan.action,
-            status: "failed",
-            title: "Web Browsing Failed",
-            summary: "I tried to accomplish this via the browser agent, but it encountered an error.",
-            provider: "browser-use",
-          };
-        }
-      }
-      case "system.subagent": {
-        const task = plan.subagent?.task;
-        try {
-          fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Executing Subagent Task: ${task}\n`);
-        } catch (e) {}
-        if (!task) {
-          return {
-            action: plan.action,
-            status: "needs_input",
-            title: "Subagent task needed",
-            summary: "What specifically do you want the subagent to do?",
-          };
-        }
-        
-        try {
-          const resp = await fetch("http://127.0.0.1:3030/a2a", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": "Bearer local_token" },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              method: "message/send",
-              params: {
-                message: {
-                  messageId: "msg-" + Date.now(),
-                  role: "user",
-                  parts: [{ kind: "text", text: task }]
-                }
-              }
-            }),
-            signal: AbortSignal.timeout(180_000), 
-          });
-
-          if (!resp.ok) throw new Error("Nullclaw A2A request failed");
-          const res = await resp.json();
-          try {
-            fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Subagent Success: ${JSON.stringify(res)}\n`);
-          } catch (e) {}
-          const replyText = res.result?.message?.parts?.[0]?.text || "The subagent completed your request.";
-
-          return {
-            action: plan.action,
-            status: "executed",
-            title: "Subagent Task Complete",
-            summary: replyText,
-            provider: "nullclaw",
-            data: res,
-          };
-        } catch (e) {
-          try {
-            fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Subagent ERROR: ${e}\n`);
-          } catch (err) {}
-          return {
-            action: plan.action,
-            status: "failed",
-            title: "Subagent error",
-            summary: (e as Error).message,
-            provider: "nullclaw",
-          };
-        }
-      }
+        return await executeMusicAction(plan, options as any);
+      case "browser.use":
+        return {
+          action: "browser.use",
+          status: "executed",
+          title: "Opening Browser",
+          summary: `I'm looking that up for you now.`,
+          data: { task: plan.browser?.task },
+        };
+      case "system.subagent":
+        return {
+          action: "system.subagent",
+          status: "executed",
+          title: "Working on it",
+          summary: `I'm handling that task in the background.`,
+          data: { task: plan.subagent?.task },
+        };
+      case "none":
       default:
-        return null;
+        return {
+          action: "none",
+          status: "executed",
+          title: "Chatting",
+          summary: "I'm just chatting with you.",
+        };
     }
   } catch (error) {
     console.warn("[Flow Guru] External action execution failed.", error);

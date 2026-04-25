@@ -39,6 +39,8 @@ export const userMemoryProfiles = pgTable("fg_profiles", {
   recurringEventsSummary: text("recurringEventsSummary"),
   alarmSound: varchar("alarmSound", { length: 64 }).default("chime"),
   alarmDays: varchar("alarmDays", { length: 32 }).default("0,1,2,3,4,5,6"),
+  voiceId: varchar("voiceId", { length: 64 }),
+  buddyPersonality: text("buddyPersonality"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -106,12 +108,44 @@ export const providerConnections = pgTable(
   }
 );
 
+export const pushSubscriptions = pgTable("fg_push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const lists = pgTable("fg_lists", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  icon: varchar("icon", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export const listItems = pgTable("fg_list_items", {
+  id: serial("id").primaryKey(),
+  listId: integer("listId").notNull(),
+  userId: integer("userId").notNull(),
+  content: text("content").notNull(),
+  completed: integer("completed").default(0).notNull(),
+  reminderAt: timestamp("reminderAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type UserMemoryProfile = typeof userMemoryProfiles.$inferSelect;
 export type UserMemoryFact = typeof userMemoryFacts.$inferSelect;
 export type ConversationThread = typeof conversationThreads.$inferSelect;
 export type ConversationMessage = typeof conversationMessages.$inferSelect;
 export type ProviderConnection = typeof providerConnections.$inferSelect;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type List = typeof lists.$inferSelect;
+export type ListItem = typeof listItems.$inferSelect;
 
 export const localEvents = pgTable(
   "fg_local_events",
