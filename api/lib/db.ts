@@ -144,6 +144,9 @@ ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "credits" INTEGER NOT NULL DEFAULT
 ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "personaName" VARCHAR(64);
 ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "personaStyle" VARCHAR(64);
 ALTER TABLE fg_threads ADD COLUMN IF NOT EXISTS "shareToken" VARCHAR(64);
+ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "voiceId" VARCHAR(64);
+ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "buddyPersonality" TEXT;
+ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "reminderAt" TIMESTAMP;
 `;
 
 async function ensureSchemaOnce(): Promise<void> {

@@ -40,7 +40,8 @@ export default function Lists() {
     onSuccess: () => {
       utils.list.items.invalidate({ listId: selectedListId! });
       setNewItemContent('');
-    }
+    },
+    onError: (err) => toast.error(err.message || 'Failed to add item')
   });
 
   const toggleItemMutation = trpc.list.toggleItem.useMutation({
