@@ -623,14 +623,14 @@ function IntegrationsPanel() {
           {status.spotify ? (
             <button
               onClick={() => disconnect('spotify')}
-              className="w-full xs:w-auto px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
+              className="w-full xs:w-auto px-6 py-3 rounded-2xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
             >
               Disconnect
             </button>
           ) : (
             <button
               onClick={() => window.location.href = '/api/integrations/spotify/start'}
-              className="w-full xs:w-auto px-4 py-2 rounded-xl bg-secondary text-xs font-bold hover:bg-primary hover:text-primary-foreground transition-all shrink-0"
+              className="w-full xs:w-auto px-8 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-lg shadow-primary/20"
             >
               Connect
             </button>
@@ -657,14 +657,14 @@ function IntegrationsPanel() {
           {status.googleCalendar ? (
             <button
               onClick={() => disconnect('google-calendar')}
-              className="w-full xs:w-auto px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
+              className="w-full xs:w-auto px-6 py-3 rounded-2xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
             >
               Disconnect
             </button>
           ) : (
             <button
               onClick={() => window.location.href = '/api/integrations/google-calendar/start'}
-              className="px-4 py-2 rounded-xl bg-secondary text-xs font-bold hover:bg-primary hover:text-primary-foreground transition-all shrink-0 w-full xs:w-auto"
+              className="w-full xs:w-auto px-8 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-lg shadow-primary/20"
             >
               Connect
             </button>

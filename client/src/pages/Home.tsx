@@ -671,8 +671,8 @@ export default function Home() {
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Today</span>
                       </div>
-                      <span
-                        className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary cursor-pointer hover:underline"
+                      <button
+                        className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[9px] sm:text-[10px] uppercase font-bold tracking-wider hover:bg-primary/20 transition-colors"
                         onClick={(e) => {
                           if (isGoogleConnected) {
                             e.stopPropagation();
@@ -681,7 +681,7 @@ export default function Home() {
                         }}
                       >
                         {isGoogleConnected ? 'Open Google' : 'Open'}
-                      </span>
+                      </button>
                     </div>
                     
                     {allTodayEvents.length > 0 ? (
