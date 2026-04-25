@@ -125,12 +125,12 @@ export async function connectSpotify(params: {
 export async function refreshSpotifyToken(userId: number) {
   const connection = await getProviderConnection(userId, "spotify");
   if (!connection || !connection.refreshToken) {
-    throw new Error("No Spotify refresh token available.");
+    throw new Error("Spotify connection lost. Please reconnect in settings.");
   }
 
   const storedRefreshToken = decryptToken(connection.refreshToken);
   if (!storedRefreshToken) {
-    throw new Error("No Spotify refresh token available.");
+    throw new Error("Spotify session expired. Please reconnect in settings.");
   }
 
   const authHeader = btoa(`${ENV.spotifyClientId}:${ENV.spotifyClientSecret}`);
@@ -147,7 +147,9 @@ export async function refreshSpotifyToken(userId: number) {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to refresh Spotify token.");
+    const errText = await response.text();
+    console.error("[Spotify] Refresh failed:", errText);
+    throw new Error("Spotify session could not be refreshed. Try reconnecting.");
   }
 
   const tokenData = await response.json();
@@ -155,7 +157,7 @@ export async function refreshSpotifyToken(userId: number) {
     ...connection,
     accessToken: encryptToken(tokenData.access_token),
     refreshToken: encryptToken(tokenData.refresh_token || storedRefreshToken),
-    expiresAtUnixMs: Date.now() + tokenData.expires_in * 1000,
+    expiresAtUnixMs: Date.now() + (tokenData.expires_in || 3600) * 1000,
   };
 
   await upsertProviderConnection(updated);
@@ -173,49 +175,67 @@ export async function searchAndPlaySpotify(params: {
   }
 
   let token = decryptToken(connection.accessToken);
-  if (connection.expiresAtUnixMs && Date.now() > Number(connection.expiresAtUnixMs)) {
+  if (!token || (connection.expiresAtUnixMs && Date.now() > Number(connection.expiresAtUnixMs) - 60000)) {
     token = await refreshSpotifyToken(params.userId);
   }
 
-  const searchUrl = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(params.query)}&type=${params.type}&limit=1`;
-  const searchResp = await fetch(searchUrl, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
-  const searchData = await searchResp.json();
-  
-  const item = searchData[`${params.type}s`]?.items?.[0];
-  if (!item) {
-    throw new Error(`No ${params.type} found for "${params.query}"`);
-  }
+  const executeSearchAndPlay = async (accessToken: string) => {
+    // 1. Search
+    const searchUrl = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(params.query)}&type=${params.type}&limit=1`;
+    const searchResp = await fetch(searchUrl, {
+      headers: { "Authorization": `Bearer ${accessToken}` }
+    });
+    
+    if (searchResp.status === 401) return { retry: true };
+    if (!searchResp.ok) throw new Error(`Spotify search failed (${searchResp.status})`);
 
-  const playUrl = `${SPOTIFY_API_BASE}/me/player/play`;
-  const playBody: any = {};
-  if (params.type === "track") {
-    playBody.uris = [item.uri];
-  } else {
-    playBody.context_uri = item.uri;
-  }
-
-  const playResp = await fetch(playUrl, {
-    method: "PUT",
-    headers: { 
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(playBody)
-  });
-
-  if (!playResp.ok && playResp.status !== 204) {
-    const err = await playResp.text();
-    if (playResp.status === 404) {
-      return { 
-        status: "no_device" as const, 
-        message: "I found the music, but I couldn't find an active Spotify device to play it on. Open Spotify on your phone or computer first!",
-        item
-      };
+    const searchData = await searchResp.json();
+    const item = searchData[`${params.type}s`]?.items?.[0];
+    if (!item) {
+      throw new Error(`No ${params.type} found for "${params.query}"`);
     }
-    throw new Error(`Spotify play failed: ${err}`);
+
+    // 2. Play
+    const playUrl = `${SPOTIFY_API_BASE}/me/player/play`;
+    const playBody: any = {};
+    if (params.type === "track") {
+      playBody.uris = [item.uri];
+    } else {
+      playBody.context_uri = item.uri;
+    }
+
+    const playResp = await fetch(playUrl, {
+      method: "PUT",
+      headers: { 
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(playBody)
+    });
+
+    if (playResp.status === 401) return { retry: true };
+    
+    if (!playResp.ok && playResp.status !== 204) {
+      const err = await playResp.text();
+      if (playResp.status === 404) {
+        return { 
+          status: "no_device" as const, 
+          message: "Spotify found the music, but I couldn't find an active device. Open Spotify on your phone or computer first!",
+          item
+        };
+      }
+      throw new Error(`Spotify playback failed (${playResp.status}): ${err}`);
+    }
+
+    return { status: "success" as const, item };
+  };
+
+  let result = await executeSearchAndPlay(token!);
+  
+  if ((result as any).retry) {
+    token = await refreshSpotifyToken(params.userId);
+    result = await executeSearchAndPlay(token);
   }
 
-  return { status: "success" as const, item };
+  return result as { status: "success" | "no_device"; message?: string; item: any };
 }
