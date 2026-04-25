@@ -1,7 +1,8 @@
-import { COOKIE_NAME } from "./shared/const.js";
+import { COOKIE_NAME } from "@shared/const";
+import fs from "fs";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies.js";
-import { invokeLLM } from "./_core/llm.js";
+import { invokeLLM, type Tool, type ToolCall } from "./_core/llm.js";
 import { systemRouter } from "./_core/systemRouter.js";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc.js";
 import {
@@ -10,6 +11,7 @@ import {
   formatActionResultContext,
   planAssistantAction,
   type AssistantActionResult,
+  type AssistantActionPlan,
 } from "./assistantActions.js";
 import {
   createConversationMessage,
@@ -28,12 +30,17 @@ import {
   resolveAssistantUserId,
   touchConversationThread,
   upsertUserMemoryProfile,
-  updateUserPersona,
   getUserById,
-  getUserByReferralCode,
-  addCredits,
-  setThreadShareToken,
-  getThreadByShareToken,
+  listUserLists,
+  getListItems,
+  createList,
+  addListItem,
+  toggleListItem,
+  deleteListItem,
+  deleteList,
+  updateList,
+  updateListItem,
+  setListItemReminder,
 } from "./db.js";
 
 const sendMessageInput = z.object({
@@ -41,8 +48,6 @@ const sendMessageInput = z.object({
   timeZone: z.string().trim().min(1).max(100).optional(),
   threadId: z.number().int().positive().optional(),
 });
-
-
 
 const MEMORY_FACT_CATEGORIES = [
   "wake_up_time",
@@ -73,6 +78,150 @@ const extractionSchema = z.object({
 
 type ExtractionResult = z.infer<typeof extractionSchema>;
 
+// ─── Tool definitions ─────────────────────────────────────────────────────────
+
+const ASSISTANT_TOOLS: Tool[] = [
+  {
+    type: "function",
+    function: {
+      name: "playMusic",
+      description: "Play music for the user based on genre, mood, or playlist name",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Genre, mood, or playlist name (e.g. 'house music', 'morning playlist', 'lo-fi')",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "createCalendarEvent",
+      description: "Create a calendar event or reminder for the user",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          time: { type: "string", description: "ISO 8601 or natural language like 'tomorrow 9am'" },
+          description: { type: "string" },
+        },
+        required: ["title", "time"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getWeather",
+      description: "Get current weather for the user's saved location",
+      parameters: {
+        type: "object",
+        properties: {
+          location: {
+            type: "string",
+            description: "City or location, use user's saved location if available",
+          },
+        },
+        required: ["location"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "setReminder",
+      description: "Set a one-time or recurring reminder for the user",
+      parameters: {
+        type: "object",
+        properties: {
+          message: { type: "string" },
+          time: { type: "string" },
+          recurring: { type: "boolean", description: "Whether this repeats daily" },
+        },
+        required: ["message", "time"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "manageList",
+      description: "Manage personal lists (e.g., Grocery, Todo, Ideas)",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["create", "add", "remove", "clear", "list", "rename", "update", "remind"], description: "The action to perform" },
+          listName: { type: "string", description: "Name of the list (e.g. 'Grocery')" },
+          itemContent: { type: "string", description: "The item to add, remove, or set reminder for" },
+          time: { type: "string", description: "Natural language time (e.g. '5pm', 'tomorrow at 9am')" },
+        },
+        required: ["action", "listName"],
+      },
+    },
+  },
+];
+
+// ─── Tool stub handler ────────────────────────────────────────────────────────
+
+function executeToolStub(toolName: string, args: Record<string, unknown>): string {
+  switch (toolName) {
+    case "playMusic":
+      return `🎵 Playing ${args.query} now!`;
+    case "createCalendarEvent":
+      return `📅 Event '${args.title}' scheduled for ${args.time}!`;
+    case "getWeather":
+      return `🌤 Fetching weather for ${args.location}...`;
+    case "setReminder":
+      return `⏰ Reminder set: '${args.message}' at ${args.time}`;
+    default:
+      return "Tool executed successfully.";
+  }
+}
+
+// ─── Assistant name helpers ───────────────────────────────────────────────────
+
+/**
+ * Detects patterns like "call you X", "your name is X", "rename yourself X".
+ * Returns the new name string, or null if no match.
+ */
+function detectAssistantNameChange(message: string): string | null {
+  const lower = message.toLowerCase().trim();
+
+  const patterns = [
+    /(?:call\s+you|your\s+name\s+(?:is|should\s+be)|rename\s+yourself?|you\s+are\s+now\s+called?|go\s+by)\s+([A-Za-z][A-Za-z0-9 _-]{0,39})/i,
+  ];
+
+  for (const re of patterns) {
+    const match = re.exec(lower);
+    if (match) {
+      // Capitalise the first letter of each word
+      return match[1]
+        .trim()
+        .split(/\s+/)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Reads assistant_name from the user's memory facts.
+ * Takes the last occurrence in case the user renamed it multiple times.
+ */
+function getAssistantName(facts: Array<{ factKey: string | null; factValue: string }>): string {
+  const nameFacts = facts.filter(f => f.factKey === "assistant_name");
+  return nameFacts.length > 0 ? nameFacts[nameFacts.length - 1].factValue : "FLO GURU";
+}
+
+// ─── Memory helpers ───────────────────────────────────────────────────────────
+
 function normalizeText(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -97,6 +246,7 @@ function buildMemoryContext(params: {
         dailyRoutine: string | null;
         preferencesSummary: string | null;
         recurringEventsSummary: string | null;
+        buddyPersonality: string | null;
       }
     | null
     | undefined;
@@ -113,12 +263,18 @@ function buildMemoryContext(params: {
         .join("\n")
     : "- No saved personal facts yet.";
 
-  return [
+  let context = [
     `User name: ${params.userName ?? "Unknown"}`,
     `Wake-up time: ${params.profile?.wakeUpTime ?? "Unknown"}`,
     `Daily routine: ${params.profile?.dailyRoutine ?? "Unknown"}`,
-    `Preferences summary: ${params.profile?.preferencesSummary ?? "Unknown"}`,
-    `Recurring events summary: ${params.profile?.recurringEventsSummary ?? "Unknown"}`,
+  ].join("\n");
+
+  if (params.profile?.preferencesSummary) context += `\nPreferences: ${params.profile.preferencesSummary}`;
+  if (params.profile?.buddyPersonality) context += `\nYour Assigned Personality: ${params.profile.buddyPersonality}`;
+  if (params.profile?.recurringEventsSummary) context += `\nRecurring Events: ${params.profile.recurringEventsSummary}`;
+
+  return [
+    context,
     "Known memory facts:",
     factLines,
   ].join("\n");
@@ -126,15 +282,20 @@ function buildMemoryContext(params: {
 
 async function getOrCreateThreadId(userId: number, requestedThreadId?: number) {
   if (requestedThreadId) {
-    const requestedThread = await getConversationThreadById(requestedThreadId);
+    const requestedThread = (await getConversationThreadById(requestedThreadId)) as any;
     if (requestedThread && requestedThread.userId === userId) {
       return requestedThread.id;
     }
   }
 
+  const existingThread = (await findLatestConversationThread(userId)) as any;
+  if (existingThread && existingThread.userId === userId) {
+    return existingThread.id;
+  }
+
   const threadId = await createConversationThread({
     userId,
-    title: "Flow Guru Chat",
+    title: "FLO GURU Chat",
   });
 
   if (!threadId) {
@@ -150,7 +311,7 @@ async function extractAndPersistMemory(params: {
   userMessage: string;
   assistantReply: string;
 }) {
-  const existingProfile = await getUserMemoryProfile(params.userId);
+  const existingProfile = (await getUserMemoryProfile(params.userId)) as any;
   const existingFacts = await listUserMemoryFacts(params.userId);
 
   const extractionResponse = await invokeLLM({
@@ -158,7 +319,7 @@ async function extractAndPersistMemory(params: {
       {
         role: "system",
         content:
-          "You are a dedicated memory engine for Flow Guru. Extract durable user facts (wake-up times, routine steps, name of health providers, food preferences, family details, etc.) that would make a personal assistant more helpful. Avoid generic fluff. return nulls/empty array if no new specific context is found.",
+          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.",
       },
       {
         role: "user",
@@ -215,12 +376,8 @@ async function extractAndPersistMemory(params: {
                     type: "string",
                     enum: [...MEMORY_FACT_CATEGORIES],
                   },
-                  factKey: {
-                    type: ["string", "null"],
-                  },
-                  factValue: {
-                    type: "string",
-                  },
+                  factKey: { type: ["string", "null"] },
+                  factValue: { type: "string" },
                   confidence: {
                     type: "integer",
                     minimum: 1,
@@ -320,11 +477,10 @@ async function extractAndPersistMemory(params: {
   };
 }
 
-import { voiceRouter } from "./_core/voiceRouter.js";
+// ─── Router ───────────────────────────────────────────────────────────────────
 
 export const appRouter = router({
   system: systemRouter,
-  voice: voiceRouter,
   calendar: router({
     list: publicProcedure
       .input(z.object({
@@ -344,7 +500,7 @@ export const appRouter = router({
         location: z.string().optional(),
         allDay: z.boolean().default(false),
         color: z.string().optional(),
-        reminderMinutes: z.string().optional(), // e.g. '30,15,5'
+        reminderMinutes: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -371,7 +527,7 @@ export const appRouter = router({
         location: z.string().nullable().optional(),
         allDay: z.boolean().optional(),
         color: z.string().optional(),
-        reminderMinutes: z.string().nullable().optional(), // e.g. '30,15,5'
+        reminderMinutes: z.string().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -396,7 +552,7 @@ export const appRouter = router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      (ctx.res as any).clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return {
         success: true,
       } as const;
@@ -414,119 +570,82 @@ export const appRouter = router({
       const safeThread = thread && thread.userId === userId ? thread : null;
       const messages = safeThread ? await listConversationMessages(safeThread.id) : [];
 
-      // Find user's assistant name
       const assistantNameFact = memoryFacts.find(
-        f => f.factKey === "assistant_name" && f.category === "preference"
+        (f: any) => f.factKey === "assistant_name" && f.category === "preference"
       );
-      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const assistantName = assistantNameFact?.factValue || "FLO GURU";
 
-      // Find user's location from memory
       const locationFact = memoryFacts.find(
-        f => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
+        (f: any) => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
       );
       const userLocation = locationFact?.factValue || null;
 
-      // Fetch weather + calendar in parallel (non-blocking)
       type WeatherSnapshot = { tempC: number; feelsLikeC: number; label: string; locationName: string };
       type CalendarItem = { title: string; start: string | null; allDay: boolean };
       let weather: WeatherSnapshot | null = null;
       let todayEvents: CalendarItem[] = [];
 
-      const weatherPromise = (async (): Promise<WeatherSnapshot | null> => {
+      const weatherPromise = (async () => {
         if (!userLocation) return null;
         try {
-          const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(userLocation)}&count=1`;
-          const geoResp = await fetch(geoUrl);
-          if (!geoResp.ok) return null;
-          const geoData = await geoResp.json();
-          const geo = geoData.results?.[0];
-          if (!geo) return null;
-
-          const wxUrl = new URL("https://api.open-meteo.com/v1/forecast");
-          wxUrl.searchParams.set("latitude", String(geo.latitude));
-          wxUrl.searchParams.set("longitude", String(geo.longitude));
-          wxUrl.searchParams.set("current", "temperature_2m,apparent_temperature,weather_code");
-          wxUrl.searchParams.set("timezone", "auto");
-          const wxResp = await fetch(wxUrl.toString());
-          if (!wxResp.ok) return null;
-          const wxData = await wxResp.json();
-          const c = wxData.current;
-          if (!c || c.temperature_2m == null) return null;
-
-          const code = c.weather_code ?? 99;
-          let label = "unsettled weather";
-          if (code <= 1) label = "clear skies";
-          else if (code <= 3) label = "partly cloudy";
-          else if (code <= 48) label = "foggy";
-          else if (code <= 57) label = "drizzle";
-          else if (code <= 65) label = "rainy";
-          else if (code <= 77) label = "snowy";
-          else if (code <= 86) label = "snow showers";
-          else if (code <= 99) label = "thunderstorms";
-
-          return {
-            tempC: Math.round(c.temperature_2m),
-            feelsLikeC: Math.round(c.apparent_temperature ?? c.temperature_2m),
-            label,
-            locationName: geo.name || userLocation,
-          };
-        } catch { return null; }
+          const { planAssistantAction, executeAssistantAction } = await import("./assistantActions.js");
+          const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather" });
+          const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
+          if (result.status === "executed" && result.data?.current) {
+            const c = result.data.current as any;
+            return { tempC: c.temperatureC, feelsLikeC: c.apparentTemperatureC, label: c.weatherLabel, locationName: result.data.location as string };
+          }
+        } catch { /* ignore */ }
+        return null;
       })();
 
-      const calendarPromise = (async (): Promise<CalendarItem[]> => {
+      const calendarPromise = (async () => {
+        const results: CalendarItem[] = [];
         const now = new Date();
-        const startOfDay = new Date(now);
-        startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(now);
         endOfDay.setHours(23, 59, 59, 999);
 
-        const results: CalendarItem[] = [];
-
-        // Local events (always available)
         try {
-          const localEvts = await listLocalEvents(userId, startOfDay, endOfDay);
-          for (const e of localEvts) {
-            results.push({
-              title: e.title,
-              start: e.startAt ? e.startAt.toISOString() : null,
-              allDay: Boolean(e.allDay ?? false),
-            });
+          const local = await listLocalEvents(userId, now, endOfDay);
+          for (const e of local) {
+            results.push({ title: e.title, start: e.startAt ? e.startAt.toISOString() : null, allDay: !!e.allDay });
           }
         } catch { /* ignore */ }
 
-        // Google Calendar events (if connected)
         try {
           const { listGoogleCalendarEvents } = await import("./_core/googleCalendar.js");
           const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
           if (conn) {
-            const result = await listGoogleCalendarEvents({
-              userId,
-              timeMinIso: now.toISOString(),
-              timeMaxIso: endOfDay.toISOString(),
-              maxResults: 5,
-            });
-
+            const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
             for (const e of result?.items ?? []) {
-              results.push({
-                title: (e as any).summary || "Untitled event",
-                start: (e as any).start?.dateTime || (e as any).start?.date || null,
-                allDay: !(e as any).start?.dateTime,
-              });
+              results.push({ title: (e as any).summary || "Untitled event", start: (e as any).start?.dateTime || (e as any).start?.date || null, allDay: !(e as any).start?.dateTime });
             }
           }
         } catch { /* ignore */ }
 
-        // Sort by start time
-        results.sort((a, b) => {
-          if (!a.start) return 1;
-          if (!b.start) return -1;
-          return new Date(a.start).getTime() - new Date(b.start).getTime();
-        });
-
+        results.sort((a, b) => (!a.start ? 1 : !b.start ? -1 : new Date(a.start).getTime() - new Date(b.start).getTime()));
         return results;
       })();
 
       [weather, todayEvents] = await Promise.all([weatherPromise, calendarPromise]);
+
+      // --- Generate Proactive Greeting ---
+      let proactiveGreeting: string | null = null;
+      if (messages.length === 0) {
+        try {
+          const userName = ctx.user?.name?.split(' ')[0] || "there";
+          const weatherContext = weather ? `${weather.tempC}°C and ${weather.label} in ${weather.locationName}` : "";
+          const eventsContext = todayEvents.length > 0 
+            ? `You have ${todayEvents.length} event${todayEvents.length > 1 ? 's' : ''} today.`
+            : "Your schedule is clear today.";
+
+          const timeGreeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening";
+          
+          proactiveGreeting = `${timeGreeting}, ${userName}. ${weatherContext ? `It's currently ${weatherContext}. ` : ''}${eventsContext}`;
+        } catch (e) {
+          console.error("[Flow Guru] Failed to generate proactive greeting", e);
+        }
+      }
 
       return {
         profile,
@@ -537,13 +656,14 @@ export const appRouter = router({
         assistantName,
         weather,
         todayEvents,
+        proactiveGreeting,
       };
     }),
     startFresh: publicProcedure.mutation(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await createConversationThread({
         userId,
-        title: "Flow Guru Chat",
+        title: "FLO GURU Chat",
       });
 
       if (!threadId) {
@@ -614,13 +734,11 @@ export const appRouter = router({
         };
       }
 
-      // --- Resolve custom assistant name from memory or persona settings ---
+      // --- Resolve custom assistant name from memory ---
       const assistantNameFact = memoryFacts.find(
         f => f.factKey === "assistant_name" && f.category === "preference"
       );
-      const userRecord = await getUserById(userId);
-      const assistantName = assistantNameFact?.factValue || userRecord?.personaName || "Flow Guru";
-      const personaStyle = userRecord?.personaStyle || '';
+      const assistantName = assistantNameFact?.factValue || "FLO GURU";
       const userName = ctx.user?.name || "Brandon";
 
       const memoryContext = buildMemoryContext({
@@ -629,49 +747,18 @@ export const appRouter = router({
         facts: memoryFacts,
       });
 
-      const now = new Date();
-      const userTimeZone = input.timeZone || "UTC";
-      const dateStr = now.toLocaleDateString("en-US", { 
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        timeZone: userTimeZone
-      });
-      const timeStr = now.toLocaleTimeString("en-US", { 
-        hour: 'numeric', minute: '2-digit', hour12: true,
-        timeZone: userTimeZone
-      });
-
-      const isGoogleConnected = (await listProviderConnections(userId)).some(c => c.provider === "google-calendar" && c.status === "connected");
-      const isSpotifyConnected = (await listProviderConnections(userId)).some(c => c.provider === "spotify" && c.status === "connected");
-
-      // Load custom instructions from memory facts
-      const customInstructionsFact = memoryFacts.find(f => f.factKey === 'custom_instructions');
-      const customInstructions = customInstructionsFact?.factValue?.trim() || '';
-
       const systemPrompt = [
-        `You are ${assistantName}, ${userName}'s personal Flow Guru and loyal buddy.`,
-        `Current Time: ${timeStr} on ${dateStr}`,
-        `User Timezone: ${input.timeZone || "UTC"}`,
-        `Integrations: Google Calendar: ${isGoogleConnected ? 'CONNECTED' : 'NOT CONNECTED'}, Spotify: ${isSpotifyConnected ? 'CONNECTED' : 'NOT CONNECTED'}`,
-        "",
-        "HONESTY & ACCURACY (NON-NEGOTIABLE):",
-        "- NEVER lie, fabricate facts, invent statistics, or make up information.",
-        "- NEVER return mock data, placeholder values, or fake examples as if they were real.",
-        "- If you don't know something, say so clearly. Do not guess and present it as fact.",
-        "- Only state things you are confident are true. Uncertainty must be expressed explicitly.",
-        "",
-        "PERSONALITY & TONE:",
-        ...(personaStyle ? [`- Your personality style is: ${personaStyle}. Embody this style in every response.`] : ["- Be encouraging, high-energy, and effortlessly smooth. You're here to keep them in the zone."]),
-        "- Speak with a natural, conversational flow. Avoid robotic lists or choppy structures.",
-        "- Use the user's name naturally. Reference their habits and saved memory (preferences, routine) in almost every reply.",
-        "- Use human fillers like 'Ah', 'Got it', 'Actually', or 'Honestly' occasionally to keep the vibe casual and smooth.",
-        "- If an integration is NOT CONNECTED and the user asks for related info, politely suggest they click the 'Connect' link in their dashboard.",
-        "- Use contractions and occasional emojis. You're a buddy, not a bot.",
+        `You are ${assistantName}, ${userName}'s personal assistant.`,
+        profile?.buddyPersonality ? `Your personality profile: ${profile.buddyPersonality}` : "You sound like a close friend. Short, warm, direct. Never robotic.",
         "",
         "RULES:",
-        "- Reply in 1-2 sentences max. Extreme brevity is key.",
-        "- NEVER say 'I can help with...' or 'As an AI...'. Just do the work.",
-        "- When you book or check something, confirm with enthusiasm: 'Done! Physio with Rick is in for 9:30 AM tomorrow. You got this!'",
-        ...(customInstructions ? ["", "USER'S CUSTOM INSTRUCTIONS (follow these carefully):", customInstructions] : []),
+        "- Reply in 1-2 sentences max. Be concise.",
+        "- NEVER list what you can do. NEVER say 'I can help with...' or 'Would you like me to...'",
+        "- When you book something, confirm briefly: 'Done — physio with Rick is on your calendar for tomorrow at 9:30 AM.'",
+        "- When you check weather, share the actual data: 'It's 18°C and partly cloudy in Toronto right now.'",
+        "- When the user mentions a time or event, just book it. Don't ask for confirmation.",
+        "- Use the user's name and saved memory naturally. Reference their habits.",
+        "- Sound human: contractions, casual tone, occasional emoji.",
         "",
         "THINGS YOU CAN DO (but never mention these to the user):",
         "- Book events on Google Calendar",
@@ -679,15 +766,6 @@ export const appRouter = router({
         "- Check weather for any city",
         "- Get directions and travel times",
         "- Set reminders (via calendar)",
-        "- Play music, playlists, and artists on Spotify or via sound generation",
-        "- Browse the live web to find answers or perform tasks",
-        "- Delegate complex or multi-step system tasks (shell, files, script execution) to an autonomous sub-agent",
-        "",
-        "AUTONOMOUS AGENT PROTOCOL (The Manus Loop):",
-        "1. ANALYZE: Process the user intent and current project state.",
-        "2. SELECT: Choose the precise tool (Browser or Sub-Agent) for the next step.",
-        "3. OBSERVE: You must wait for the tool output. Do not hallucinate results.",
-        "4. ITERATE: If the sub-agent needs more steps, delegate them one by one until the goal is finished.",
         "",
         `The user's saved memory:`,
         memoryContext,
@@ -696,12 +774,13 @@ export const appRouter = router({
       let actionResult: AssistantActionResult | null = null;
 
       try {
+        // PERF: Combined Planner + Action Execution
         const plannedAction = await planAssistantAction({
           userName,
           memoryContext,
           message: input.message,
         });
-        console.log('[Flow Guru] Planner decided:', JSON.stringify({ action: plannedAction.action, calendar: plannedAction.calendar, reminder: plannedAction.reminder }));
+        
         actionResult = await executeAssistantAction(plannedAction, {
           userId,
           userName,
@@ -709,17 +788,13 @@ export const appRouter = router({
           memoryContext,
           timeZone: input.timeZone ?? null,
         });
-        console.log('[Flow Guru] Action result:', JSON.stringify({ status: actionResult?.status, title: actionResult?.title, action: actionResult?.action }));
       } catch (error) {
-        console.error("[Flow Guru] SYSTEM FAILURE:", error);
-        if (error instanceof Error) {
-          console.error("[Flow Guru] Stack:", error.stack);
-        }
+        console.error("[Flow Guru] SYSTEM FAILURE IN SEND:", error);
         actionResult = {
           action: "none",
           status: "failed",
           title: "Action unavailable",
-          summary: "I hit a snag while trying to carry that out, so I’ll respond conversationally instead.",
+          summary: "I hit a snag while trying to carry that out, so I'll respond conversationally instead.",
         };
       }
 
@@ -738,11 +813,6 @@ export const appRouter = router({
                 resultJson,
                 "",
                 "INSTRUCTION: The tool ran successfully. Your reply MUST confirm what happened using the data above.",
-                "For music: say what's playing (e.g., 'Playing Drake on Spotify now 🔥').",
-                "For weather: share the actual temperature and conditions.",
-                "For calendar: confirm what was booked or list the events.",
-                "For routes: share the estimated travel time.",
-                "For news: briefly mention the top headline.",
                 "Keep it short (1-2 sentences), warm, and enthusiastic. DO NOT ignore the tool result.",
               ].join("\n"),
             });
@@ -754,7 +824,7 @@ export const appRouter = router({
                 resultJson,
                 "",
                 "The user wants to do something that requires connecting an account first.",
-                "Warmly explain they need to connect the service and offer to help set it up.",
+                "Warmly explain they need to connect the service.",
               ].join("\n"),
             });
           } else if (actionResult.status === "needs_input") {
@@ -774,12 +844,13 @@ export const appRouter = router({
                 "TOOL RESULT — FAILED:",
                 resultJson,
                 "",
-                "The tool didn't work. Briefly acknowledge the issue and offer an alternative.",
+                "The tool didn't work. Briefly acknowledge the issue.",
               ].join("\n"),
             });
           }
         }
 
+        // PERF: Final Chat Generation
         const llmResponse = await invokeLLM({
           messages: [
             {
@@ -794,10 +865,9 @@ export const appRouter = router({
           ],
         });
 
-        assistantReply =
-          extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+        assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
       } catch (error) {
-        console.error("[Flow Guru] Chat generation failed. Falling back to a safe reply.", error);
+        console.error("[Flow Guru] Chat generation failed.", error);
       }
 
       await createConversationMessage({
@@ -816,13 +886,13 @@ export const appRouter = router({
         assistantReply,
       }).catch(err => console.warn("[Flow Guru] Background memory extraction failed:", err));
 
-      const finalMessages = await listConversationMessages(threadId);
+      const messages = await listConversationMessages(threadId);
 
       return {
         threadId,
         reply: assistantReply,
-        messages: finalMessages,
-        memoryUpdate: { profileUpdated: false, factsAdded: 0 }, // Handled in background
+        messages,
+        memoryUpdate: { profileUpdated: false, factsAdded: 0 }, // Backgrounded
         actionResult,
       };
     }),
@@ -832,17 +902,17 @@ export const appRouter = router({
       const profile = await getUserMemoryProfile(userId);
 
       const assistantNameFact = memoryFacts.find(
-        f => f.factKey === "assistant_name" && f.category === "preference"
+        (f: any) => f.factKey === "assistant_name" && f.category === "preference"
       );
-      const assistantName = assistantNameFact?.factValue || "Flow Guru";
+      const assistantName = assistantNameFact?.factValue || "FLO GURU";
       const userName = ctx.user?.name || "Brandon";
 
-      // Find location from memory
       const locationFact = memoryFacts.find(
-        f => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
+        (f: any) => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
       );
       const location = locationFact?.factValue || null;
 
+      // Dynamic import to keep the bundle lean
       const { generateBriefing } = await import("./_core/briefing.js");
       const result = await generateBriefing({
         userId,
@@ -868,75 +938,84 @@ export const appRouter = router({
         text: z.string().min(1).max(2000),
         voiceId: z.string().optional(),
       }))
-      .mutation(async ({ ctx, input }) => {
-        const userId = await resolveAssistantUserId(ctx.user);
-        const memoryFacts = await listUserMemoryFacts(userId);
-        const voiceFact = memoryFacts.find(f => f.factKey === "voice_id" || f.factKey === "preferred_voice");
-        
+      .mutation(async ({ input }) => {
         const { textToSpeech } = await import("./_core/elevenLabs.js");
         const buffer = await textToSpeech({
           text: input.text,
-          voiceId: input.voiceId || voiceFact?.factValue,
-          stability: 0.75, // Higher stability for smoother, less jittery delivery
-          similarityBoost: 0.75,
+          voiceId: input.voiceId,
+          stability: 0.6,
+          similarityBoost: 0.8,
         });
         return {
           audioDataUri: `data:audio/mpeg;base64,${buffer.toString("base64")}`,
         };
       }),
+    getBriefing: publicProcedure
+      .query(async ({ ctx }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const [profile, memoryFacts, allLists] = await Promise.all([
+          getUserMemoryProfile(userId),
+          listUserMemoryFacts(userId),
+          listUserLists(userId),
+        ]);
+
+        const locationFact = memoryFacts.find(f => f.factKey === "location" || f.factKey === "city");
+        const userLocation = locationFact?.factValue || null;
+
+        const now = new Date();
+        const endOfDay = new Date(now);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Weather
+        let weather = null;
+        if (userLocation) {
+          try {
+            const { planAssistantAction, executeAssistantAction } = await import("./assistantActions.js");
+            const plan = await planAssistantAction({ message: "current weather", memoryContext: `Location: ${userLocation}` });
+            const result = await executeAssistantAction(plan, { userId, message: "current weather", memoryContext: `Location: ${userLocation}` });
+            if (result.status === "executed") weather = result.data;
+          } catch {}
+        }
+
+        // Calendar
+        const calendar = await listLocalEvents(userId, now, endOfDay);
+
+        // Lists
+        const listSnapshots = [];
+        for (const list of allLists) {
+          const items = await getListItems(userId, list.id);
+          const pending = items.filter(i => !i.completed);
+          if (pending.length > 0) {
+            listSnapshots.push({ name: list.name, items: pending.map(i => i.content) });
+          }
+        }
+
+        return {
+          weather,
+          calendar: calendar.map(e => ({ title: e.title, start: e.startAt })),
+          lists: listSnapshots,
+          assistantName: getAssistantName(memoryFacts),
+          userName: ctx.user?.name || "Brandon",
+        };
+      }),
   }),
   settings: router({
-    // Get all memory facts for the settings page
-    getMemoryFacts: publicProcedure.query(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
-      const facts = await listUserMemoryFacts(userId);
-      return { facts };
-    }),
-    // Delete a specific memory fact by id
-    deleteMemoryFact: publicProcedure
-      .input(z.object({ factId: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        const userId = await resolveAssistantUserId(ctx.user);
-        const db = await import('./db.js').then(m => m.getDb());
-        if (!db) throw new Error('Database unavailable');
-        const { userMemoryFacts } = await import('./drizzle/schema.js');
-        const { eq, and } = await import('drizzle-orm');
-        await db.delete(userMemoryFacts).where(and(eq(userMemoryFacts.id, input.factId), eq(userMemoryFacts.userId, userId)));
-        return { success: true };
-      }),
-    // Add a memory fact manually
-    addMemoryFact: publicProcedure
-      .input(z.object({
-        factKey: z.string().min(1).max(128),
-        factValue: z.string().min(1),
-        category: z.string().optional().default('general'),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const userId = await resolveAssistantUserId(ctx.user);
-        await createUserMemoryFacts(userId, [{
-          factKey: input.factKey,
-          factValue: input.factValue,
-          category: input.category,
-          confidence: 100,
-        }]);
-        return { success: true };
-      }),
-    // Get profile (custom instructions + personal profile fields)
     getProfile: publicProcedure.query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const profile = await getUserMemoryProfile(userId);
       const facts = await listUserMemoryFacts(userId);
-      const customInstructions = facts.find(f => f.factKey === 'custom_instructions')?.factValue ?? '';
+      const customInstructions = facts.find((f: any) => f.factKey === 'custom_instructions')?.factValue ?? '';
       return {
-        wakeUpTime: profile?.wakeUpTime ?? '',
-        dailyRoutine: profile?.dailyRoutine ?? '',
-        preferencesSummary: profile?.preferencesSummary ?? '',
+        wakeUpTime: (profile as any)?.wakeUpTime ?? '',
+        dailyRoutine: (profile as any)?.dailyRoutine ?? '',
+        preferencesSummary: (profile as any)?.preferencesSummary ?? '',
         customInstructions,
-        alarmSound: profile?.alarmSound ?? 'chime',
-        alarmDays: profile?.alarmDays ?? '0,1,2,3,4,5,6',
+        alarmSound: (profile as any)?.alarmSound ?? 'chime',
+        alarmDays: (profile as any)?.alarmDays ?? '0,1,2,3,4,5,6',
+        voiceId: (profile as any)?.voiceId ?? '',
+        buddyPersonality: (profile as any)?.buddyPersonality ?? '',
       };
     }),
-    // Save profile fields
     saveProfile: publicProcedure
       .input(z.object({
         wakeUpTime: z.string().optional(),
@@ -944,6 +1023,8 @@ export const appRouter = router({
         preferencesSummary: z.string().optional(),
         alarmSound: z.string().optional(),
         alarmDays: z.string().optional(),
+        voiceId: z.string().optional(),
+        buddyPersonality: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -953,46 +1034,39 @@ export const appRouter = router({
           preferencesSummary: input.preferencesSummary ?? null,
           alarmSound: input.alarmSound ?? null,
           alarmDays: input.alarmDays ?? null,
+          voiceId: input.voiceId ?? null,
+          buddyPersonality: input.buddyPersonality ?? null,
         });
         return { success: true };
       }),
-    // Save custom instructions
-    saveCustomInstructions: publicProcedure
-      .input(z.object({ instructions: z.string().max(2000) }))
+    getVoices: publicProcedure.query(async () => {
+      const { getVoices } = await import("./_core/elevenLabs.js");
+      return await getVoices();
+    }),
+    getMemoryFacts: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      return await listUserMemoryFacts(userId);
+    }),
+    deleteMemoryFact: publicProcedure
+      .input(z.object({ factId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const facts = await listUserMemoryFacts(userId);
-        const existing = facts.find(f => f.factKey === 'custom_instructions');
-        const db = await import('./db.js').then(m => m.getDb());
-        if (!db) throw new Error('Database unavailable');
-        const { userMemoryFacts } = await import('./drizzle/schema.js');
-        const { eq, and } = await import('drizzle-orm');
-        if (existing) {
-          await db.update(userMemoryFacts)
-            .set({ factValue: input.instructions, updatedAt: new Date() })
-            .where(and(eq(userMemoryFacts.id, existing.id), eq(userMemoryFacts.userId, userId)));
-        } else {
-          await createUserMemoryFacts(userId, [{
-            factKey: 'custom_instructions',
-            factValue: input.instructions,
-            category: 'preference',
-            confidence: 100,
-          }]);
-        }
+        const { deleteUserMemoryFact } = await import('./db');
+        await deleteUserMemoryFact(userId, input.factId);
         return { success: true };
       }),
-    // Save assistant persona
-    savePersona: publicProcedure
-      .input(z.object({
-        personaName: z.string().max(64).optional().default(''),
-        personaStyle: z.string().max(64).optional().default(''),
-      }))
+    addMemoryFact: publicProcedure
+      .input(z.object({ factKey: z.string(), factValue: z.string(), category: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        await updateUserPersona(userId, input.personaName, input.personaStyle);
+        await createUserMemoryFacts(userId, [{
+          factKey: input.factKey,
+          factValue: input.factValue,
+          category: (input.category as any) ?? 'general',
+          confidence: 100,
+        }]);
         return { success: true };
       }),
-    // Get current persona
     getPersona: publicProcedure.query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const user = await getUserById(userId);
@@ -1001,68 +1075,156 @@ export const appRouter = router({
         personaStyle: user?.personaStyle ?? '',
       };
     }),
-    // Get referral info for current user
+    savePersona: publicProcedure
+      .input(z.object({ personaName: z.string(), personaStyle: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { updateUserPersona } = await import('./db');
+        await updateUserPersona(userId, input.personaName, input.personaStyle);
+        return { success: true };
+      }),
     getReferralInfo: publicProcedure.query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const user = await getUserById(userId);
       return {
-        referralCode: user?.referralCode ?? null,
-        credits: user?.credits ?? 0,
+        referralCode: (user as any)?.referralCode ?? '',
+        credits: (user as any)?.credits ?? 0,
       };
     }),
-  }),
-  share: router({
-    // Generate a share token for a thread
-    createShareLink: publicProcedure
-      .input(z.object({ threadId: z.number() }))
+    saveCustomInstructions: publicProcedure
+      .input(z.object({ instructions: z.string() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { randomBytes } = await import('crypto');
-        const token = randomBytes(16).toString('hex');
-        await setThreadShareToken(input.threadId, userId, token);
-        return { token, url: `/share/${token}` };
-      }),
-    // Get shared thread messages (public)
-    getSharedThread: publicProcedure
-      .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
-        const thread = await getThreadByShareToken(input.token);
-        if (!thread) throw new Error('Shared conversation not found');
-        const messages = await listConversationMessages(thread.id);
-        return { thread, messages };
+        await createUserMemoryFacts(userId, [{
+          factKey: 'custom_instructions',
+          factValue: input.instructions,
+          category: 'preference',
+          confidence: 100,
+        }]);
+        return { success: true };
       }),
   }),
   news: router({
     topHeadlines: publicProcedure
       .input(z.object({
-        locale: z.string().optional().default("us"),
-        categories: z.string().optional().default("general,technology,business"),
-        limit: z.number().min(1).max(20).optional().default(10),
+        limit: z.number().optional(),
+        locale: z.string().optional(),
+        categories: z.string().optional(),
       }))
       .query(async ({ input }) => {
-        const { ENV } = await import("./_core/env.js");
-        const key = ENV.theNewsApiKey;
-        if (!key) throw new Error("TheNewsAPI key not configured");
-        const url = new URL("https://api.thenewsapi.com/v1/news/top");
-        url.searchParams.set("api_token", key);
-        url.searchParams.set("locale", input.locale);
-        url.searchParams.set("categories", input.categories);
-        url.searchParams.set("limit", String(input.limit));
-        const res = await fetch(url.toString());
-        if (!res.ok) throw new Error(`TheNewsAPI error: ${res.status}`);
-        const data = await res.json();
-        return {
-          articles: (data.data ?? []).map((a: any) => ({
-            uuid: a.uuid,
-            title: a.title,
-            description: a.description ?? "",
-            url: a.url,
-            imageUrl: a.image_url ?? null,
-            source: a.source ?? "",
-            publishedAt: a.published_at ?? "",
-            categories: a.categories ?? [],
-          })),
-        };
+        try {
+          const url = new URL("https://actually-relevant-api.onrender.com/api/stories");
+          // Map common categories to issueSlugs if needed
+          const cat = input.categories?.toLowerCase() || "";
+          if (cat.includes("tech")) url.searchParams.set("issueSlug", "science-technology");
+          else if (cat.includes("science")) url.searchParams.set("issueSlug", "science-technology");
+          else if (cat.includes("planet") || cat.includes("climate")) url.searchParams.set("issueSlug", "planet-climate");
+          
+          const resp = await fetch(url.toString());
+          if (!resp.ok) return { articles: [] };
+          const payload = await resp.json() as any;
+          const stories = payload.data || [];
+          return {
+            articles: stories.map((s: any) => ({
+              uuid: s.id,
+              title: s.title,
+              description: s.summary || s.blurb || "",
+              url: s.sourceUrl || "#",
+              imageUrl: s.imageUrl || null,
+              source: s.sourceTitle || "News",
+              publishedAt: s.datePublished || new Date().toISOString(),
+              categories: [s.slug],
+            }))
+          };
+        } catch (e) {
+          return { articles: [] };
+        }
+      }),
+  }),
+  push: router({
+    register: publicProcedure
+      .input(z.object({
+        subscription: z.object({
+          endpoint: z.string(),
+          keys: z.object({
+            p256dh: z.string(),
+            auth: z.string(),
+          }),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const { upsertPushSubscription } = await import("./db.js");
+        await upsertPushSubscription(userId, input.subscription);
+        return { success: true };
+      }),
+  }),
+  list: router({
+    all: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      return await listUserLists(userId);
+    }),
+    items: publicProcedure
+      .input(z.object({ listId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        return await getListItems(userId, input.listId);
+      }),
+    create: publicProcedure
+      .input(z.object({ name: z.string().min(1).max(100), icon: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const id = await createList(userId, input.name, input.icon);
+        return { id };
+      }),
+    addItem: publicProcedure
+      .input(z.object({ listId: z.number(), content: z.string().min(1) }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        const id = await addListItem(userId, input.listId, input.content);
+        return { id };
+      }),
+    toggleItem: publicProcedure
+      .input(z.object({ itemId: z.number(), completed: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await toggleListItem(userId, input.itemId, input.completed);
+        return { success: true };
+      }),
+    deleteItem: publicProcedure
+      .input(z.object({ itemId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await deleteListItem(userId, input.itemId);
+        return { success: true };
+      }),
+    deleteList: publicProcedure
+      .input(z.object({ listId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await deleteList(userId, input.listId);
+        return { success: true };
+      }),
+    updateList: publicProcedure
+      .input(z.object({ listId: z.number(), name: z.string().min(1).max(100) }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await updateList(userId, input.listId, input.name);
+        return { success: true };
+      }),
+    updateItem: publicProcedure
+      .input(z.object({ itemId: z.number(), content: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await updateListItem(userId, input.itemId, input.content);
+        return { success: true };
+      }),
+    setReminder: publicProcedure
+      .input(z.object({ itemId: z.number(), reminderAt: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        await setListItemReminder(userId, input.itemId, input.reminderAt ? new Date(input.reminderAt) : null);
+        return { success: true };
       }),
   }),
 });

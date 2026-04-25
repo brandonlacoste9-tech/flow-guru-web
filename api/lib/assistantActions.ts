@@ -1,3 +1,4 @@
+import fs from "fs";
 import { z } from "zod";
 import { getProviderConnection, createLocalEvent } from "./db.js";
 import {
@@ -5,7 +6,6 @@ import {
   listGoogleCalendarEvents,
 } from "./_core/googleCalendar.js";
 import { invokeLLM } from "./_core/llm.js";
-import { ENV } from "./_core/env.js";
 import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map.js";
 
 const ACTION_NAMES = [
@@ -16,9 +16,9 @@ const ACTION_NAMES = [
   "route.get",
   "weather.get",
   "news.get",
-  "reminder.set",
   "browser.use",
   "system.subagent",
+  "list.manage",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -30,66 +30,68 @@ const NEWS_ISSUE_SLUGS = [
 
 const plannerSchema = z.object({
   action: z.enum(ACTION_NAMES),
-  rationale: z.string().optional().default(""),
-  route: z
-    .object({
-      origin: z.string().nullable().optional(),
-      destination: z.string().nullable().optional(),
-      mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable().optional(),
-    })
-    .nullish(),
-  weather: z
-    .object({
-      location: z.string().nullable().optional(),
-      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable().optional(),
-    })
-    .nullish(),
-  news: z
-    .object({
-      issueSlug: z.enum(NEWS_ISSUE_SLUGS).nullable().optional(),
-      interestLabel: z.string().nullable().optional(),
-      limit: z.number().int().min(1).max(5).nullable().optional(),
-    })
-    .nullish(),
-  calendar: z
-    .object({
-      title: z.string().nullable().optional(),
-      startDescription: z.string().nullable().optional(),
-      endDescription: z.string().nullable().optional(),
-    })
-    .nullish(),
-  music: z
-    .object({
-      query: z.string().nullable().optional(),
-      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable().optional(),
-    })
-    .nullish(),
-  reminder: z
-    .object({
-      label: z.string().nullable().optional(),
-      when: z.string().nullable().optional(),
-      recurring: z.boolean().nullable().optional(),
-    })
-    .nullish(),
+  rationale: z.string(),
   browser: z
     .object({
-      task_description: z.string().nullable().optional(),
+      task: z.string().nullable(),
     })
-    .nullish(),
+    .nullable(),
   subagent: z
     .object({
-      task: z.string().nullable().optional(),
+      task: z.string().nullable(),
     })
-    .nullish(),
+    .nullable(),
+  route: z
+    .object({
+      origin: z.string().nullable(),
+      destination: z.string().nullable(),
+      mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable(),
+    })
+    .nullable(),
+  weather: z
+    .object({
+      location: z.string().nullable(),
+      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable(),
+    })
+    .nullable(),
+  news: z
+    .object({
+      issueSlug: z.enum(NEWS_ISSUE_SLUGS).nullable(),
+      interestLabel: z.string().nullable(),
+      limit: z.number().int().min(1).max(5).nullable(),
+    })
+    .nullable(),
+  calendar: z
+    .object({
+      title: z.string().nullable(),
+      startDescription: z.string().nullable(),
+      endDescription: z.string().nullable(),
+    })
+    .nullable(),
+  music: z
+    .object({
+      query: z.string().nullable(),
+      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+    })
+    .nullable(),
+  list: z
+    .object({
+      action: z.enum(["create", "add", "remove", "clear", "list", "rename", "update", "remind"]).nullable(),
+      listName: z.string().nullable(),
+      itemContent: z.string().nullable(),
+      newName: z.string().nullable(),
+      time: z.string().nullable(),
+    })
+    .nullable(),
 });
 
 const calendarResolutionSchema = z.object({
-  title: z.string().nullable().optional(),
-  startIso: z.string().nullable().optional(),
-  endIso: z.string().nullable().optional(),
-  timeMinIso: z.string().nullable().optional(),
-  timeMaxIso: z.string().nullable().optional(),
-  searchQuery: z.string().nullable().optional(),
+  title: z.string().nullable(),
+  startIso: z.string().nullable(),
+  endIso: z.string().nullable(),
+  timeMinIso: z.string().nullable(),
+  timeMaxIso: z.string().nullable(),
+  searchQuery: z.string().nullable(),
 });
 
 export type AssistantActionPlan = z.infer<typeof plannerSchema>;
@@ -246,25 +248,23 @@ export async function planAssistantAction(params: {
           "You are Flow Guru's intent classifier. Your ONLY job is to decide which tool to call.",
           "ALWAYS choose an action when possible — err on the side of calling a tool rather than returning 'none'.",
           "",
-          "ACTION RULES:",
-          "• music.play → ANY mention of playing music, playlists, artists, genres, songs, chimes, sounds, or vibes. Examples: 'play house music', 'play my morning playlist', 'play something relaxing', 'put on some Drake', 'play a wake up chime'.",
-          "• calendar.create_event → ANY mention of scheduling, booking, adding to calendar, reminders. Examples: 'book physio at 9:30', 'schedule lunch with mom', 'remind me to call the dentist tomorrow'.",
-          "• calendar.list_events → ANY question about schedule, agenda, what's next, upcoming events. Examples: 'what's on my calendar?', 'do I have anything tomorrow?', 'what's my schedule today?'.",
-          "• weather.get → ANY mention of weather, temperature, rain, forecast. Examples: 'what's the weather?', 'is it going to rain?', 'how's it outside?'.",
-          "• route.get → ANY mention of directions, traffic, commute, how to get somewhere. Examples: 'how's traffic?', 'directions to work', 'route to the gym'.",
-          "• news.get → ANY mention of news, headlines, briefing, what's happening. Examples: 'what's in the news?', 'give me a tech briefing', 'any updates?'.",
-          "• reminder.set → ANY mention of reminders, alerts, 'remind me', 'don't let me forget'. Examples: 'remind me to take meds at 9', 'set a reminder for laundry', 'remind me every Monday to meal prep'.",
-          "• browser.use → ANY mention of browsing, searching the live web, finding things online, or navigating sites. Examples: 'search Google for...', 'tell me what's on the front page of Reddit', 'find me flights to London'.",
-          "• system.subagent → ANY mention of complex system-level tasks, editing files, managing directories, running terminal commands, or multi-step execution. Examples: 'create a folder called Audit', 'write a python script to...', 'delete the old test file'.",
-          "• none → ONLY when the user is making small talk, asking about you, or saying something truly unrelated to any tool.",
+          "AVAILABLE TOOLS:",
+          "- calendar.create_event: For scheduling or booking things on the calendar.",
+          "- calendar.list_events: For checking a schedule or listing upcoming items.",
+          "- weather.get: For checking current or future weather conditions.",
+          "- route.get: For travel times, directions, or distances between points.",
+          "- music.play: For playing music on Spotify.",
+          "- news.get: For latest headlines or specific news issues.",
+          "- browser.use: For browsing the web to find answers, research topics, or perform web-based tasks.",
+          "- system.subagent: For ANY complex system tasks: file operations, terminal commands, writing scripts, running Python, or performing multi-step autonomous actions on the user's machine.",
+          "- none: Use this for general conversation or if no tool fits.",
+          "",
+          "AGENT DELEGATION RULES:",
+          "- If the user asks to 'Check XYZ website', 'Search for...', or 'Find out who won...', use 'browser.use'.",
+          "- If the user asks to 'Add a file', 'Create a folder', 'Python script', 'Run a command', or 'Do a system audit', use 'system.subagent'.",
+          "- Prefer 'system.subagent' for ALL file system and shell operations.",
           "",
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
-          "",
-          "CRITICAL: You MUST respond with a valid JSON object. Never return plain text or just an action name.",
-          "For calendar actions: {\"action\": \"calendar.create_event\", \"rationale\": \"<why>\", \"calendar\": {\"title\": \"<title>\", \"startDescription\": \"<when>\", \"endDescription\": null}}",
-          "For browser.use actions: {\"action\": \"browser.use\", \"rationale\": \"<why>\", \"browser\": {\"task_description\": \"<exact search query or task>\"}}",
-          "For all other actions: {\"action\": \"<action_name>\", \"rationale\": \"<why>\"}",
-          "Always include the relevant data field for the chosen action. Never omit browser.task_description for browser.use.",
         ].join("\n"),
       },
       {
@@ -275,8 +275,6 @@ export async function planAssistantAction(params: {
           params.memoryContext,
           "Current message:",
           params.message,
-          "",
-          "Respond with JSON only.",
         ].join("\n\n"),
       },
     ],
@@ -347,49 +345,34 @@ export async function planAssistantAction(params: {
               required: ["query", "targetType"],
               additionalProperties: false,
             },
-            reminder: {
-              type: ["object", "null"],
-              properties: {
-                label: { type: ["string", "null"] },
-                when: { type: ["string", "null"] },
-                recurring: { type: ["boolean", "null"] },
-              },
-              required: ["label", "when", "recurring"],
-              additionalProperties: false,
-            },
             browser: {
               type: ["object", "null"],
-              properties: {
-                task_description: { type: ["string", "null"] },
-              },
-              required: ["task_description"],
+              properties: { task: { type: "string" } },
+              required: ["task"],
               additionalProperties: false,
             },
             subagent: {
               type: ["object", "null"],
-              properties: {
-                task: { type: ["string", "null"] },
-              },
+              properties: { task: { type: "string" } },
               required: ["task"],
               additionalProperties: false,
             },
           },
-          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "reminder", "browser", "subagent"],
+          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "browser", "subagent"],
           additionalProperties: false,
         },
       },
     },
   });
 
-  console.log("[Flow Guru] Planner output:", extractTextContent(response.choices[0]?.message.content ?? ""));
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  
-  // Strip markdown code fences if present (e.g. ```json ... ```)
-  const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  try {
+    fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Planner Raw: ${raw}\n`);
+  } catch (e) {}
 
-  // Robust JSON Extraction (The Lasso Pattern)
-  let jsonString = stripped;
-  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+  // Robust JSON Extraction
+  let jsonString = raw;
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     jsonString = jsonMatch[0];
   }
@@ -398,7 +381,12 @@ export async function planAssistantAction(params: {
     const parsed = plannerSchema.parse(JSON.parse(jsonString));
     return parsed;
   } catch (e) {
-    console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw response:", raw);
+    console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw:", raw);
+    try {
+      if (typeof fs !== "undefined") {
+        fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Parse Error: ${e}\n`);
+      }
+    } catch (err) {}
     throw new Error(`Failed to parse AI plan: ${(e as Error).message}`);
   }
 }
@@ -472,20 +460,7 @@ async function resolveCalendarDetails(params: {
   });
 
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  
-  // Strip markdown code fences if present
-  const strippedRaw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-  const jsonMatchRaw = strippedRaw.match(/\{[\s\S]*\}/);
-  const jsonStringRaw = jsonMatchRaw ? jsonMatchRaw[0] : strippedRaw;
-  
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(jsonStringRaw || "{}");
-  } catch (e) {
-    console.error("[Flow Guru] Calendar resolution JSON parse error:", e, "Raw:", raw);
-    throw new Error(`Calendar resolution JSON parse failed: ${(e as Error).message}`);
-  }
-  const parsed = calendarResolutionSchema.safeParse(parsedJson);
+  const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
   if (!parsed.success) {
     throw new Error(`Calendar resolution did not match schema: ${parsed.error.message}`);
   }
@@ -769,13 +744,15 @@ async function executeCalendarCreateAction(
   plan: AssistantActionPlan,
   options: { userId: number; message: string; userName?: string | null; memoryContext?: string | null; timeZone?: string | null },
 ): Promise<AssistantActionResult> {
+  const connection = await getProviderConnection(options.userId, "google-calendar");
+  const hasGoogleCalendar = connection && (connection as any).status === "connected";
+
   if (!normalizeText(plan.calendar?.title) || !normalizeText(plan.calendar?.startDescription)) {
     return {
       action: plan.action,
       status: "needs_input",
       title: "Calendar details needed",
       summary: "I can book that as soon as I know the event title and when it should start.",
-      provider: "local",
     };
   }
 
@@ -793,440 +770,346 @@ async function executeCalendarCreateAction(
       action: plan.action,
       status: "needs_input",
       title: "Timing still needed",
-      summary: "I need a clearer time for that before I can add it to your calendar.",
-      provider: "local",
+      summary: "I need a clearer time for that booking before I add it to your calendar.",
     };
   }
 
   const endIso =
     resolved.endIso ?? new Date(new Date(resolved.startIso).getTime() + 1000 * 60 * 60).toISOString();
 
-  // Try Google Calendar first if connected, otherwise fall back to local calendar
-  const connection = await getProviderConnection(options.userId, "google-calendar");
-  const useGoogle = connection && (connection as any).status === "connected";
+  // Use Google Calendar if connected, otherwise fall back to local database
+  if (hasGoogleCalendar) {
+    const created = await createGoogleCalendarEvent({
+      userId: options.userId,
+      title: eventTitle,
+      startIso: resolved.startIso,
+      endIso,
+      timeZone: options.timeZone ?? null,
+    });
 
-  if (useGoogle) {
-    try {
-      const created = await createGoogleCalendarEvent({
-        userId: options.userId,
-        title: eventTitle,
-        startIso: resolved.startIso,
-        endIso,
-        timeZone: options.timeZone ?? null,
-      });
+    const confirmedStart = created.start?.dateTime ?? resolved.startIso;
+    const confirmedEnd = created.end?.dateTime ?? endIso;
+    const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
 
-      const confirmedStart = created.start?.dateTime ?? resolved.startIso;
-      const confirmedEnd = created.end?.dateTime ?? endIso;
-      const confirmedTimeZone = created.start?.timeZone ?? options.timeZone ?? null;
-      const formattedTime = formatCalendarEventDateTime(confirmedStart, confirmedTimeZone);
-
-      try {
-        const { notifyOwner } = await import("./_core/notification.js");
-        await notifyOwner({
-          title: `📅 Booked: ${created.summary ?? eventTitle}`,
-          content: `${formattedTime}. You'll get a reminder before it starts.`,
-        });
-      } catch {}
-
-      return {
-        action: plan.action,
-        status: "executed",
-        title: `Booked: ${created.summary ?? eventTitle}`,
-        summary: `Done — ${eventTitle} is on your Google Calendar for ${formattedTime}. I'll remind you before it starts.`,
-        provider: "google-calendar",
-        data: {
-          id: created.id ?? null,
-          title: created.summary ?? eventTitle,
-          start: confirmedStart,
-          end: confirmedEnd,
-          link: created.htmlLink ?? null,
-        },
-      };
-    } catch (googleErr) {
-      console.warn("[Flow Guru] Google Calendar create failed, falling back to local:", googleErr);
-    }
+    return {
+      action: plan.action,
+      status: "executed",
+      title: `Booked: ${created.summary ?? eventTitle}`,
+      summary: `It's on your Google Calendar for ${formatCalendarEventDateTime(confirmedStart, confirmedTimeZone)}.`,
+      provider: "google-calendar",
+      data: {
+        id: created.id ?? null,
+        title: created.summary ?? eventTitle,
+        start: confirmedStart,
+        end: confirmedEnd,
+        link: created.htmlLink ?? null,
+        status: created.status ?? null,
+      },
+    };
   }
 
-  // ── Local calendar fallback (always works) ──
-  const startDate = new Date(resolved.startIso);
-  const endDate = new Date(endIso);
-  console.log('[Calendar] Creating local event:', JSON.stringify({ userId: options.userId, title: eventTitle, startIso: resolved.startIso, endIso }));
-  const localEventId = await createLocalEvent({
+  // Local database fallback (no Google Calendar connected)
+  const savedEvent = await createLocalEvent({
     userId: options.userId,
     title: eventTitle,
-    description: plan.calendar?.startDescription ?? null,
-    startAt: startDate,
-    endAt: endDate,
-    location: null,
+    description: plan.calendar?.title ?? null,
+    startAt: new Date(resolved.startIso),
+    endAt: new Date(endIso),
     allDay: 0,
-    color: 'blue',
-    reminderMinutes: '30,15,5',
+    color: "blue",
+    reminderMinutes: "30,15,5",
   });
-  console.log('[Calendar] Local event created with id:', localEventId);
-
-  const formattedTime = formatCalendarEventDateTime(resolved.startIso, options.timeZone ?? null);
-
+  console.log("[Calendar] Local event saved:", savedEvent, eventTitle);
+  const displayTime = new Date(resolved.startIso).toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
   return {
     action: plan.action,
     status: "executed",
-    title: `Added: ${eventTitle}`,
-    summary: `Done — I've added "${eventTitle}" to your calendar for ${formattedTime}. I'll remind you before it starts.`,
-    provider: "local",
+    title: `Booked: ${eventTitle}`,
+    summary: `Added to your calendar for ${displayTime}.`,
     data: {
-      id: localEventId,
+      id: savedEvent ?? null,
       title: eventTitle,
       start: resolved.startIso,
       end: endIso,
       link: null,
+      status: "confirmed",
     },
   };
 }
 
-async function executeMusicAction(
-  plan: AssistantActionPlan,
-  options?: { userId?: number },
-): Promise<AssistantActionResult> {
-  const query = plan.music?.query || "relaxing ambient music";
-  const targetType = plan.music?.targetType || "track";
+async function executeListAction(plan: AssistantActionPlan, options: { userId: number, timeZone?: string | null }): Promise<AssistantActionResult> {
+  const { action, listName, itemContent, newName, time } = plan.list ?? {};
 
-  if (options?.userId) {
-    try {
-      const { searchAndPlaySpotify } = await import("./_core/spotify.js");
-      const result = await searchAndPlaySpotify({
-        userId: options.userId,
-        query,
-        type: targetType === "liked" ? "track" : targetType,
-      });
-
-      if (result.status === "success") {
-        return {
-          action: "music.play",
-          status: "executed",
-          title: `Playing on Spotify`,
-          summary: `Playing ${result.item.name} on Spotify 🔥`,
-          provider: "spotify",
-          data: result,
-        };
-      } else if (result.status === "no_device") {
-        return {
-          action: "music.play",
-          status: "executed",
-          title: "Spotify device needed",
-          summary: result.message ?? "Open Spotify on any device to start playback.",
-          provider: "spotify",
-          data: result,
-        };
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes("Spotify not connected")) {
-        // Continue to ElevenLabs fallback
-      } else {
-        console.warn("[Flow Guru] Spotify playback failed, falling back to ElevenLabs:", msg);
-      }
-    }
+  if (!action || !listName) {
+    return {
+      action: "list.manage",
+      status: "needs_input",
+      title: "List name needed",
+      summary: "Which list would you like me to manage? (e.g. Grocery, Todo)",
+    };
   }
 
-  // Build descriptive prompt for ElevenLabs sound generation
-  const soundPrompt = buildSoundPrompt(query, plan.music?.targetType);
+  const { 
+    listUserLists, createList, addListItem, deleteListItem, 
+    deleteList, getListItems, updateList, updateListItem 
+  } = await import("./db.js");
+  
+  const allLists = await listUserLists(options.userId);
+  const targetList = allLists.find(l => l.name.toLowerCase().includes(listName.toLowerCase()));
 
   try {
-    const { generateSoundAsDataUri } = await import("./_core/elevenLabs.js");
-    const audioDataUri = await generateSoundAsDataUri({
-      text: soundPrompt,
-      durationSeconds: 15,
-      promptInfluence: 0.7,
+    switch (action) {
+      case "create": {
+        if (targetList) {
+          return {
+            action: "list.manage",
+            status: "executed",
+            title: `List already exists`,
+            summary: `The '${listName}' list is already set up and ready to use.`,
+            data: { list: targetList },
+          };
+        }
+        const id = await createList(options.userId, listName);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `Created list: ${listName}`,
+          summary: `I've created your new '${listName}' list.`,
+          data: { id, name: listName },
+        };
+      }
+      case "add": {
+        if (!itemContent) {
+          return { action: "list.manage", status: "needs_input", title: "Item needed", summary: `What should I add to your ${listName} list?` };
+        }
+        let listId = targetList?.id;
+        if (!listId) {
+          listId = (await createList(options.userId, listName))!;
+        }
+        const id = await addListItem(options.userId, listId, itemContent);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `Added to ${listName}`,
+          summary: `Done — I added '${itemContent}' to your ${listName} list.`,
+          data: { id, content: itemContent, listName },
+        };
+      }
+      case "remove": {
+        if (!targetList || !itemContent) {
+          return { action: "list.manage", status: "failed", title: "Cannot remove", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
+        }
+        const items = await getListItems(options.userId, targetList.id);
+        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        if (!item) {
+          return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in the ${listName} list.` };
+        }
+        await deleteListItem(options.userId, item.id);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `Removed from ${listName}`,
+          summary: `Okay, I've removed '${item.content}' from your ${listName} list.`,
+          data: { itemId: item.id, content: item.content, listName },
+        };
+      }
+      case "clear": {
+        if (!targetList) {
+          return { action: "list.manage", status: "failed", title: "List not found", summary: `I couldn't find a list named '${listName}'.` };
+        }
+        await deleteList(options.userId, targetList.id);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `Cleared ${listName}`,
+          summary: `I've cleared out the entire '${listName}' list for you.`,
+          data: { listId: targetList.id, listName },
+        };
+      }
+      case "rename": {
+        if (!targetList || !newName) {
+          return { action: "list.manage", status: "failed", title: "Cannot rename", summary: `I couldn't find '${listName}' to rename it.` };
+        }
+        await updateList(options.userId, targetList.id, newName);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: "List Renamed",
+          summary: `Done! I've renamed '${listName}' to '${newName}'.`,
+          data: { listId: targetList.id, oldName: listName, newName },
+        };
+      }
+      case "update": {
+        if (!targetList || !itemContent || !newName) {
+          return { action: "list.manage", status: "failed", title: "Cannot update", summary: `I need to know which item to change and what to change it to.` };
+        }
+        const items = await getListItems(options.userId, targetList.id);
+        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        if (!item) {
+          return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in your ${listName} list.` };
+        }
+        await updateListItem(options.userId, item.id, newName);
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: "Item Updated",
+          summary: `Updated! I've changed '${item.content}' to '${newName}' on your ${listName} list.`,
+          data: { itemId: item.id, oldContent: item.content, newContent: newName, listName },
+        };
+      }
+      case "list": {
+        if (!targetList) {
+          return { action: "list.manage", status: "executed", title: "List not found", summary: `You don't have a list named '${listName}' yet.`, data: { items: [] } };
+        }
+        const items = await getListItems(options.userId, targetList.id);
+        const activeItems = items.filter(i => !i.completed);
+        const summary = activeItems.length 
+          ? `You have ${activeItems.length} items on your ${listName} list: ${activeItems.map(i => i.content).join(", ")}.`
+          : `Your ${listName} list is currently empty.`;
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: `${listName} List`,
+          summary,
+          data: { listId: targetList.id, listName, items },
+        };
+      }
+      case "remind": {
+        if (!targetList || !itemContent || !time) {
+          return { action: "list.manage", status: "needs_input", title: "Time needed", summary: `When should I remind you about '${itemContent}' on your ${listName} list?` };
+        }
+        const items = await getListItems(options.userId, targetList.id);
+        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        if (!item) {
+          return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
+        }
+
+        const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar.js");
+        const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
+        
+        if (!resolvedTime) {
+          return { action: "list.manage", status: "failed", title: "Time resolution failed", summary: `I couldn't understand the time '${time}'. Could you be more specific?` };
+        }
+
+        const { setListItemReminder } = await import("./db.js");
+        await setListItemReminder(options.userId, item.id, new Date(resolvedTime));
+
+        const timeStr = new Date(resolvedTime).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+        return {
+          action: "list.manage",
+          status: "executed",
+          title: "Reminder Set",
+          summary: `Done! I'll remind you to '${item.content}' on ${timeStr}.`,
+          data: { itemId: item.id, content: item.content, listName, reminderAt: resolvedTime },
+        };
+      }
+      default:
+        throw new Error("Invalid list action");
+    }
+  } catch (e) {
+    throw e;
+  }
+}
+
+async function executeMusicAction(
+  plan: AssistantActionPlan,
+  options: { userId: number }
+): Promise<AssistantActionResult> {
+  const query = plan.music?.query || "some good music";
+  const targetType = plan.music?.targetType || "track";
+
+  try {
+    const { searchAndPlaySpotify } = await import("./_core/spotify.js");
+    const result = await searchAndPlaySpotify({
+      userId: options.userId,
+      query,
+      type: (targetType as string) || "track",
     });
 
+    if (result.status === "no_device") {
+      return {
+        action: "music.play",
+        status: "needs_input",
+        title: "Spotify Device Needed",
+        summary: result.message || "I found the music, but I couldn't find an active Spotify device to play it on.",
+        provider: "spotify",
+      };
+    }
+
+    const item = result.item;
     return {
       action: "music.play",
       status: "executed",
-      title: `Playing: ${query}`,
-      summary: `Here's some ${query} for you 🔥`,
-      provider: "elevenlabs",
+      title: `Playing: ${item.name}`,
+      summary: `I've started ${item.name} by ${item.artists?.[0]?.name || "the artist"} on Spotify for you.`,
+      provider: "spotify",
       data: {
-        audioDataUri,
-        query,
-        soundPrompt,
+        item,
+        externalUrl: item.external_urls?.spotify,
       },
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Sound generation failed.";
+    const msg = error instanceof Error ? error.message : "Spotify failed.";
     return {
       action: "music.play",
       status: "failed",
-      title: "Audio snag",
-      summary: msg.includes("not configured")
-        ? "I need the ElevenLabs API key to play sounds. Can you add it in your Vercel settings?"
-        : `Couldn't generate that audio right now — ${msg}`,
-      provider: "elevenlabs",
+      title: "Spotify snag",
+      summary: msg,
+      provider: "spotify",
     };
   }
 }
 
-/** Translate user music intent into an ElevenLabs sound generation prompt */
-function buildSoundPrompt(query: string, targetType?: string | null): string {
-  const q = query.toLowerCase();
-
-  // Alarm/chime sounds
-  if (/chime|alarm|bell|wake.?up|ring|alert/.test(q)) {
-    return `A pleasant, melodic ${q} sound. Gentle, ascending tones that feel warm and encouraging.`;
-  }
-
-  // Ambient/relaxing
-  if (/relax|ambient|calm|chill|zen|meditat|sleep|sooth/.test(q)) {
-    return `${query}. Soft, atmospheric soundscape with gentle pads and warm tones. Peaceful and calming.`;
-  }
-
-  // Nature sounds
-  if (/rain|ocean|waves|forest|bird|nature|thunder|wind|water|fire|campfire/.test(q)) {
-    return `Natural ${query} sounds. Rich, immersive, realistic environmental audio.`;
-  }
-
-  // Music genres
-  if (/house|techno|electronic|edm|dance|beat|bass|drum/.test(q)) {
-    return `Upbeat ${query} music. Punchy rhythm, energetic beat, electronic production.`;
-  }
-
-  if (/jazz|blues|soul|funk/.test(q)) {
-    return `Smooth ${query} music. Warm instruments, relaxed groove, sophisticated feel.`;
-  }
-
-  if (/classical|piano|orchestra|violin|cello/.test(q)) {
-    return `Beautiful ${query} music. Elegant, emotional, orchestral.`;
-  }
-
-  if (/lofi|lo-fi|hip.?hop|study/.test(q)) {
-    return `Lo-fi ${query} music. Warm vinyl crackle, mellow beats, cozy atmosphere.`;
-  }
-
-  // Generic music
-  return `${query} music. Pleasant, well-produced, high-quality audio.`;
-}
-
-
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
-  options?: {
-    userId?: number;
-    userName?: string | null;
-    message?: string;
-    memoryContext?: string | null;
-    timeZone?: string | null;
-  },
-): Promise<AssistantActionResult | null> {
+  options: { userId: number; threadId?: number }
+): Promise<AssistantActionResult> {
+  console.log(`[Assistant Action] Executing: ${plan.action}`, plan);
+
   try {
     switch (plan.action) {
-      case "none":
-        return null;
-      case "route.get":
-        return await executeRouteAction(plan);
-      case "weather.get":
-        return await executeWeatherAction(plan);
-      case "news.get":
-        return await executeNewsAction(plan, options);
-      case "calendar.list_events":
-        if (!options?.userId || !options.message) {
-          return connectionRequiredResult(
-            plan.action,
-            "google-calendar",
-            "Google Calendar is not ready yet because the assistant is missing the current user context.",
-          );
-        }
-        return await executeCalendarListAction(plan, {
-          userId: options.userId,
-          userName: options.userName,
-          message: options.message,
-          memoryContext: options.memoryContext,
-          timeZone: options.timeZone,
-        });
+      case "list.manage":
+        return await executeListAction(plan, options);
       case "calendar.create_event":
-        if (!options?.userId || !options.message) {
-          return connectionRequiredResult(
-            plan.action,
-            "google-calendar",
-            "Google Calendar is not ready yet because the assistant is missing the current user context.",
-          );
-        }
-        return await executeCalendarCreateAction(plan, {
-          userId: options.userId,
-          userName: options.userName,
-          message: options.message,
-          memoryContext: options.memoryContext,
-          timeZone: options.timeZone,
-        });
+        return await executeCalendarCreateAction(plan, options as any);
+      case "calendar.list_events":
+        return await executeCalendarListAction(plan, options as any);
+      case "route.get":
+        return await executeRouteAction(plan, options as any);
+      case "weather.get":
+        return await executeWeatherAction(plan, options as any);
+      case "news.get":
+        return await executeNewsAction(plan, options as any);
       case "music.play":
-        return await executeMusicAction(plan, options);
-      case "reminder.set": {
-        const label = plan.reminder?.label || "Reminder";
-        const when = plan.reminder?.when;
-        if (!options?.userId || !options.message) {
-          return {
-            action: "reminder.set",
-            status: "needs_input",
-            title: "Reminder details needed",
-            summary: "What should I remind you about, and when?",
-          };
-        }
-        // Use calendar.create_event under the hood — reminders become calendar events
-        const reminderPlan = {
-          ...plan,
-          action: "calendar.create_event" as const,
-          calendar: {
-            title: `Reminder: ${label}`,
-            startDescription: when || "soon",
-            endDescription: null,
-          },
+        return await executeMusicAction(plan, options as any);
+      case "browser.use":
+        return {
+          action: "browser.use",
+          status: "executed",
+          title: "Opening Browser",
+          summary: `I'm looking that up for you now.`,
+          data: { task: plan.browser?.task },
         };
-        try {
-          const calResult = await executeCalendarCreateAction(reminderPlan, {
-            userId: options.userId,
-            userName: options.userName,
-            message: options.message,
-            memoryContext: options.memoryContext,
-            timeZone: options.timeZone,
-          });
-          return {
-            ...calResult,
-            action: "reminder.set",
-            title: `Reminder set: ${label}`,
-          };
-        } catch {
-          return {
-            action: "reminder.set",
-            status: "executed",
-            title: `Reminder noted: ${label}`,
-            summary: `I'll remind you: "${label}"${when ? ` at ${when}` : ""}.`,
-            provider: "flow-guru",
-          };
-        }
-      }
-      case "browser.use": {
-        const task = plan.browser?.task_description;
-        if (!task) {
-          return {
-            action: plan.action,
-            status: "needs_input",
-            title: "Search details needed",
-            summary: "What specifically do you want me to look up on the web?",
-          };
-        }
-
-        const braveKey = ENV.braveApiKey;
-        if (!braveKey) {
-          return {
-            action: plan.action,
-            status: "failed",
-            title: "Web Search Unavailable",
-            summary: "Web search is not configured (missing BRAVE_API_KEY).",
-          };
-        }
-
-        try {
-          console.log("[Flow Guru] Brave web search for:", task);
-
-          const braveUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(task)}&count=5`;
-          const braveResp = await fetch(braveUrl, {
-            method: "GET",
-            headers: {
-              "Accept": "application/json",
-              "Accept-Encoding": "gzip",
-              "X-Subscription-Token": braveKey,
-            },
-            signal: AbortSignal.timeout(15_000),
-          });
-
-          if (!braveResp.ok) throw new Error(`Brave search failed: ${braveResp.status}`);
-          const braveData = await braveResp.json() as any;
-
-          const results = braveData.web?.results || [];
-          const snippets = results.slice(0, 5).map((r: any) => `${r.title}: ${r.description || r.snippet || ""}`).join("\n\n");
-          const searchContext = snippets || "No results found.";
-
-          console.log("[Flow Guru] Brave search results:", searchContext?.slice(0, 150));
-
-          return {
-            action: plan.action,
-            status: "executed",
-            title: "Web Search Complete",
-            summary: searchContext,
-            provider: "brave",
-          };
-
-        } catch (error) {
-          console.error("[Flow Guru] Brave web search error:", error);
-          return {
-            action: plan.action,
-            status: "failed",
-            title: "Web Search Failed",
-            summary: "I tried to search the web but ran into an error. Please try again.",
-            provider: "brave",
-          };
-        }
-      }
-      case "system.subagent": {
-        const task = plan.subagent?.task;
-        console.log("[Flow Guru] Executing subagent task:", task);
-        if (!task) {
-          return {
-            action: plan.action,
-            status: "needs_input",
-            title: "Subagent task needed",
-            summary: "What specifically do you want the subagent to do?",
-          };
-        }
-        
-        try {
-          console.log("[Flow Guru] Calling Nullclaw A2A at http://127.0.0.1:3030/a2a...");
-          const resp = await fetch("http://127.0.0.1:3030/a2a", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": "Bearer local_token" },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              method: "message/send",
-              params: {
-                message: {
-                  messageId: "msg-" + Date.now(),
-                  role: "user",
-                  parts: [{ kind: "text", text: task }]
-                }
-              }
-            }),
-            signal: AbortSignal.timeout(180_000), 
-          });
-
-          console.log("[Flow Guru] Nullclaw status:", resp.status);
-          if (!resp.ok) {
-            const errText = await resp.text();
-            console.error("[Flow Guru] Nullclaw error body:", errText);
-            throw new Error(`Nullclaw A2A request failed: ${resp.status} ${errText}`);
-          }
-          const res = await resp.json();
-          console.log("[Flow Guru] Nullclaw response:", JSON.stringify(res, null, 2));
-          const replyText = res.result?.message?.parts?.[0]?.text || "The subagent completed your request.";
-
-          return {
-            action: plan.action,
-            status: "executed",
-            title: "Subagent Task Complete",
-            summary: replyText,
-            provider: "nullclaw",
-            data: res,
-          };
-        } catch (e) {
-          console.error("[Flow Guru] Subagent execution catch block:", e);
-          return {
-            action: plan.action,
-            status: "failed",
-            title: "Subagent error",
-            summary: (e as Error).message,
-            provider: "nullclaw",
-          };
-        }
-      }
+      case "system.subagent":
+        return {
+          action: "system.subagent",
+          status: "executed",
+          title: "Working on it",
+          summary: `I'm handling that task in the background.`,
+          data: { task: plan.subagent?.task },
+        };
+      case "none":
       default:
-        return null;
+        return {
+          action: "none",
+          status: "executed",
+          title: "Chatting",
+          summary: "I'm just chatting with you.",
+        };
     }
   } catch (error) {
     console.warn("[Flow Guru] External action execution failed.", error);
