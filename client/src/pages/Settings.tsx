@@ -297,7 +297,9 @@ export function Settings() {
                   <p className="text-[9px] sm:text-[10px] text-muted-foreground">Select which days the wake-up alarm fires.</p>
                 </div>
                 <button disabled={!profileDirty || saveProfileMutation.isPending}
-                  onClick={() => saveProfileMutation.mutate({ wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays } as any)}
+                  onClick={() => saveProfileMutation.mutate({ 
+                    wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays, voiceId, buddyPersonality 
+                  } as any)}
                   className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
                     profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
                   <Save size={14} />{saveProfileMutation.isPending ? 'Saving...' : 'Save Profile'}

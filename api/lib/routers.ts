@@ -395,7 +395,7 @@ async function extractAndPersistMemory(params: {
       },
     },
   });
-
+  
   const rawContent = extractionResponse.choices[0]?.message.content;
   const extractionText =
     typeof rawContent === "string"
@@ -404,11 +404,18 @@ async function extractAndPersistMemory(params: {
           .map(part => (part.type === "text" && "text" in part ? part.text : ""))
           .join("\n");
 
+  // Robust JSON Extraction
+  let jsonString = extractionText;
+  const jsonMatch = extractionText.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonString = jsonMatch[0];
+  }
+
   let parsedJson: unknown;
   try {
-    parsedJson = JSON.parse(extractionText || "{}");
+    parsedJson = JSON.parse(jsonString || "{}");
   } catch (error) {
-    console.warn("[Flow Guru] Memory extraction returned invalid JSON.", error);
+    console.warn("[Flow Guru] Memory extraction returned invalid JSON.", error, "Raw text:", extractionText);
     return {
       profileUpdated: false,
       factsAdded: 0,

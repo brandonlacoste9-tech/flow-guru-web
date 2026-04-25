@@ -329,9 +329,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       });
 
       if (normalizedResponseFormat) {
-        // DeepSeek and Forge (Manus proxy) don't support json_schema — convert to json_object
-        if ((provider.name === "deepseek" || provider.name === "forge") && normalizedResponseFormat.type === "json_schema") {
-          payload.response_format = { type: "json_object" };
+        // DeepSeek doesn't support json_schema — strip response_format entirely and rely on prompt
+        if (provider.name === "deepseek" && normalizedResponseFormat.type === "json_schema") {
+          // Don't set response_format at all; DeepSeek will follow the JSON instruction in the prompt
+        } else if (provider.name === "forge" && normalizedResponseFormat.type === "json_schema") {
+          // Forge (Manus/Gemini proxy) supports json_schema natively — pass it through
+          payload.response_format = normalizedResponseFormat;
         } else {
           payload.response_format = normalizedResponseFormat;
         }

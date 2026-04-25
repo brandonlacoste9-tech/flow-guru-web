@@ -3,7 +3,7 @@ import { textToSpeech, textToSpeechStream } from "../../api/lib/_core/elevenLabs
 import { Readable } from "stream";
 
 // Re-export so sibling modules (briefing.ts) can import from this path
-export { textToSpeech, textToSpeechStream, generateSound, generateSoundAsDataUri } from "../../api/lib/_core/elevenLabs.js";
+export { textToSpeech, textToSpeechStream, generateSound, generateSoundAsDataUri, getVoices } from "../../api/lib/_core/elevenLabs.js";
 export type { TtsOptions, SoundGenerationOptions } from "../../api/lib/_core/elevenLabs.js";
 
 export function registerElevenLabsRoutes(app: Express) {

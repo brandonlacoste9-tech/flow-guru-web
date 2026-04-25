@@ -133,6 +133,7 @@ export const listItems = pgTable("fg_list_items", {
   content: text("content").notNull(),
   completed: integer("completed").default(0).notNull(),
   reminderAt: timestamp("reminderAt"),
+  locationTrigger: text("locationTrigger"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

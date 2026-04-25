@@ -336,35 +336,53 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   });
 
   if (normalizedResponseFormat) {
-    payload.response_format = normalizedResponseFormat;
+    // DeepSeek doesn't support json_schema — strip entirely
+    if (hasDeepSeek && normalizedResponseFormat.type === "json_schema") {
+      // Don't set response_format; rely on prompt for JSON output
+    } else {
+      payload.response_format = normalizedResponseFormat;
+    }
   }
 
-  const response = await fetch(resolveApiUrl(), {
+  const apiUrl = resolveApiUrl();
+  const apiKey = process.env.DEEPSEEK_API_KEY || ENV.forgeApiKey;
+
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${process.env.DEEPSEEK_API_KEY || ENV.forgeApiKey}`,
+      authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.warn(`[Flow Guru] LLM API failed (${response.status}):`, errorText);
-    return {
-      id: "error-fallback-" + Date.now(),
-      created: Math.floor(Date.now() / 1000),
-      model: "error-fallback",
-      choices: [{
-        index: 0,
-        message: {
-          role: "assistant",
-          content: "I hit a temporary snag with my AI backend. Give me a moment and try again!",
+    console.error(`[Flow Guru] LLM API failed (${response.status}):`, errorText.slice(0, 300));
+
+    // If json_schema was rejected, retry WITHOUT response_format
+    if (normalizedResponseFormat && response.status === 400) {
+      console.warn("[Flow Guru] Retrying LLM call without response_format...");
+      delete payload.response_format;
+      
+      const retryResponse = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
         },
-        finish_reason: "stop",
-      }],
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    };
+        body: JSON.stringify(payload),
+      });
+
+      if (retryResponse.ok) {
+        return (await retryResponse.json()) as InvokeResult;
+      }
+      
+      const retryError = await retryResponse.text();
+      throw new Error(`LLM API retry also failed (${retryResponse.status}): ${retryError.slice(0, 200)}`);
+    }
+
+    throw new Error(`LLM API failed (${response.status}): ${errorText.slice(0, 200)}`);
   }
 
   return (await response.json()) as InvokeResult;

@@ -1,6 +1,7 @@
 import { textToSpeech, generateSoundAsDataUri } from "./elevenLabs";
 import { listGoogleCalendarEvents } from "./googleCalendar";
 import { getProviderConnection } from "../db";
+import { invokeLLM } from "./llm";
 
 // ─── Weather helpers ────────────────────────────────────────────────────────
 
@@ -114,12 +115,33 @@ function formatEventTime(event: CalendarEvent): string {
   }
 }
 
-// ─── Script builder ─────────────────────────────────────────────────────────
+async function fetchActiveListItems(userId: number): Promise<{ listName: string; count: number; examples: string[] }[]> {
+  try {
+    const { listUserLists, getListItems } = await import("../db");
+    const lists = await listUserLists(userId);
+    const results = [];
+    for (const list of lists) {
+      const items = await getListItems(userId, list.id);
+      const active = items.filter(i => !i.completed);
+      if (active.length > 0) {
+        results.push({
+          listName: list.name,
+          count: active.length,
+          examples: active.slice(0, 3).map(i => i.content),
+        });
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
 
 export type BriefingData = {
   script: string;
   weather: { label: string; tempC: number; feelsLikeC: number; locationName: string } | null;
   events: CalendarEvent[];
+  lists: { listName: string; count: number; examples: string[] }[];
   greeting: string;
 };
 
@@ -136,53 +158,57 @@ export async function buildBriefingData(params: {
   assistantName: string;
   location?: string | null;
   wakeUpTime?: string | null;
+  buddyPersonality?: string | null;
 }): Promise<BriefingData> {
-  // Fetch weather and calendar in parallel
-  const [weather, events] = await Promise.all([
+  // Fetch weather, calendar, and lists in parallel
+  const [weather, events, lists] = await Promise.all([
     params.location ? fetchCurrentWeather(params.location) : Promise.resolve(null),
     fetchTodayEvents(params.userId),
+    fetchActiveListItems(params.userId),
   ]);
 
   const greeting = getTimeOfDayGreeting();
-  const lines: string[] = [];
+  
+  const weatherContext = weather 
+    ? `Right now in ${weather.locationName}, it's ${Math.round(weather.tempC)}°C and ${weather.label}, feeling like ${Math.round(weather.feelsLikeC)}°C.`
+    : "No weather data available.";
+    
+  const calendarContext = events.length > 0
+    ? `You have ${events.length} events today: ${events.map(e => `${e.summary} at ${formatEventTime(e)}`).join(", ")}.`
+    : "Your calendar is clear today.";
+    
+  const listsContext = lists.length > 0
+    ? `You have active items on your lists: ${lists.map(l => `${l.listName} (${l.count} items, e.g. ${l.examples.join(", ")})`).join("; ")}.`
+    : "Your lists are all clear.";
 
-  // Greeting
-  lines.push(`${greeting}, ${params.userName}. It's ${params.assistantName} here.`);
+  const systemPrompt = [
+    "You are Flow Guru, a warm and helpful personal assistant.",
+    params.buddyPersonality || "Your style: Short, warm, direct. Never robotic.",
+    "Generate a natural morning briefing script based on the provided data.",
+    "Keep it conversational, like a friend talking to a friend.",
+    "Do NOT use markdown. Just plain text suitable for text-to-speech.",
+    "Include the greeting, weather, calendar, and list highlights.",
+  ].join("\n");
 
-  // Weather section
-  if (weather) {
-    const temp = Math.round(weather.tempC);
-    const feelsLike = Math.round(weather.feelsLikeC);
-    lines.push(
-      `Right now in ${weather.locationName}, it's ${temp} degrees with ${weather.label}, feeling like ${feelsLike}.`
-    );
-  }
+  const userPrompt = [
+    `User: ${params.userName}`,
+    `Greeting: ${greeting}`,
+    `Weather: ${weatherContext}`,
+    `Calendar: ${calendarContext}`,
+    `Lists: ${listsContext}`,
+  ].join("\n");
 
-  // Calendar section
-  if (events.length > 0) {
-    if (events.length === 1) {
-      const e = events[0];
-      lines.push(`You have one thing on your calendar: ${e.summary || "an event"} at ${formatEventTime(e)}.`);
-    } else {
-      lines.push(`You have ${events.length} things on your calendar today.`);
-      const topThree = events.slice(0, 3);
-      for (const e of topThree) {
-        lines.push(`${e.summary || "An event"} at ${formatEventTime(e)}.`);
-      }
-      if (events.length > 3) {
-        lines.push(`And ${events.length - 3} more.`);
-      }
-    }
-  } else {
-    lines.push("Your calendar is clear today — nice and open.");
-  }
+  const response = await invokeLLM({
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+  });
 
-  // Closing
-  lines.push("Have a great one.");
+  const script = response.choices[0]?.message.content?.trim() || 
+    `${greeting}, ${params.userName}. Weather is ${weather?.label || "clear"}. You have ${events.length} events and some list items. Have a great day!`;
 
-  const script = lines.join(" ");
-
-  return { script, weather, events, greeting };
+  return { script, weather, events, lists, greeting };
 }
 
 // ─── Audio generation ───────────────────────────────────────────────────────
@@ -201,6 +227,7 @@ export async function generateBriefing(params: {
   assistantName: string;
   location?: string | null;
   wakeUpTime?: string | null;
+  buddyPersonality?: string | null;
   voiceId?: string;
 }): Promise<BriefingResult> {
   const data = await buildBriefingData(params);

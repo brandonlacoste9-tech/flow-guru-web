@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Plus, Trash2, CheckCircle2, Circle, ListTodo, X, Sparkles, Edit2, Check } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, CheckCircle2, Circle, ListTodo, X, Sparkles, Edit2, Check, MapPin } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc-client';
 import { cn } from '@/lib/utils';
@@ -371,6 +371,12 @@ export default function Lists() {
                                 <div className="flex items-center gap-1 text-[10px] text-primary font-bold uppercase tracking-wider mt-0.5">
                                   <Sparkles size={10} />
                                   <span>Reminding: {new Date(item.reminderAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                                </div>
+                              )}
+                              {(item as any).locationTrigger && !item.completed && (
+                                <div className="flex items-center gap-1 text-[10px] text-amber-500 font-bold uppercase tracking-wider mt-0.5">
+                                  <MapPin size={10} />
+                                  <span>Trigger: At {(item as any).locationTrigger}</span>
                                 </div>
                               )}
                             </div>

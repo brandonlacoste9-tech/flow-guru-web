@@ -395,7 +395,7 @@ async function extractAndPersistMemory(params: {
       },
     },
   });
-
+  
   const rawContent = extractionResponse.choices[0]?.message.content;
   const extractionText =
     typeof rawContent === "string"
@@ -404,11 +404,18 @@ async function extractAndPersistMemory(params: {
           .map(part => (part.type === "text" && "text" in part ? part.text : ""))
           .join("\n");
 
+  // Robust JSON Extraction
+  let jsonString = extractionText;
+  const jsonMatch = extractionText.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonString = jsonMatch[0];
+  }
+
   let parsedJson: unknown;
   try {
-    parsedJson = JSON.parse(extractionText || "{}");
+    parsedJson = JSON.parse(jsonString || "{}");
   } catch (error) {
-    console.warn("[Flow Guru] Memory extraction returned invalid JSON.", error);
+    console.warn("[Flow Guru] Memory extraction returned invalid JSON.", error, "Raw text:", extractionText);
     return {
       profileUpdated: false,
       factsAdded: 0,
@@ -920,6 +927,8 @@ export const appRouter = router({
         assistantName,
         location,
         wakeUpTime: profile?.wakeUpTime ?? null,
+        buddyPersonality: profile?.buddyPersonality ?? null,
+        voiceId: profile?.voiceId ?? undefined,
       });
 
       return result;
@@ -938,11 +947,21 @@ export const appRouter = router({
         text: z.string().min(1).max(2000),
         voiceId: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        let finalVoiceId = input.voiceId;
+        
+        if (!finalVoiceId && userId) {
+          const profile = await getUserMemoryProfile(userId);
+          if (profile?.voiceId) {
+            finalVoiceId = profile.voiceId;
+          }
+        }
+
         const { textToSpeech } = await import("./_core/elevenLabs");
         const buffer = await textToSpeech({
           text: input.text,
-          voiceId: input.voiceId,
+          voiceId: finalVoiceId,
           stability: 0.6,
           similarityBoost: 0.8,
         });

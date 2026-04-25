@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS fg_list_items (
     "content" TEXT NOT NULL,
     "completed" INTEGER DEFAULT 0 NOT NULL,
     "reminderAt" TIMESTAMP,
+    "locationTrigger" TEXT,
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
@@ -147,6 +148,7 @@ ALTER TABLE fg_threads ADD COLUMN IF NOT EXISTS "shareToken" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "voiceId" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "buddyPersonality" TEXT;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "reminderAt" TIMESTAMP;
+ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "locationTrigger" TEXT;
 `;
 
 async function ensureSchemaOnce(): Promise<void> {
@@ -781,5 +783,13 @@ export async function setListItemReminder(userId: number, itemId: number, remind
   if (!db) return;
   await ensureTables(db);
   await db.update(schema.listItems).set({ reminderAt, updatedAt: new Date() })
+    .where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
+}
+
+export async function setListItemLocationTrigger(userId: number, itemId: number, locationTrigger: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await ensureTables(db);
+  await db.update(schema.listItems).set({ locationTrigger, updatedAt: new Date() })
     .where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
 }

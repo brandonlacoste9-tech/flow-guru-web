@@ -35,11 +35,13 @@ const plannerSchema = z.object({
     .object({
       task: z.string().nullable(),
     })
+    .optional()
     .nullable(),
   subagent: z
     .object({
       task: z.string().nullable(),
     })
+    .optional()
     .nullable(),
   route: z
     .object({
@@ -47,12 +49,14 @@ const plannerSchema = z.object({
       destination: z.string().nullable(),
       mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable(),
     })
+    .optional()
     .nullable(),
   weather: z
     .object({
       location: z.string().nullable(),
       timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable(),
     })
+    .optional()
     .nullable(),
   news: z
     .object({
@@ -60,6 +64,7 @@ const plannerSchema = z.object({
       interestLabel: z.string().nullable(),
       limit: z.number().int().min(1).max(5).nullable(),
     })
+    .optional()
     .nullable(),
   calendar: z
     .object({
@@ -67,12 +72,14 @@ const plannerSchema = z.object({
       startDescription: z.string().nullable(),
       endDescription: z.string().nullable(),
     })
+    .optional()
     .nullable(),
   music: z
     .object({
       query: z.string().nullable(),
       targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
     })
+    .optional()
     .nullable(),
   list: z
     .object({
@@ -81,7 +88,9 @@ const plannerSchema = z.object({
       itemContent: z.string().nullable(),
       newName: z.string().nullable(),
       time: z.string().nullable(),
+      location: z.string().nullable(),
     })
+    .optional()
     .nullable(),
 });
 
@@ -269,6 +278,22 @@ export async function planAssistantAction(params: {
           "CRITICAL: If the user mentions 'list' (e.g. grocery list, shopping list, todo list, pack list), you MUST use 'list.manage'.",
           "",
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
+          "",
+          "RESPONSE FORMAT: You MUST respond with a single JSON object (no markdown, no code blocks, no explanation). The JSON must have these keys:",
+          '{ "action": "<tool_name>", "rationale": "<why>", "route": null, "weather": null, "news": null, "calendar": null, "music": null, "browser": null, "subagent": null, "list": null }',
+          "",
+          "For list.manage, populate the list field:",
+          '{ "action": "list.manage", "rationale": "...", "list": { "action": "add", "listName": "Grocery", "itemContent": "bread", "newName": null, "time": null }, ... }',
+          "list.action can be: create, add, remove, clear, list, rename, update, remind",
+          "For list.action 'remind', you can provide 'time' for time-based reminders or 'location' for location-based reminders (e.g. 'store', 'work').",
+          "",
+          "For calendar.create_event, populate the calendar field:",
+          '{ "action": "calendar.create_event", "rationale": "...", "calendar": { "title": "...", "startDescription": "...", "endDescription": "..." }, ... }',
+          "",
+          "For weather.get, populate the weather field:",
+          '{ "action": "weather.get", "rationale": "...", "weather": { "location": "...", "timeframe": "current" }, ... }',
+          "",
+          "ONLY respond with the JSON object. No other text.",
         ].join("\n"),
       },
       {
@@ -282,91 +307,6 @@ export async function planAssistantAction(params: {
         ].join("\n\n"),
       },
     ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "assistant_action_plan",
-        strict: false,
-        schema: {
-          type: "object",
-          properties: {
-            action: {
-              type: "string",
-              enum: toJsonSchemaEnum(ACTION_NAMES),
-            },
-            rationale: { type: "string" },
-            route: {
-              type: ["object", "null"],
-              properties: {
-                origin: { type: ["string", "null"] },
-                destination: { type: ["string", "null"] },
-                mode: {
-                  type: ["string", "null"],
-                  enum: [...toJsonSchemaEnum(["driving", "walking", "bicycling", "transit"] as const), null],
-                },
-              },
-              required: ["origin", "destination", "mode"],
-              additionalProperties: false,
-            },
-            weather: {
-              type: ["object", "null"],
-              properties: {
-                location: { type: ["string", "null"] },
-                timeframe: {
-                  type: ["string", "null"],
-                  enum: [...toJsonSchemaEnum(["current", "today", "tomorrow", "next_days"] as const), null],
-                },
-              },
-              required: ["location", "timeframe"],
-              additionalProperties: false,
-            },
-            news: {
-              type: ["object", "null"],
-              properties: {
-                issueSlug: { type: ["string", "null"], enum: [...toJsonSchemaEnum(NEWS_ISSUE_SLUGS), null] },
-                interestLabel: { type: ["string", "null"] },
-                limit: { type: ["integer", "null"], minimum: 1, maximum: 5 },
-              },
-              required: ["issueSlug", "interestLabel", "limit"],
-              additionalProperties: false,
-            },
-            calendar: {
-              type: ["object", "null"],
-              properties: {
-                title: { type: ["string", "null"] },
-                startDescription: { type: ["string", "null"] },
-                endDescription: { type: ["string", "null"] },
-              },
-              required: ["title", "startDescription", "endDescription"],
-              additionalProperties: false,
-            },
-            music: {
-              type: ["object", "null"],
-              properties: {
-                query: { type: ["string", "null"] },
-                targetType: { type: ["string", "null"], enum: ["playlist", "artist", "album", "track", "liked", null] },
-              },
-              required: ["query", "targetType"],
-              additionalProperties: false,
-            },
-            browser: {
-              type: ["object", "null"],
-              properties: { task: { type: "string" } },
-              required: ["task"],
-              additionalProperties: false,
-            },
-            subagent: {
-              type: ["object", "null"],
-              properties: { task: { type: "string" } },
-              required: ["task"],
-              additionalProperties: false,
-            },
-          },
-          required: ["action", "rationale", "route", "weather", "news", "calendar", "music", "browser", "subagent", "list"],
-          additionalProperties: false,
-        },
-      },
-    },
   });
 
   const raw = extractTextContent(response.choices[0]?.message.content ?? "");
@@ -376,14 +316,34 @@ export async function planAssistantAction(params: {
 
   // Robust JSON Extraction
   let jsonString = raw;
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    jsonString = jsonMatch[0];
+  
+  // If it's just the action name string, wrap it
+  if (raw.trim().length > 0 && !raw.includes("{") && ACTION_NAMES.includes(raw.trim() as any)) {
+    jsonString = JSON.stringify({
+      action: raw.trim(),
+      rationale: "Defaulted from bare action string",
+      route: null, weather: null, news: null, calendar: null, music: null, browser: null, subagent: null, list: { action: "list", listName: "Grocery" }
+    });
+  } else {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonString = jsonMatch[0];
+    }
   }
 
+  const fixSingleQuotes = (str: string) => {
+    return str.replace(/'/g, '"');
+  };
+
   try {
-    const parsed = plannerSchema.parse(JSON.parse(jsonString));
-    return parsed;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch (e) {
+      // Try fixing single quotes if it looks like a Python-style dict
+      parsed = JSON.parse(fixSingleQuotes(jsonString));
+    }
+    return plannerSchema.parse(parsed);
   } catch (e) {
     console.error("[Flow Guru] Planner JSON Parse Error:", e, "Raw:", raw);
     try {
@@ -845,7 +805,8 @@ async function executeCalendarCreateAction(
 }
 
 async function executeListAction(plan: AssistantActionPlan, options: { userId: number, timeZone?: string | null }): Promise<AssistantActionResult> {
-  const { action, listName, itemContent, newName, time } = plan.list ?? {};
+  const { action, listName, itemContent, newName, time, location: locationTrigger } = plan.list ?? {};
+  console.log(`[DEBUG] executeListAction: userId=${options.userId}, action=${action}, listName=${listName}, itemContent=${itemContent}`);
 
   if (!action || !listName) {
     return {
@@ -999,34 +960,50 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
         };
       }
       case "remind": {
-        if (!targetList || !itemContent || !time) {
-          return { action: "list.manage", status: "needs_input", title: "Time needed", summary: `When should I remind you about '${itemContent}' on your ${listName} list?` };
+        if (!targetList || !itemContent) {
+          return { action: "list.manage", status: "needs_input", title: "Item needed", summary: `Which item on your ${listName} list should I set a reminder for?` };
         }
+        
         const items = await getListItems(options.userId, targetList.id);
         const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
         if (!item) {
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
         }
 
-        const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar");
-        const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
-        
-        if (!resolvedTime) {
-          return { action: "list.manage", status: "failed", title: "Time resolution failed", summary: `I couldn't understand the time '${time}'. Could you be more specific?` };
+        const { setListItemReminder, setListItemLocationTrigger } = await import("./db");
+
+        if (locationTrigger) {
+          await setListItemLocationTrigger(options.userId, item.id, locationTrigger);
+          return {
+            action: "list.manage",
+            status: "executed",
+            title: "Location Reminder Set",
+            summary: `Got it. I'll remind you to '${item.content}' when you're at the ${locationTrigger}.`,
+            data: { itemId: item.id, content: item.content, listName, locationTrigger },
+          };
         }
 
-        const { setListItemReminder } = await import("./db");
-        await setListItemReminder(options.userId, item.id, new Date(resolvedTime));
+        if (time) {
+          const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar");
+          const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
+          
+          if (!resolvedTime) {
+            return { action: "list.manage", status: "failed", title: "Time resolution failed", summary: `I couldn't understand the time '${time}'. Could you be more specific?` };
+          }
 
-        const timeStr = new Date(resolvedTime).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+          await setListItemReminder(options.userId, item.id, new Date(resolvedTime));
+          const timeStr = new Date(resolvedTime).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-        return {
-          action: "list.manage",
-          status: "executed",
-          title: "Reminder Set",
-          summary: `Done! I'll remind you to '${item.content}' on ${timeStr}.`,
-          data: { itemId: item.id, content: item.content, listName, reminderAt: resolvedTime },
-        };
+          return {
+            action: "list.manage",
+            status: "executed",
+            title: "Reminder Set",
+            summary: `Done! I'll remind you to '${item.content}' on ${timeStr}.`,
+            data: { itemId: item.id, content: item.content, listName, reminderAt: resolvedTime },
+          };
+        }
+
+        return { action: "list.manage", status: "needs_input", title: "Trigger needed", summary: `When or where should I remind you about '${itemContent}'?` };
       }
       default:
         throw new Error("Invalid list action");
