@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper, ListTodo, BrainCircuit } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper, ListTodo, BrainCircuit, MapPin } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc-client";
 import { toast } from "sonner";
@@ -123,12 +123,15 @@ export default function Home() {
     return () => { window.removeEventListener('click', unlock); window.removeEventListener('keydown', unlock); window.removeEventListener('touchstart', unlock); };
   }, []);
 
+  const addMemoryFactMutation = trpc.settings.addMemoryFact.useMutation();
+
   // Auto-geolocation: fetch weather client-side if bootstrap didn't return any
   useEffect(() => {
     if (bootstrap.isLoading) return;
     if (weather !== null) return;
     if (geoFetchedRef.current) return;
     if (!('geolocation' in navigator)) return;
+    
     geoFetchedRef.current = true;
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
@@ -142,7 +145,18 @@ export default function Home() {
         const wxData = wxRes.ok ? await wxRes.json() : {};
         const c = wxData.current;
         if (!c || c.temperature_2m == null) return;
+        
         const cityName = cityData.city || cityData.locality || cityData.principalSubdivision || 'Your location';
+        
+        // --- Persistence: Save to user memory so server knows it next time ---
+        if (user && cityName !== 'Your location') {
+          addMemoryFactMutation.mutate({
+            factKey: 'home_location',
+            factValue: cityName,
+            category: 'preference'
+          });
+        }
+        
         if (cityData.countryCode) setCountryCode(cityData.countryCode.toLowerCase());
         setWeather({
           tempC: Math.round(c.temperature_2m),
@@ -151,8 +165,11 @@ export default function Home() {
           locationName: cityName,
         });
       } catch { /* silent */ }
-    }, () => { /* denied — no problem */ });
-  }, [bootstrap.isLoading, weather]);
+    }, (err) => { 
+      console.warn("Geolocation failed", err);
+      // We don't reset geoFetchedRef here to avoid infinite loops if it's permanently denied
+    });
+  }, [bootstrap.isLoading, weather, user]);
 
   useEffect(() => {
     const data = bootstrap.data;
@@ -640,19 +657,24 @@ export default function Home() {
                         {coords && <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-2">Tap for forecast →</p>}
                       </>
                     ) : (
-                      <div className="h-16 flex flex-col justify-center">
-                        <div className="flex items-center justify-between w-full">
-                          <p className="text-sm text-muted-foreground">No location set</p>
-                          <button 
-                            onClick={() => {
-                              const city = prompt("What city are you in?");
-                              if (city) handleSend(`My city is ${city}`);
-                            }}
-                            className="text-[10px] uppercase font-bold tracking-wider text-primary hover:underline"
-                          >
-                            Set
-                          </button>
+                      <div className="h-16 flex items-center justify-between bg-primary/5 rounded-2xl px-4 border border-primary/10 cursor-pointer group/loc" 
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             geoFetchedRef.current = false;
+                             setWeather(null);
+                             // This triggers the useEffect for auto-geolocation
+                           }}>
+                        <div className="flex flex-col justify-center">
+                          <p className="text-xs font-bold text-primary">Detect Location</p>
+                          <p className="text-[9px] text-muted-foreground">Tap to sync local weather</p>
                         </div>
+                        <motion.div 
+                          className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary"
+                          animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
+                          transition={{ repeat: Infinity, duration: 2 }}
+                        >
+                          <MapPin size={18} />
+                        </motion.div>
                       </div>
                     )}
                   </motion.div>
