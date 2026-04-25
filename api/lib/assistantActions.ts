@@ -862,7 +862,21 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
   } = await import("./db.js");
   
   const allLists = await listUserLists(options.userId);
-  const targetList = allLists.find(l => l.name.toLowerCase().includes(listName.toLowerCase()));
+  
+  // Smarter matching: 
+  // 1. Try exact/substring match
+  let targetList = allLists.find(l => l.name.toLowerCase().includes(listName.toLowerCase()));
+  
+  // 2. If listName is very generic (e.g. "list", "my list") and user has lists, pick the most recent one
+  const genericNames = ["list", "my list", "smart list", "grocery list", "shopping list"];
+  if (!targetList && genericNames.includes(listName.toLowerCase()) && allLists.length > 0) {
+    // If they said "grocery list" and have a list named "Groceries", use it.
+    targetList = allLists.find(l => 
+      l.name.toLowerCase().includes("grocer") || 
+      l.name.toLowerCase().includes("shop") || 
+      l.name.toLowerCase().includes("todo")
+    ) || allLists[0]; 
+  }
 
   try {
     switch (action) {

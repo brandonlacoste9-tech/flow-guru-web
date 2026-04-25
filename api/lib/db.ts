@@ -704,20 +704,35 @@ export async function getListItems(userId: number, listId: number): Promise<sche
   }
 }
 
-export async function createList(userId: number, name: string, icon?: string): Promise<number | null> {
+export async function createList(userId: number, name: string, icon?: string): Promise<number> {
   const db = await getDb();
-  if (!db) return null;
+  if (!db) throw new Error("Database unavailable");
   await ensureTables(db);
-  const results = await db.insert(schema.lists).values({ userId, name, icon: icon || 'list' }).returning({ id: schema.lists.id });
-  return results[0]?.id || null;
+  const results = await db.insert(schema.lists).values({ 
+    userId, 
+    name, 
+    icon: icon || 'list' 
+  }).returning({ id: schema.lists.id });
+  
+  const id = results[0]?.id;
+  if (!id) throw new Error("Failed to create list: No ID returned");
+  return id;
 }
 
-export async function addListItem(userId: number, listId: number, content: string): Promise<number | null> {
+export async function addListItem(userId: number, listId: number, content: string): Promise<number> {
   const db = await getDb();
-  if (!db) return null;
+  if (!db) throw new Error("Database unavailable");
   await ensureTables(db);
-  const results = await db.insert(schema.listItems).values({ userId, listId, content, completed: 0 }).returning({ id: schema.listItems.id });
-  return results[0]?.id || null;
+  const results = await db.insert(schema.listItems).values({ 
+    userId, 
+    listId, 
+    content, 
+    completed: 0 
+  }).returning({ id: schema.listItems.id });
+  
+  const id = results[0]?.id;
+  if (!id) throw new Error("Failed to add list item: No ID returned");
+  return id;
 }
 
 export async function toggleListItem(userId: number, itemId: number, completed: boolean): Promise<void> {
