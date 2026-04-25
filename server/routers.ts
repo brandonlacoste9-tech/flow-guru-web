@@ -33,6 +33,14 @@ import {
   getUserById,
   listUserLists,
   getListItems,
+  createList,
+  addListItem,
+  toggleListItem,
+  deleteListItem,
+  deleteList,
+  updateList,
+  updateListItem,
+  setListItemReminder,
 } from "./db";
 
 const sendMessageInput = z.object({
@@ -1154,21 +1162,18 @@ export const appRouter = router({
   list: router({
     all: publicProcedure.query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
-      const { listUserLists } = await import("./db");
       return await listUserLists(userId);
     }),
     items: publicProcedure
       .input(z.object({ listId: z.number() }))
       .query(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { getListItems } = await import("./db");
         return await getListItems(userId, input.listId);
       }),
     create: publicProcedure
       .input(z.object({ name: z.string().min(1).max(100), icon: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { createList } = await import("./db");
         const id = await createList(userId, input.name, input.icon);
         return { id };
       }),
@@ -1176,7 +1181,6 @@ export const appRouter = router({
       .input(z.object({ listId: z.number(), content: z.string().min(1) }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { addListItem } = await import("./db");
         const id = await addListItem(userId, input.listId, input.content);
         return { id };
       }),
@@ -1184,7 +1188,6 @@ export const appRouter = router({
       .input(z.object({ itemId: z.number(), completed: z.boolean() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { toggleListItem } = await import("./db");
         await toggleListItem(userId, input.itemId, input.completed);
         return { success: true };
       }),
@@ -1192,7 +1195,6 @@ export const appRouter = router({
       .input(z.object({ itemId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { deleteListItem } = await import("./db");
         await deleteListItem(userId, input.itemId);
         return { success: true };
       }),
@@ -1200,7 +1202,6 @@ export const appRouter = router({
       .input(z.object({ listId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { deleteList } = await import("./db");
         await deleteList(userId, input.listId);
         return { success: true };
       }),
@@ -1208,7 +1209,6 @@ export const appRouter = router({
       .input(z.object({ listId: z.number(), name: z.string().min(1).max(100) }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { updateList } = await import("./db");
         await updateList(userId, input.listId, input.name);
         return { success: true };
       }),
@@ -1216,7 +1216,6 @@ export const appRouter = router({
       .input(z.object({ itemId: z.number(), content: z.string() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { updateListItem } = await import("./db");
         await updateListItem(userId, input.itemId, input.content);
         return { success: true };
       }),
@@ -1224,7 +1223,6 @@ export const appRouter = router({
       .input(z.object({ itemId: z.number(), reminderAt: z.string().nullable() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { setListItemReminder } = await import("./db");
         await setListItemReminder(userId, input.itemId, input.reminderAt ? new Date(input.reminderAt) : null);
         return { success: true };
       }),
