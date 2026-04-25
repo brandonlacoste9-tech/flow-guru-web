@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME } from "../shared/const.js";
 import fs from "fs";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";

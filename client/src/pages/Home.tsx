@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper, ListTodo } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper, ListTodo, BrainCircuit } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc-client";
 import { toast } from "sonner";
@@ -95,6 +95,7 @@ export default function Home() {
   // Load wake-up time and alarm sound from profile for reminders
   const utils = trpc.useUtils();
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
+  const memoryFactsQuery = trpc.assistant.getMemoryFacts.useQuery(undefined, { enabled: !!user });
   useEffect(() => {
     const data = profileQuery.data as any;
     if (!data) return;
@@ -755,6 +756,24 @@ export default function Home() {
                         setCurrentStation(label);
                       }} 
                     />
+                  </motion.div>
+
+                  {/* Memory Spark Card */}
+                  <motion.div 
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 sm:p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.75 }}
+                    onClick={() => navigate("/settings")}
+                  >
+                    <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
+                    <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                      <BrainCircuit className="w-4 h-4 text-primary" />
+                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Memory Spark</span>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">AI Knowledge</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Flow Guru has learned <span className="text-primary font-bold">{memoryFactsQuery.data?.length || 0}</span> facts about you.</p>
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">Manage Memories →</p>
                   </motion.div>
                 </div>
 
