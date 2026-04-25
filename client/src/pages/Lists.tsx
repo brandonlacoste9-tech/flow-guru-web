@@ -19,7 +19,7 @@ export default function Lists() {
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingItemContent, setEditingItemContent] = useState('');
 
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
 
   const allLists = trpc.list.all.useQuery();
   const listItems = trpc.list.items.useQuery(
@@ -33,7 +33,8 @@ export default function Lists() {
       setNewListName('');
       setIsAddingList(false);
       toast.success('List created');
-    }
+    },
+    onError: (err) => toast.error(err.message || 'Failed to create list')
   });
 
   const addItemMutation = trpc.list.addItem.useMutation({
