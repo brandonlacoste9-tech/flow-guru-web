@@ -894,12 +894,13 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           listId = (await createList(options.userId, listName))!;
         }
         const id = await addListItem(options.userId, listId, itemContent);
+        const items = await getListItems(options.userId, listId);
         return {
           action: "list.manage",
           status: "executed",
           title: `Added to ${listName}`,
           summary: `Done — I added '${itemContent}' to your ${listName} list.`,
-          data: { id, content: itemContent, listName },
+          data: { id, content: itemContent, listName, items },
         };
       }
       case "remove": {
@@ -912,12 +913,13 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in the ${listName} list.` };
         }
         await deleteListItem(options.userId, item.id);
+        const remainingItems = await getListItems(options.userId, targetList.id);
         return {
           action: "list.manage",
           status: "executed",
           title: `Removed from ${listName}`,
           summary: `Okay, I've removed '${item.content}' from your ${listName} list.`,
-          data: { itemId: item.id, content: item.content, listName },
+          data: { itemId: item.id, content: item.content, listName, items: remainingItems },
         };
       }
       case "clear": {
@@ -956,12 +958,13 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in your ${listName} list.` };
         }
         await updateListItem(options.userId, item.id, newName);
+        const updatedItems = await getListItems(options.userId, targetList.id);
         return {
           action: "list.manage",
           status: "executed",
           title: "Item Updated",
           summary: `Updated! I've changed '${item.content}' to '${newName}' on your ${listName} list.`,
-          data: { itemId: item.id, oldContent: item.content, newContent: newName, listName },
+          data: { itemId: item.id, oldContent: item.content, newContent: newName, listName, items: updatedItems },
         };
       }
       case "list": {
