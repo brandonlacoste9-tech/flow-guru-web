@@ -29,7 +29,7 @@ const MAX_ALARM_MS = 10 * 60 * 1000;
 // Snooze duration: 9 minutes
 const SNOOZE_MS = 9 * 60 * 1000;
 
-export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender, alarmSound = 'chime', alarmDays }: UseRemindersOptions) {
+export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender, alarmSound = 'chime', alarmDays, onWakeUp }: UseRemindersOptions) {
   // Use refs so the interval callback always reads the latest values (no stale closures)
   const wakeUpTimeRef = useRef(wakeUpTime);
   const alarmSoundRef = useRef(alarmSound);
