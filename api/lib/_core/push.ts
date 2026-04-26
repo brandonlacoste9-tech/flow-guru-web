@@ -1,7 +1,7 @@
 import webpush from 'web-push';
 import { ENV } from './env';
 import { getDb } from '../db';
-import { pushSubscriptions } from '../../api/lib/drizzle/schema';
+import { pushSubscriptions } from '../drizzle/schema.js';
 import { eq } from 'drizzle-orm';
 
 // Configure VAPID keys
@@ -20,7 +20,7 @@ export async function sendPushNotification(userId: number, payload: { title: str
   
   if (subs.length === 0) return;
 
-  const promises = subs.map(async (sub) => {
+  const promises = subs.map(async (sub: any) => {
     try {
       const pushSubscription = {
         endpoint: sub.endpoint,

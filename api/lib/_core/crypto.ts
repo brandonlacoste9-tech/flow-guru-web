@@ -3,7 +3,7 @@
  * Uses AES-256-GCM with a key derived from JWT_SECRET so tokens are encrypted at rest.
  */
 import crypto from "node:crypto";
-import { ENV } from "./env";
+import { ENV } from "./env.js";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12; // 96-bit IV recommended for GCM
@@ -30,7 +30,6 @@ export function encryptToken(plaintext: string | null | undefined): string | nul
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: TAG_LENGTH });
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  // Format: base64url(iv) . base64url(tag) . base64url(ciphertext)
   return [iv.toString(ENCODING), tag.toString(ENCODING), encrypted.toString(ENCODING)].join(".");
 }
 
@@ -40,8 +39,6 @@ export function encryptToken(plaintext: string | null | undefined): string | nul
  */
 export function decryptToken(ciphertext: string | null | undefined): string | null {
   if (ciphertext == null) return null;
-  // Support legacy plaintext tokens that were stored before encryption was added.
-  // They won't contain exactly 2 dots in the expected positions.
   const parts = ciphertext.split(".");
   if (parts.length !== 3) {
     // Treat as unencrypted legacy value — return as-is.
@@ -56,7 +53,6 @@ export function decryptToken(ciphertext: string | null | undefined): string | nu
     decipher.setAuthTag(tag);
     return decipher.update(encrypted) + decipher.final("utf8");
   } catch {
-    // Decryption failed — could be a legacy plaintext token with dots in it.
     return ciphertext;
   }
 }

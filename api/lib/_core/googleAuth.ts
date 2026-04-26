@@ -6,13 +6,13 @@
  *   GET /api/auth/google/callback → exchange code, upsert user, set JWT cookie, redirect to /
  */
 
-import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const.js";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { Express } from "express";
-import * as db from "../db.js";
-import { getSessionCookieOptions } from "./cookies.js";
-import { sdk } from "./sdk.js";
-import { ENV } from "./env.js";
+import * as db from "../db";
+import { getSessionCookieOptions } from "./cookies";
+import { sdk } from "./sdk";
+import { ENV } from "./env";
 
 function getQueryParam(req: VercelRequest, key: string): string | undefined {
   const value = req.query[key];
@@ -113,7 +113,7 @@ export function registerGoogleAuthRoutes(app: Express) {
         expiresInMs: ONE_YEAR_MS,
       });
 
-      const cookieOptions = getSessionCookieOptions(vReq);
+      const cookieOptions = getSessionCookieOptions(vReq as any);
       (vRes as any).cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       vRes.redirect("/");

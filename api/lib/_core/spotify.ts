@@ -1,12 +1,12 @@
 import crypto from "node:crypto";
-import { ENV } from "./env";
-import { upsertProviderConnection, getProviderConnection } from "../db";
-import { encryptToken, decryptToken } from "./crypto";
+import { ENV } from "./env.js";
+import { upsertProviderConnection, getProviderConnection } from "../db.js";
+import { encryptToken, decryptToken } from "./crypto.js";
 
 const SPOTIFY_AUTH_URL = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API_BASE = "https://api.spotify.com/v1";
 
-/* ── HMAC-signed OAuth state ──────────────────────────────────────────── */
+/* ── HMAC-signed OAuth state (same pattern as Google Calendar) ─────────── */
 
 function base64UrlEncode(value: string) {
   return Buffer.from(value).toString("base64url");
@@ -69,11 +69,15 @@ export function parseSpotifyOAuthState(state: string): { userId: number } {
   return { userId: parsed.userId };
 }
 
+/* ── Callback URL helper ─────────────────────────────────────────────── */
+
 export function getSpotifyCallbackUrl(req: { headers: { host?: string }; protocol: string }): string {
   const host = req.headers.host || "flow-guru-web.vercel.app";
   const protocol = host.includes("localhost") ? "http" : "https";
   return `${protocol}://${host}/api/integrations/spotify/callback`;
 }
+
+/* ── Token exchange (no profile lookup – userId comes from signed state) ── */
 
 export async function connectSpotify(params: {
   userId: number;
@@ -102,10 +106,19 @@ export async function connectSpotify(params: {
 
   const tokenData = await response.json();
   
-  const meResponse = await fetch(`${SPOTIFY_API_BASE}/me`, {
-    headers: { "Authorization": `Bearer ${tokenData.access_token}` }
-  });
-  const meData = await meResponse.json();
+  // Best-effort profile fetch for a friendly label (non-fatal if it fails)
+  let accountLabel = "Spotify Account";
+  try {
+    const meResponse = await fetch(`${SPOTIFY_API_BASE}/me`, {
+      headers: { "Authorization": `Bearer ${tokenData.access_token}` }
+    });
+    if (meResponse.ok) {
+      const meData = await meResponse.json();
+      accountLabel = meData.display_name || meData.id || accountLabel;
+    }
+  } catch {
+    // Profile fetch is cosmetic — swallow errors
+  }
 
   const connection = {
     userId: params.userId,
@@ -114,7 +127,7 @@ export async function connectSpotify(params: {
     accessToken: encryptToken(tokenData.access_token),
     refreshToken: encryptToken(tokenData.refresh_token || null),
     expiresAtUnixMs: tokenData.expires_in ? Date.now() + tokenData.expires_in * 1000 : null,
-    externalAccountLabel: meData.display_name || meData.id || "Spotify Account",
+    externalAccountLabel: accountLabel,
     lastError: null,
   };
 

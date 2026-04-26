@@ -1,5 +1,5 @@
 import { getDb } from '../db';
-import * as schema from '../../api/lib/drizzle/schema';
+import * as schema from '../drizzle/schema.js';
 import { and, eq, gte, lte } from 'drizzle-orm';
 import { sendPushNotification } from './push';
 

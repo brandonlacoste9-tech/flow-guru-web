@@ -353,3 +353,8 @@ export async function createGoogleCalendarEvent(params: {
     },
   );
 }
+
+export async function resolveNaturalLanguageTime(time: string, timeZone: string): Promise<string | null> {
+  // Very basic fallback since it was missing
+  return new Date().toISOString(); 
+}

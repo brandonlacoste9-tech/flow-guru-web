@@ -795,7 +795,7 @@ export default function Home() {
                       <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Memory Spark</span>
                     </div>
                     <p className="text-sm font-semibold text-foreground">AI Knowledge</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Flow Guru has learned <span className="text-primary font-bold">{memoryFactsQuery.data?.length || 0}</span> facts about you.</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Flow Guru has learned <span className="text-primary font-bold">{bootstrap.data?.memoryFacts?.length || 0}</span> facts about you.</p>
                     <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">Manage Memories →</p>
                   </motion.div>
                 </div>
