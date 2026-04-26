@@ -7,7 +7,6 @@ import {
 } from "./_core/googleCalendar.js";
 import { invokeLLM } from "./_core/llm.js";
 import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map.js";
-import { searchAndPlaySpotify } from "./_core/spotify.js";
 
 const ACTION_NAMES = [
   "none",
@@ -249,6 +248,7 @@ export async function planAssistantAction(params: {
   userName: string | null | undefined;
   memoryContext: string;
   message: string;
+  language: 'en' | 'fr';
 }) {
   const response = await invokeLLM({
     messages: [
@@ -256,6 +256,7 @@ export async function planAssistantAction(params: {
         role: "system",
         content: [
           "You are Flow Guru's intent classifier. Your ONLY job is to decide which tool to call.",
+          `CRITICAL: The user's preferred language is ${params.language === 'fr' ? 'FRENCH' : 'ENGLISH'}. However, you MUST return JSON as specified below regardless of input language.`,
           "ALWAYS choose an action when possible — err on the side of calling a tool rather than returning 'none'.",
           "",
           "AVAILABLE TOOLS:",
@@ -263,7 +264,7 @@ export async function planAssistantAction(params: {
           "- calendar.list_events: For checking a schedule or listing upcoming items.",
           "- weather.get: For checking current or future weather conditions.",
           "- route.get: For travel times, directions, or distances between points.",
-          "- music.play: For playing music on Spotify.",
+          "- music.play: For playing music on our internal radio (Focus, Chill, Energy, Sleep, Space).",
           "- news.get: For latest headlines or specific news issues.",
           "- browser.use: For browsing the web to find answers, research topics, or perform web-based tasks.",
           "- system.subagent: For ANY complex system tasks: file operations, terminal commands, writing scripts, running Python, or performing multi-step autonomous actions on the user's machine.",
@@ -1041,50 +1042,42 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
 
 async function executeMusicAction(
   plan: AssistantActionPlan,
-  options: { userId: number }
+  _options: { userId: number }
 ): Promise<AssistantActionResult> {
-  const query = plan.music?.query || "some good music";
-  const targetType = plan.music?.targetType || "track";
-
-  try {
-    const result = await searchAndPlaySpotify({
-      userId: options.userId,
-      query,
-      type: (targetType as string) || "track",
-    });
-
-    if (result.status === "no_device") {
-      return {
-        action: "music.play",
-        status: "needs_input",
-        title: "Spotify Device Needed",
-        summary: result.message || "I found the music, but I couldn't find an active Spotify device to play it on.",
-        provider: "spotify",
-      };
-    }
-
-    const item = result.item;
-    return {
-      action: "music.play",
-      status: "executed",
-      title: `Playing: ${item.name}`,
-      summary: `I've started ${item.name} by ${item.artists?.[0]?.name || "the artist"} on Spotify for you.`,
-      provider: "spotify",
-      data: {
-        item,
-        externalUrl: item.external_urls?.spotify,
-      },
-    };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Spotify failed.";
-    return {
-      action: "music.play",
-      status: "failed",
-      title: "Spotify snag",
-      summary: msg,
-      provider: "spotify",
-    };
+  const query = (plan.music?.query || "lofi").toLowerCase();
+  
+  // Simple mapping from query to internal station IDs
+  let stationId = "focus";
+  let label = "Focus";
+  
+  if (query.includes("chill") || query.includes("relax") || query.includes("lush")) {
+    stationId = "chill";
+    label = "Chill";
+  } else if (query.includes("energy") || query.includes("beat") || query.includes("workout") || query.includes("dance")) {
+    stationId = "energy";
+    label = "Energy";
+  } else if (query.includes("sleep") || query.includes("night") || query.includes("calm")) {
+    stationId = "sleep";
+    label = "Sleep";
+  } else if (query.includes("space") || query.includes("deep") || query.includes("ambient")) {
+    stationId = "space";
+    label = "Space";
+  } else if (query.includes("focus") || query.includes("study") || query.includes("groove")) {
+    stationId = "focus";
+    label = "Focus";
   }
+
+  return {
+    action: "music.play",
+    status: "executed",
+    title: `Switching to ${label} Radio`,
+    summary: `I've started the ${label} station for you.`,
+    provider: "internal-radio",
+    data: {
+      stationId,
+      label,
+    },
+  };
 }
 
 export async function executeAssistantAction(
@@ -1150,7 +1143,7 @@ export async function executeAssistantAction(
             : plan.action.startsWith("calendar")
               ? "google-calendar"
               : plan.action.startsWith("music")
-                ? "spotify"
+                ? "internal-radio"
                 : undefined,
     };
   }

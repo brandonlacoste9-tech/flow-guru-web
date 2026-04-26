@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper, ListTodo, BrainCircuit, MapPin } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, LogOut, Cloud, Calendar, Send, Settings, CheckCircle2, MessageSquarePlus, User, UserRound, Newspaper, ListTodo, BrainCircuit, MapPin, Globe } from 'lucide-react';
+import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc-client";
 import { toast } from "sonner";
@@ -32,13 +33,15 @@ interface Message {
   actionResult?: any;
 }
 
-const SUGGESTIONS = [
-  "What's on my calendar today?",
-  "What's the weather?",
+const SUGGESTIONS: TranslationKeys[] = [
+  "suggest_calendar",
+  "suggest_weather",
+  "suggest_briefing",
 ];
 
 export default function Home() {
   const [, navigate] = useLocation();
+  const { language, setLanguage, t } = useLanguage();
   const { user, logout } = useAuth({ redirectOnUnauthenticated: false });
   const [showAuthModal, setShowAuthModal] = useState(false);
   const resetToken = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('reset_token') || undefined : undefined;
@@ -51,7 +54,6 @@ export default function Home() {
   const [weather, setWeather] = useState<any>(null);
   const [todayEvents, setTodayEvents] = useState<any[]>([]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
-  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [memoryFacts, setMemoryFacts] = useState<any[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
@@ -107,7 +109,7 @@ export default function Home() {
     if (data.alarmDays) setAlarmDays(data.alarmDays);
   }, [profileQuery.data]);
 
-  const bootstrap = trpc.assistant.bootstrap.useQuery(undefined, { enabled: true });
+  const bootstrap = trpc.assistant.bootstrap.useQuery({ language }, { enabled: true });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -183,8 +185,6 @@ export default function Home() {
     if (data.providerConnections) {
       const gcal = (data.providerConnections as any[]).find(c => c.provider === "google-calendar" && c.status === "connected");
       setIsGoogleConnected(!!gcal);
-      const spot = (data.providerConnections as any[]).find(c => c.provider === "spotify" && c.status === "connected");
-      setIsSpotifyConnected(!!spot);
     }
     if (data.proactiveGreeting && (!data.messages || data.messages.length === 0) && messages.length === 0) {
       const greetingMsg: Message = { id: 'proactive', role: 'assistant', content: data.proactiveGreeting };
@@ -251,7 +251,7 @@ export default function Home() {
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
-      recognition.lang = 'en-US';
+      recognition.lang = language === 'en' ? 'en-US' : 'fr-FR';
       recognition.onresult = (event: any) => handleSend(event.results[0][0].transcript);
       recognition.onend = () => setIsListening(false);
       recognition.onerror = () => setIsListening(false);
@@ -291,7 +291,8 @@ export default function Home() {
     sendMutation.mutate({
       message: text,
       threadId: startsFresh ? undefined : currentThreadId,
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      language
     });
   };
 
@@ -488,8 +489,16 @@ export default function Home() {
             </button>
           )}
 
+          <button
+            onClick={() => setLanguage(language === 'en' ? 'fr' : 'en')}
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-primary font-bold text-[10px] sm:text-[11px]"
+            title={language === 'en' ? 'Passer en français' : 'Switch to English'}
+          >
+            {language.toUpperCase()}
+          </button>
+
           <button onClick={() => navigate("/calendar")}
-            title="Open Calendar"
+            title={t('nav_calendar')}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
             <Calendar size={14} />
           </button>
@@ -501,7 +510,10 @@ export default function Home() {
               const next = voiceGender === 'male' ? 'female' : 'male';
               setVoiceGender(next);
               localStorage.setItem('voiceGender', next);
-              toast.success(`Voice switched to ${next === 'male' ? 'Brian (male)' : 'Sarah (female)'}`);
+              const msg = language === 'en' 
+                ? `Voice switched to ${next === 'male' ? 'Brian' : 'Sarah'}`
+                : `Voix changée pour ${next === 'male' ? 'Brian' : 'Sarah'}`;
+              toast.success(msg);
             }}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground"
           >
@@ -509,12 +521,13 @@ export default function Home() {
           </button>
           
           <button onClick={() => navigate("/lists")}
-            title="Your Lists"
+            title={t('nav_lists')}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
             <ListTodo size={14} />
           </button>
 
           <button onClick={() => navigate('/settings')}
+            title={t('nav_settings')}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm text-muted-foreground hover:text-foreground">
             <Settings size={14} />
           </button>
@@ -525,6 +538,7 @@ export default function Home() {
           </button>
           {user ? (
             <button onClick={() => logout()}
+              title={t('nav_sign_out')}
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-destructive/10 hover:border-destructive/30 transition-all text-muted-foreground hover:text-destructive shadow-sm">
               <LogOut size={14} />
             </button>
@@ -533,7 +547,7 @@ export default function Home() {
               onClick={() => setShowAuthModal(true)}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 h-8 sm:h-9 rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 transition-all text-primary text-[10px] sm:text-xs font-semibold shadow-sm">
               <User size={12} />
-              <span className="hidden xs:inline">Sign in</span>
+              <span className="hidden xs:inline">{t('nav_sign_in')}</span>
             </button>
           )}
         </motion.div>
@@ -647,15 +661,15 @@ export default function Home() {
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
                     <div className="flex items-center gap-2 mb-2 sm:mb-3">
                       <Cloud className="w-4 h-4 text-primary" />
-                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest truncate">{weather?.locationName || "Weather"}</span>
+                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest truncate">{weather?.locationName || t('card_weather_title')}</span>
                     </div>
                     {weather ? (
                       <>
                         <div className="flex items-baseline gap-2">
                           <p className="text-3xl sm:text-4xl font-bold tracking-tight">{weather.tempC}°</p>
                         </div>
-                        <p className="text-xs sm:text-sm text-muted-foreground capitalize mt-1 font-medium">{weather.label} <span className="text-border">•</span> Feels like {weather.feelsLikeC}°</p>
-                        {coords && <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-2">Tap for forecast →</p>}
+                        <p className="text-xs sm:text-sm text-muted-foreground capitalize mt-1 font-medium">{weather.label} <span className="text-border">•</span> {language === 'en' ? 'Feels like' : 'Ressenti'} {weather.feelsLikeC}°</p>
+                        {coords && <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-2">{t('card_weather_forecast')} →</p>}
                       </>
                     ) : (
                       <div className="h-16 flex items-center justify-between bg-primary/5 rounded-2xl px-4 border border-primary/10 cursor-pointer group/loc" 
@@ -666,8 +680,8 @@ export default function Home() {
                              // This triggers the useEffect for auto-geolocation
                            }}>
                         <div className="flex flex-col justify-center">
-                          <p className="text-xs font-bold text-primary">Detect Location</p>
-                          <p className="text-[9px] text-muted-foreground">Tap to sync local weather</p>
+                          <p className="text-xs font-bold text-primary">{t('card_weather_detect')}</p>
+                          <p className="text-[9px] text-muted-foreground">{t('card_weather_sync')}</p>
                         </div>
                         <motion.div 
                           className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary"
@@ -692,7 +706,7 @@ export default function Home() {
                     <div className="flex items-center justify-between mb-2 sm:mb-3">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-primary" />
-                        <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Today</span>
+                        <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('card_calendar_today')}</span>
                       </div>
                       <button
                         className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[9px] sm:text-[10px] uppercase font-bold tracking-wider hover:bg-primary/20 transition-colors"
@@ -703,7 +717,7 @@ export default function Home() {
                           }
                         }}
                       >
-                        {isGoogleConnected ? 'Open Google' : 'Open'}
+                        {isGoogleConnected ? t('card_calendar_open_google') : t('card_calendar_open')}
                       </button>
                     </div>
                     
@@ -719,13 +733,13 @@ export default function Home() {
                           </div>
                         ))}
                         {allTodayEvents.length > 4 && (
-                          <p className="text-[10px] sm:text-xs text-muted-foreground pt-0.5">+{allTodayEvents.length - 4} more</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground pt-0.5">+{allTodayEvents.length - 4} {language === 'en' ? 'more' : 'de plus'}</p>
                         )}
                       </div>
                     ) : (
                       <div className="h-14 flex flex-col justify-center">
-                        <p className="text-sm sm:text-[15px] font-medium text-foreground">Schedule is clear.</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">No events today</p>
+                        <p className="text-sm sm:text-[15px] font-medium text-foreground">{t('card_calendar_clear')}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{t('card_calendar_no_events')}</p>
                       </div>
                     )}
                   </motion.div>
@@ -741,11 +755,11 @@ export default function Home() {
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all" />
                     <div className="flex items-center gap-2 mb-2 sm:mb-3">
                       <Newspaper className="w-4 h-4 text-primary" />
-                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Top News</span>
+                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('card_news_title')}</span>
                     </div>
-                    <p className="text-sm font-semibold text-foreground">Today's Headlines</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">General · Tech · Business</p>
-                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">Tap to read →</p>
+                    <p className="text-sm font-semibold text-foreground">{language === 'en' ? "Today's Headlines" : "Titres du jour"}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{language === 'en' ? 'General · Tech · Business' : 'Général · Tech · Affaires'}</p>
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">{t('card_news_tap')} →</p>
                   </motion.div>
 
                   {/* Lists Card */}
@@ -759,11 +773,11 @@ export default function Home() {
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
                     <div className="flex items-center gap-2 mb-2 sm:mb-3">
                       <ListTodo className="w-4 h-4 text-primary" />
-                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Smart Lists</span>
+                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('card_lists_title')}</span>
                     </div>
-                    <p className="text-sm font-semibold text-foreground">Groceries & Todos</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Organize your day</p>
-                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">View all →</p>
+                    <p className="text-sm font-semibold text-foreground">{language === 'en' ? 'Groceries & Todos' : 'Courses & Tâches'}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{language === 'en' ? 'Organize your day' : 'Organisez votre journée'}</p>
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">{language === 'en' ? 'View all' : 'Voir tout'} →</p>
                   </motion.div>
 
                   {/* Music Player Card */}
@@ -792,11 +806,15 @@ export default function Home() {
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
                     <div className="flex items-center gap-2 mb-2 sm:mb-3">
                       <BrainCircuit className="w-4 h-4 text-primary" />
-                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">Memory Spark</span>
+                      <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">{language === 'en' ? 'Memory Spark' : 'Étincelle de Mémoire'}</span>
                     </div>
-                    <p className="text-sm font-semibold text-foreground">AI Knowledge</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Flow Guru has learned <span className="text-primary font-bold">{bootstrap.data?.memoryFacts?.length || 0}</span> facts about you.</p>
-                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">Manage Memories →</p>
+                    <p className="text-sm font-semibold text-foreground">{language === 'en' ? 'AI Knowledge' : 'Connaissance IA'}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                      {language === 'en' 
+                        ? <>Flow Guru has learned <span className="text-primary font-bold">{bootstrap.data?.memoryFacts?.length || 0}</span> facts about you.</>
+                        : <>Flow Guru a appris <span className="text-primary font-bold">{bootstrap.data?.memoryFacts?.length || 0}</span> faits sur vous.</>}
+                    </p>
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">{language === 'en' ? 'Manage Memories' : 'Gérer les mémoires'} →</p>
                   </motion.div>
                 </div>
 
@@ -810,7 +828,7 @@ export default function Home() {
                   {SUGGESTIONS.map((s, idx) => (
                     <motion.button 
                       key={s} 
-                      onClick={() => handleSend(s)}
+                      onClick={() => handleSend(t(s))}
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.7 + (idx * 0.1) }}
@@ -818,7 +836,7 @@ export default function Home() {
                       whileTap={{ scale: 0.98 }}
                       className="bg-card border border-border backdrop-blur-md text-[13px] sm:text-sm text-muted-foreground px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl hover:bg-secondary hover:text-foreground transition-all font-medium"
                     >
-                      {s}
+                      {t(s)}
                     </motion.button>
                   ))}
                 </motion.div>

@@ -6,22 +6,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const user = await sdk.authenticateRequest(req);
     if (!user) {
-      return res.status(401).json({ googleCalendar: false, spotify: false });
+      return res.status(401).json({ googleCalendar: false });
     }
 
-    const [gcal, spot] = await Promise.all([
-      getProviderConnection(user.id, "google-calendar"),
-      getProviderConnection(user.id, "spotify"),
-    ]);
+    const gcal = await getProviderConnection(user.id, "google-calendar");
 
     return res.json({
       googleCalendar: gcal?.status === "connected",
-      spotify: spot?.status === "connected",
       googleCalendarLabel: gcal?.status === "connected" ? (gcal as any).externalAccountLabel ?? null : null,
-      spotifyLabel: spot?.status === "connected" ? (spot as any).externalAccountLabel ?? null : null,
     });
   } catch (err: any) {
     console.error("[Integrations Status]", err.message);
-    return res.status(500).json({ googleCalendar: false, spotify: false });
+    return res.status(500).json({ googleCalendar: false });
   }
 }

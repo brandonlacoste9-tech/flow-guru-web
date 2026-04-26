@@ -5,9 +5,10 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Play, Pause, Volume2, VolumeX, Music2, SkipForward } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 /* ── SomaFM fallback stations ─────────────────────────────────────── */
 type StationId = "focus" | "chill" | "energy" | "sleep" | "space";
@@ -66,30 +67,6 @@ const STATIONS: { id: StationId; label: string; desc: string; urls: string[] }[]
 ];
 
 /* ── Types ─────────────────────────────────────────────────────────── */
-type SpotifyNowPlaying = {
-  trackId: string;
-  name: string;
-  artists: string[];
-  albumArt: string | null;
-  isPlaying: boolean;
-  progressMs: number;
-  durationMs: number;
-};
-
-type SpotifyPlaylist = {
-  id: string;
-  name: string;
-  image: string | null;
-  trackCount: number;
-};
-
-type SpotifyState = {
-  connected: boolean;
-  nowPlaying: SpotifyNowPlaying | null;
-  playlists: SpotifyPlaylist[];
-  volumePercent: number;
-};
-
 export type MusicPlayerHandle = {
   play: (stationId?: StationId) => void;
   pause: () => void;
@@ -101,97 +78,15 @@ interface MusicPlayerProps {
 
 export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   ({ onStateChange }, ref) => {
-  /* ── Mode state ────────────────────────────────────────────────── */
-  const [mode, setMode] = useState<"spotify" | "radio">("radio");
-  const [hasInitializedMode, setHasInitializedMode] = useState(false);
-
-  /* ── Spotify state ──────────────────────────────────────────────── */
-  const [spotify, setSpotify] = useState<SpotifyState>({ connected: false, nowPlaying: null, playlists: [], volumePercent: 50 });
-  const [spotifyLoading, setSpotifyLoading] = useState(true);
-  const [playlistTab, setPlaylistTab] = useState<string | null>(null);
-  const [spotifyVolume, setSpotifyVolume] = useState(50);
-
-  const fetchSpotifyState = async () => {
-    try {
-      const resp = await fetch('/api/integrations/spotify/state', { credentials: 'include' });
-      if (resp.ok) {
-        const data = await resp.json();
-        setSpotify(data);
-        setSpotifyVolume(data.volumePercent ?? 50);
-        
-        // Auto-switch to spotify mode on first load if connected
-        if (!hasInitializedMode && data.connected) {
-          setMode("spotify");
-          setHasInitializedMode(true);
-        } else if (!hasInitializedMode && !data.connected) {
-          setHasInitializedMode(true);
-        }
-
-        if (data.connected && data.nowPlaying?.isPlaying && mode === "spotify") {
-          onStateChange?.(true, data.nowPlaying.name);
-        }
-      }
-    } catch { /* silent */ }
-    setSpotifyLoading(false);
-  };
-
-  useEffect(() => {
-    fetchSpotifyState();
-    const interval = setInterval(fetchSpotifyState, 15000);
-    return () => clearInterval(interval);
-  }, [mode]);
-
-  const spotifyPlay = async (contextUri?: string) => {
-    try {
-      // Pause radio if it's playing
-      stopAudio();
-
-      const body: any = {};
-      if (contextUri) body.contextUri = contextUri;
-      await fetch('/api/integrations/spotify/play', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      // Re-fetch state after a short delay
-      setTimeout(fetchSpotifyState, 1000);
-    } catch { /* silent */ }
-  };
-
-  const spotifyPause = async () => {
-    try {
-      // Use the Spotify Web API pause endpoint via our proxy
-      await fetch('/api/integrations/spotify/play', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'pause' }),
-      });
-      setTimeout(fetchSpotifyState, 1000);
-    } catch { /* silent */ }
-  };
-
-  const spotifySetVolume = async (vol: number) => {
-    setSpotifyVolume(vol);
-    try {
-      await fetch('/api/integrations/spotify/play', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'volume', volumePercent: vol }),
-      });
-    } catch { /* silent */ }
-  };
-
-  /* ── SomaFM state ──────────────────────────────────────────────── */
+  const { t } = useLanguage();
+  /* ── Radio state ────────────────────────────────────────────────── */
   const [activeId, setActiveId] = useState<StationId>("focus");
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const urlIndexRef = useRef(0);
   const activeIdRef = useRef<StationId>("focus");
   const prevVolumeRef = useRef(0.8);
 
@@ -209,14 +104,8 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   };
 
   const startAudio = (urls: string[], urlIdx = 0) => {
-    // Pause Spotify if it's playing
-    if (spotify.connected && spotify.nowPlaying?.isPlaying) {
-      spotifyPause();
-    }
-
     stopAudio();
     if (urlIdx >= urls.length) return;
-    urlIndexRef.current = urlIdx;
     setBuffering(true);
 
     const currentStation = STATIONS.find((s) => s.id === activeIdRef.current)!;
@@ -304,244 +193,80 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
 
   useEffect(() => () => stopAudio(), []);
 
-  /* ── Progress bar helper ────────────────────────────────────────── */
-  const formatTime = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
-
   /* ── Render ─────────────────────────────────────────────────────── */
 
   return (
     <div className="bg-card backdrop-blur-xl border border-border rounded-3xl p-3 sm:p-4 shadow-xl">
-      {/* Source Selector (only if Spotify is connected) */}
-      {spotify.connected && (
-        <div className="flex gap-1 mb-3 bg-secondary/30 rounded-xl p-0.5 w-fit ml-auto">
+      <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1">
+        {STATIONS.map((s) => (
           <button
-            onClick={() => {
-              if (isPlaying || buffering) stopAudio();
-              setMode("spotify");
-            }}
+            key={s.id}
+            onClick={() => switchStation(s.id)}
             className={cn(
-              "px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all uppercase tracking-wider",
-              mode === "spotify" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              "flex-1 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-[11px] font-semibold transition-all duration-200 leading-none",
+              activeId === s.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            Spotify
+            {s.label}
           </button>
-          <button
-            onClick={() => {
-              if (spotify.nowPlaying?.isPlaying) spotifyPause();
-              setMode("radio");
-            }}
-            className={cn(
-              "px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all uppercase tracking-wider",
-              mode === "radio" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Radio
-          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={toggle}
+          className={cn(
+            "w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
+            isPlaying || buffering ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+          )}
+        >
+          {buffering ? (
+            <motion.div 
+              className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full" 
+              animate={{ rotate: 360 }} 
+              transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }} 
+            />
+          ) : isPlaying ? (
+            <Pause className="w-4 h-4 sm:w-5 sm:h-5" />
+          ) : (
+            <Play className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" />
+          )}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-foreground text-[14px] font-semibold leading-tight">{station.label}</p>
+          <p className="text-muted-foreground text-[10px] sm:text-[11px] truncate">{station.desc}</p>
         </div>
-      )}
 
-      {mode === "spotify" && spotify.connected ? (
-        <>
-          {/* Spotify View */}
-          {/* Playlist tabs (scrollable) */}
-          {spotify.playlists.length > 0 && (
-            <div className="flex gap-1.5 mb-4 bg-secondary/50 rounded-2xl p-1 overflow-x-auto no-scrollbar touch-pan-x">
-              {spotify.playlists.slice(0, 5).map((pl) => (
-                <button
-                  key={pl.id}
-                  onClick={() => {
-                    setPlaylistTab(pl.id);
-                    spotifyPlay(`spotify:playlist:${pl.id}`);
-                  }}
-                  className={cn(
-                    "flex-1 py-2 sm:py-1.5 rounded-xl text-[10px] sm:text-[11px] font-semibold transition-all duration-200 leading-none whitespace-nowrap px-3 sm:px-2",
-                    playlistTab === pl.id
-                      ? "bg-[#1DB954] text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {pl.name.length > 14 ? pl.name.slice(0, 14) + '…' : pl.name}
-                </button>
+        <AnimatePresence>
+          {isPlaying && (
+            <motion.div className="flex gap-[2px] sm:gap-[3px] items-end h-3 sm:h-4 mr-0.5 sm:mr-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              {([0, 0.12, 0.24] as const).map((delay, i) => (
+                <motion.div key={i} className="w-[2px] sm:w-[3px] bg-primary/60 rounded-full" style={{ height: 3 }} animate={{ height: [4, 14, 4] }} transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }} />
               ))}
-            </div>
+            </motion.div>
           )}
+        </AnimatePresence>
 
-          {/* Now Playing */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => spotify.nowPlaying?.isPlaying ? spotifyPause() : spotifyPlay()}
-              className={cn(
-                "w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
-                spotify.nowPlaying?.isPlaying
-                  ? "bg-[#1DB954] text-white shadow-lg shadow-[#1DB954]/30 scale-105"
-                  : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-              )}
-            >
-              {spotify.nowPlaying?.isPlaying ? (
-                <Pause className="w-4 h-4 sm:w-5 sm:h-5" />
-              ) : (
-                <Play className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" />
-              )}
-            </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={toggleMute} className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+            {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+          </button>
+          <input type="range" min={0} max={1} step={0.02} value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="w-12 sm:w-16 h-1 accent-primary cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary" style={{ background: `linear-gradient(to right, hsl(var(--primary)) ${(isMuted ? 0 : volume) * 100}%, hsl(var(--secondary)) ${(isMuted ? 0 : volume) * 100}%)` }} />
+        </div>
+      </div>
 
-            <div className="flex-1 min-w-0">
-              {spotify.nowPlaying ? (
-                <div className="flex items-center gap-2">
-                  {spotify.nowPlaying.albumArt && (
-                    <img src={spotify.nowPlaying.albumArt} alt="" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow-md shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-foreground text-[13px] sm:text-[14px] font-semibold leading-tight truncate">{spotify.nowPlaying.name}</p>
-                    <p className="text-muted-foreground text-[10px] sm:text-[11px] truncate">{spotify.nowPlaying.artists.join(', ')}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="min-w-0">
-                  <p className="text-foreground text-[14px] font-semibold leading-tight">Spotify</p>
-                  <p className="text-muted-foreground text-[11px]">Pick a playlist</p>
-                </div>
-              )}
-            </div>
-
-            {/* Volume control for Spotify */}
-            <div className="hidden xs:flex items-center gap-1.5 shrink-0 ml-1">
-              <Volume2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
-              <input 
-                type="range" 
-                min={0} 
-                max={100} 
-                step={5} 
-                value={spotifyVolume} 
-                onChange={(e) => spotifySetVolume(parseInt(e.target.value))}
-                className="w-12 sm:w-16 h-1 accent-[#1DB954] cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-[#1DB954]"
-                style={{ background: `linear-gradient(to right, #1DB954 ${spotifyVolume}%, hsl(var(--secondary)) ${spotifyVolume}%)` }}
-              />
-            </div>
-
-            <AnimatePresence>
-              {spotify.nowPlaying?.isPlaying && (
-                <motion.div
-                  className="flex gap-[2px] sm:gap-[3px] items-end h-3 sm:h-4 mr-0.5 sm:mr-1"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  {([0, 0.12, 0.24] as const).map((delay, i) => (
-                    <motion.div
-                      key={i}
-                      className="w-[2px] sm:w-[3px] bg-[#1DB954]/60 rounded-full"
-                      style={{ height: 3 }}
-                      animate={{ height: [3, 14, 3] }}
-                      transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }}
-                    />
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {spotify.nowPlaying && (
-            <div className="mt-3 space-y-1">
-              <div className="w-full h-1 bg-secondary rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-[#1DB954] rounded-full"
-                  style={{ width: `${Math.min((spotify.nowPlaying.progressMs / spotify.nowPlaying.durationMs) * 100, 100)}%` }}
-                  transition={{ duration: 0.5 }}
-                />
-              </div>
-              <div className="flex justify-between text-[9px] text-muted-foreground font-medium">
-                <span>{formatTime(spotify.nowPlaying.progressMs)}</span>
-                <span>{formatTime(spotify.nowPlaying.durationMs)}</span>
-              </div>
-            </div>
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border">
+        <AnimatePresence>
+          {(isPlaying || buffering) && (
+            <motion.div className="flex items-center gap-1.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{t('music_playing')}</span>
+            </motion.div>
           )}
-
-          <div className="flex items-center justify-between mt-2 pt-2.5 border-t border-border">
-            <AnimatePresence>
-              {spotify.nowPlaying?.isPlaying && (
-                <motion.div className="flex items-center gap-1.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-[#1DB954] rounded-full animate-pulse" />
-                  <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Playing</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div className="flex items-center gap-1.5 ml-auto">
-              <svg className="w-3 h-3 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.216.354-.678.468-1.032.252-2.86-1.748-6.458-2.143-10.697-1.174-.405.093-.812-.162-.905-.567-.093-.405.162-.812.567-.905 4.636-1.06 8.597-.613 11.77 1.332.355.216.469.678.252 1.032z"/></svg>
-              <p className="text-muted-foreground/60 text-[9px] sm:text-[10px]">Spotify Premium</p>
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          {/* SomaFM View */}
-          <div className="flex gap-1 mb-4 bg-secondary/50 rounded-2xl p-1">
-            {STATIONS.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => switchStation(s.id)}
-                className={cn(
-                  "flex-1 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-[11px] font-semibold transition-all duration-200 leading-none",
-                  activeId === s.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={toggle}
-              className={cn(
-                "w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
-                isPlaying || buffering ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-              )}
-            >
-              {buffering ? <motion.div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }} /> : isPlaying ? <Pause className="w-4 h-4 sm:w-5 sm:h-5" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" />}
-            </button>
-
-            <div className="flex-1 min-w-0">
-              <p className="text-foreground text-[14px] font-semibold leading-tight">{station.label}</p>
-              <p className="text-muted-foreground text-[10px] sm:text-[11px] truncate">{station.desc}</p>
-            </div>
-
-            <AnimatePresence>
-              {isPlaying && (
-                <motion.div className="flex gap-[2px] sm:gap-[3px] items-end h-3 sm:h-4 mr-0.5 sm:mr-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  {([0, 0.12, 0.24] as const).map((delay, i) => (
-                    <motion.div key={i} className="w-[2px] sm:w-[3px] bg-primary/60 rounded-full" style={{ height: 3 }} animate={{ height: [4, 14, 4] }} transition={{ repeat: Infinity, duration: 0.55, delay, ease: "easeInOut" }} />
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button onClick={toggleMute} className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
-                {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-              </button>
-              <input type="range" min={0} max={1} step={0.02} value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="w-12 sm:w-16 h-1 accent-primary cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary" style={{ background: `linear-gradient(to right, hsl(var(--primary)) ${(isMuted ? 0 : volume) * 100}%, hsl(var(--secondary)) ${(isMuted ? 0 : volume) * 100}%)` }} />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border">
-            <AnimatePresence>
-              {(isPlaying || buffering) && (
-                <motion.div className="flex items-center gap-1.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-red-500 rounded-full animate-pulse" />
-                  <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Live</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <p className="text-muted-foreground/60 text-[9px] sm:text-[10px] ml-auto">SomaFM · free internet radio</p>
-          </div>
-        </>
-      )}
+        </AnimatePresence>
+        <p className="text-muted-foreground/60 text-[9px] sm:text-[10px] ml-auto">SomaFM · {t('music_radio_desc')}</p>
+      </div>
     </div>
   );
 });

@@ -5,6 +5,7 @@ import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'wouter';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'referral' | 'integrations';
 
@@ -57,8 +58,8 @@ function playRadioPreview(sound: string) {
   toast.info('Playing 8-second preview…');
 }
 
-export function Settings() {
   const [, navigate] = useLocation();
+  const { language, setLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
 
   const [wakeUpTime, setWakeUpTime] = useState('');
@@ -182,12 +183,12 @@ export function Settings() {
   }
 
   const TABS = [
-    { id: 'profile' as Tab, label: 'Profile', icon: User },
-    { id: 'memory' as Tab, label: 'Memory', icon: Brain },
-    { id: 'persona' as Tab, label: 'Persona', icon: Wand2 },
-    { id: 'instructions' as Tab, label: 'Instructions', icon: MessageSquare },
-    { id: 'integrations' as Tab, label: 'Integrations', icon: Share2 },
-    { id: 'referral' as Tab, label: 'Referral', icon: Gift },
+    { id: 'profile' as Tab, label: t('settings_tab_profile'), icon: User },
+    { id: 'memory' as Tab, label: t('settings_tab_memory'), icon: Brain },
+    { id: 'persona' as Tab, label: t('settings_tab_persona'), icon: Wand2 },
+    { id: 'instructions' as Tab, label: t('settings_tab_instructions'), icon: MessageSquare },
+    { id: 'integrations' as Tab, label: t('settings_tab_integrations'), icon: Share2 },
+    { id: 'referral' as Tab, label: t('settings_tab_referral'), icon: Gift },
   ];
 
   const PERSONA_STYLES = [
@@ -207,8 +208,8 @@ export function Settings() {
             <ArrowLeft size={16} />
           </button>
           <div className="min-w-0">
-            <h1 className="text-sm sm:text-base font-bold tracking-tight truncate">AI Settings</h1>
-            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Train and personalise your assistant</p>
+            <h1 className="text-sm sm:text-base font-bold tracking-tight truncate">{t('settings_title')}</h1>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t('settings_desc')}</p>
           </div>
         </div>
       </header>
@@ -234,33 +235,54 @@ export function Settings() {
               <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
                 <div className="flex items-center gap-2 mb-1">
                   <User size={14} className="text-primary" />
-                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Personal Profile</h2>
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">{t('settings_profile_title')}</h2>
                 </div>
-                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">Tell your assistant about yourself so it can give better, more personalised responses.</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">{t('settings_profile_desc')}</p>
+                
                 <div className="space-y-1">
-                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Wake-up Time</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_language')}</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => setLanguage('en')}
+                      className={cn('py-2.5 rounded-xl text-xs font-bold transition-all border',
+                        language === 'en' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}
+                    >
+                      English
+                    </button>
+                    <button 
+                      onClick={() => setLanguage('fr')}
+                      className={cn('py-2.5 rounded-xl text-xs font-bold transition-all border',
+                        language === 'fr' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}
+                    >
+                      Français
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_wakeup')}</label>
                   <input type="time" value={wakeUpTime} onChange={e => { setWakeUpTime(e.target.value); setProfileDirty(true); }}
                     className="w-full bg-background border border-border rounded-xl px-4 py-2 sm:py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Daily Routine</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_routine')}</label>
                   <textarea rows={3} value={dailyRoutine} onChange={e => { setDailyRoutine(e.target.value); setProfileDirty(true); }}
-                    placeholder="e.g. I wake up at 6am, work out, then start work at 9am. I take a lunch break at noon..."
+                    placeholder={t('settings_profile_routine_placeholder')}
                     className="w-full bg-background border border-border rounded-xl px-4 py-2 sm:py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Preferences & Interests</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_prefs')}</label>
                   <textarea rows={3} value={preferencesSummary} onChange={e => { setPreferencesSummary(e.target.value); setProfileDirty(true); }}
-                    placeholder="e.g. I love hip-hop, tech, fitness. I prefer concise answers. I'm building a SaaS startup..."
+                    placeholder={t('settings_profile_prefs_placeholder')}
                     className="w-full bg-background border border-border rounded-xl px-4 py-2 sm:py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors resize-none" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Sound</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_alarm')}</label>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <select value={alarmSound} onChange={e => { setAlarmSound(e.target.value); setProfileDirty(true); }}
                       className="flex-1 bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors">
-                      <option value="chime">🔔 Chime (default)</option>
-                      <option value="none">🔇 Silent (voice only)</option>
+                      <option value="chime">🔔 {language === 'en' ? 'Chime (default)' : 'Carillon (défaut)'}</option>
+                      <option value="none">🔇 {language === 'en' ? 'Silent (voice only)' : 'Silencieux (voix seulement)'}</option>
                       <option value="radio-focus">🎵 Radio — Focus (SomaFM)</option>
                       <option value="radio-chill">🎵 Radio — Chill (SomaFM)</option>
                       <option value="radio-energy">🎵 Radio — Energy (SomaFM)</option>
@@ -269,15 +291,15 @@ export function Settings() {
                     </select>
                     <button onClick={handleTestSound}
                       className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-semibold text-primary hover:bg-primary/10 transition-colors shrink-0">
-                      <Volume2 size={14} /> Test Sound
+                      <Volume2 size={14} /> {t('settings_profile_test_sound')}
                     </button>
                   </div>
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">Click Test to preview the selected alarm sound.</p>
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">{language === 'en' ? 'Click Test to preview the selected alarm sound.' : 'Cliquez sur Tester pour prévisualiser le son de l\'alarme sélectionné.'}</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Alarm Days</label>
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_alarm_days')}</label>
                   <div className="grid grid-cols-4 xs:grid-cols-7 gap-1 sm:gap-1.5">
-                    {(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] as const).map((day, idx) => {
+                    {((language === 'en' ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] : ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam']) as const).map((day, idx) => {
                       const active = alarmDays.split(',').map(Number).includes(idx);
                       return (
                         <button key={day} type="button"
@@ -292,9 +314,9 @@ export function Settings() {
                           {day}
                         </button>
                       );
-                    })}
+                   })}
                   </div>
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">Select which days the wake-up alarm fires.</p>
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground">{language === 'en' ? 'Select which days the wake-up alarm fires.' : 'Sélectionnez les jours où l\'alarme de réveil sonne.'}</p>
                 </div>
                 <button disabled={!profileDirty || saveProfileMutation.isPending}
                   onClick={() => saveProfileMutation.mutate({ 
@@ -302,7 +324,7 @@ export function Settings() {
                   } as any)}
                   className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
                     profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
-                  <Save size={14} />{saveProfileMutation.isPending ? 'Saving...' : 'Save Profile'}
+                  <Save size={14} />{saveProfileMutation.isPending ? t('settings_profile_saving') : t('settings_profile_save')}
                 </button>
               </div>
             </motion.div>
@@ -569,7 +591,7 @@ export function Settings() {
 
 /* ── Integrations Panel (fetches live status) ──────────────────────── */
 function IntegrationsPanel() {
-  const [status, setStatus] = React.useState<{ googleCalendar: boolean; spotify: boolean; googleCalendarLabel?: string; spotifyLabel?: string }>({ googleCalendar: false, spotify: false });
+  const [status, setStatus] = React.useState<{ googleCalendar: boolean; googleCalendarLabel?: string }>({ googleCalendar: false });
   const [loading, setLoading] = React.useState(true);
 
   const fetchStatus = async () => {
@@ -587,7 +609,7 @@ function IntegrationsPanel() {
   const disconnect = async (provider: string) => {
     try {
       await fetch(`/api/integrations/${provider}/disconnect`, { method: 'POST', credentials: 'include' });
-      toast.success(`${provider === 'spotify' ? 'Spotify' : 'Google Calendar'} disconnected`);
+      toast.success(`${provider === 'google-calendar' ? 'Google Calendar' : provider} disconnected`);
       fetchStatus();
     } catch {
       toast.error('Failed to disconnect');
@@ -603,39 +625,6 @@ function IntegrationsPanel() {
       <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">Connect your external accounts to allow your assistant to manage your schedule and music.</p>
 
       <div className="space-y-3">
-        {/* Spotify */}
-        <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between p-4 bg-background border border-border rounded-2xl gap-3">
-          <div className="flex items-center gap-3 min-w-0 w-full">
-            <div className="w-10 h-10 rounded-full bg-[#1DB954]/10 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.307c-.216.354-.678.468-1.032.252-2.86-1.748-6.458-2.143-10.697-1.174-.405.093-.812-.162-.905-.567-.093-.405.162-.812.567-.905 4.636-1.06 8.597-.613 11.77 1.332.355.216.469.678.252 1.032zm1.465-3.266c-.272.443-.848.583-1.291.311-3.273-2.012-8.261-2.593-12.13-1.418-.496.15-.1.026-.646-.246-.15-.496.104-.1.026-.646.246 4.316-1.31 9.805-.66 13.513 1.616.443.272.583.848.311 1.291zm.143-3.41c-3.926-2.332-10.4-2.55-14.17-1.405-.603.183-1.242-.163-1.425-.766-.183-.603.163-1.242.766-1.425 4.32-1.313 11.474-1.06 16.002 1.626.541.321.716 1.022.395 1.563-.32.541-1.022.716-1.563.395l-.005.005z"/>
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold">Spotify</p>
-              {status.spotify ? (
-                <p className="text-[10px] text-[#1DB954] uppercase tracking-wider font-semibold truncate">Connected as {status.spotifyLabel ?? 'User'}</p>
-              ) : (
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Music & Playlists</p>
-              )}
-            </div>
-          </div>
-          {status.spotify ? (
-            <button
-              onClick={() => disconnect('spotify')}
-              className="w-full xs:w-auto px-6 py-3 rounded-2xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
-            >
-              Disconnect
-            </button>
-          ) : (
-            <button
-              onClick={() => window.location.href = '/api/integrations/spotify/start'}
-              className="w-full xs:w-auto px-8 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-lg shadow-primary/20"
-            >
-              Connect
-            </button>
-          )}
-        </div>
 
         {/* Google Calendar */}
         <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between p-4 bg-background border border-border rounded-2xl gap-3">
@@ -675,7 +664,7 @@ function IntegrationsPanel() {
       <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
         <AlertCircle size={14} className="text-primary shrink-0 mt-0.5" />
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Flow Guru uses end-to-end encryption for your service tokens. We never store your passwords, and you can revoke access at any time from your Google or Spotify account settings.
+          Flow Guru uses end-to-end encryption for your service tokens. We never store your passwords, and you can revoke access at any time from your Google account settings.
         </p>
       </div>
     </div>

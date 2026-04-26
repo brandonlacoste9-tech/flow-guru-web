@@ -53,6 +53,7 @@ const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
   timeZone: z.string().trim().min(1).max(100).optional(),
   threadId: z.number().int().positive().optional(),
+  language: z.enum(['en', 'fr']).optional(),
 });
 
 const MEMORY_FACT_CATEGORIES = [
@@ -91,7 +92,7 @@ const ASSISTANT_TOOLS: Tool[] = [
     type: "function",
     function: {
       name: "playMusic",
-      description: "Play music for the user based on genre, mood, or playlist name",
+      description: "Play music on the internal radio (Focus, Chill, Energy, Sleep, or Space stations)",
       parameters: {
         type: "object",
         properties: {
@@ -572,7 +573,7 @@ export const appRouter = router({
     }),
   }),
   assistant: router({
-    bootstrap: publicProcedure.query(async ({ ctx }) => {
+    bootstrap: publicProcedure.input(z.object({ language: z.enum(['en', 'fr']).optional() })).query(async ({ ctx, input }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const [profile, memoryFacts, thread, providerConnections] = await Promise.all([
         getUserMemoryProfile(userId),
@@ -601,7 +602,7 @@ export const appRouter = router({
       const weatherPromise = (async () => {
         if (!userLocation) return null;
         try {
-          const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather" });
+          const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather", language: input.language ?? 'en' });
           const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
           if (result.status === "executed" && result.data?.current) {
             const c = result.data.current as any;
@@ -646,15 +647,26 @@ export const appRouter = router({
       let proactiveGreeting: string | null = null;
       if (messages.length === 0) {
         try {
-          const userName = ctx.user?.name?.split(' ')[0] || "there";
+          const userName = ctx.user?.name?.split(' ')[0] || (input.language === 'fr' ? "toi" : "there");
+          const language = input.language ?? 'en';
           const weatherContext = weather ? `${weather.tempC}°C and ${weather.label} in ${weather.locationName}` : "";
-          const eventsContext = todayEvents.length > 0 
-            ? `You have ${todayEvents.length} event${todayEvents.length > 1 ? 's' : ''} today.`
-            : "Your schedule is clear today.";
-
-          const timeGreeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening";
           
-          proactiveGreeting = `${timeGreeting}, ${userName}. ${weatherContext ? `It's currently ${weatherContext}. ` : ''}${eventsContext}`;
+          const timeGreeting = language === 'en' 
+            ? (new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening")
+            : (new Date().getHours() < 12 ? "Bonjour" : new Date().getHours() < 17 ? "Bon après-midi" : "Bonsoir");
+          
+          if (language === 'en') {
+            const eventsContext = todayEvents.length > 0 
+              ? `You have ${todayEvents.length} event${todayEvents.length > 1 ? 's' : ''} today.`
+              : "Your schedule is clear today.";
+            proactiveGreeting = `${timeGreeting}, ${userName}. ${weatherContext ? `It's currently ${weatherContext}. ` : ''}${eventsContext}`;
+          } else {
+            const weatherContextFr = weather ? `${weather.tempC}°C et ${weather.label === 'clear' ? 'ciel dégagé' : weather.label} à ${weather.locationName}` : "";
+            const eventsContextFr = todayEvents.length > 0 
+              ? `Vous avez ${todayEvents.length} événement${todayEvents.length > 1 ? 's' : ''} aujourd'hui.`
+              : "Votre emploi du temps est libre aujourd'hui.";
+            proactiveGreeting = `${timeGreeting}, ${userName}. ${weatherContextFr ? `Il fait actuellement ${weatherContextFr}. ` : ''}${eventsContextFr}`;
+          }
         } catch (e) {
           console.error("[Flow Guru] Failed to generate proactive greeting", e);
         }
@@ -773,6 +785,8 @@ export const appRouter = router({
         "- Use the user's name and saved memory naturally. Reference their habits.",
         "- Sound human: contractions, casual tone, occasional emoji.",
         "",
+        `CRITICAL: You MUST reply in ${input.language === 'fr' ? 'FRENCH' : 'ENGLISH'}. All confirmations and conversational text must be in this language.`,
+        "",
         "THINGS YOU CAN DO (but never mention these to the user):",
         "- Book events on Google Calendar",
         "- List upcoming calendar events",
@@ -792,6 +806,7 @@ export const appRouter = router({
           userName,
           memoryContext,
           message: input.message,
+          language: input.language ?? 'en',
         });
         
         actionResult = await executeAssistantAction(plannedAction, {
