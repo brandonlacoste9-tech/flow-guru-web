@@ -183,6 +183,43 @@
   .leather-glass {
     @apply bg-card backdrop-blur-2xl border border-white/20 shadow-xl;
   }
+
+  /* Premium Hover Glow */
+  .leather-glow {
+    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+  }
+  
+  .leather-glow:hover {
+    box-shadow: 0 0 50px -10px rgba(180, 90, 20, 0.45);
+    border-color: rgba(212, 160, 23, 0.5);
+    transform: translateY(-4px) scale(1.01);
+  }
+
+  .leather-glow::before {
+    content: "";
+    position: absolute;
+    inset: -20px;
+    background: radial-gradient(circle at center, rgba(180, 90, 20, 0.15) 0%, transparent 70%);
+    opacity: 0.4;
+    z-index: -1;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+  }
+
+  .leather-glow:hover::before {
+    opacity: 0.9;
+    background: radial-gradient(circle at center, rgba(180, 90, 20, 0.3) 0%, transparent 75%);
+  }
+
+  .cognac-glow {
+    background: radial-gradient(circle at center, rgba(180, 90, 20, 0.4) 0%, transparent 70%);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(1.05); }
 }
 
 .flex {

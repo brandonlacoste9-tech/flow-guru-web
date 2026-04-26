@@ -14,6 +14,7 @@ import {
   connectSpotify,
   getSpotifyCallbackUrl,
   parseSpotifyOAuthState,
+  SPOTIFY_SCOPES,
 } from "./spotify.js";
 
 type SupportedProvider = "google-calendar" | "spotify";
@@ -40,12 +41,7 @@ function getProviderConfig(provider: SupportedProvider) {
   return {
     configured: Boolean(ENV.spotifyClientId && ENV.spotifyClientSecret),
     label: "Spotify",
-    scopes: [
-      "user-read-playback-state",
-      "user-modify-playback-state",
-      "playlist-read-private",
-      "playlist-read-collaborative",
-    ],
+    scopes: SPOTIFY_SCOPES,
   };
 }
 

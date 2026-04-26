@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ENV } from "./lib/_core/env.js";
 import { sdk } from "./lib/_core/sdk.js";
-import { buildSpotifyOAuthState, getSpotifyCallbackUrl } from "./lib/_core/spotify.js";
+import { buildSpotifyOAuthState, getSpotifyCallbackUrl, SPOTIFY_SCOPES } from "./lib/_core/spotify.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await sdk.authenticateRequest(req as any);
@@ -16,16 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).send("Spotify Client ID not configured");
   }
 
-  const scopes = [
-    "user-read-private",
-    "user-read-email",
-    "user-read-playback-state",
-    "user-modify-playback-state",
-    "user-read-currently-playing",
-    "playlist-read-private",
-    "playlist-read-collaborative",
-    "user-library-read"
-  ].join(" ");
+  const scopes = SPOTIFY_SCOPES.join(" ");
 
   const spotifyUrl = new URL("https://accounts.spotify.com/authorize");
   spotifyUrl.searchParams.set("response_type", "code");
