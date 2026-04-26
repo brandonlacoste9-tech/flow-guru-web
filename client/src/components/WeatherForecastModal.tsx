@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Cloud, Droplets, Wind, Eye, Thermometer } from "lucide-react";
+import { X, Cloud, Droplets, Wind } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DayForecast {
@@ -11,14 +11,14 @@ interface DayForecast {
   weatherCode: number;
   precipitationSum: number;
   windSpeedMax: number;
-  uvIndexMax?: number;
 }
 
 interface WeatherForecastModalProps {
   open: boolean;
   onClose: () => void;
-  lat: number;
-  lon: number;
+  /** Prefer lat+lon if available (browser geolocation). Falls back to locationName geocoding. */
+  lat?: number | null;
+  lon?: number | null;
   locationName: string;
   currentTempC: number;
   currentLabel: string;
@@ -39,8 +39,7 @@ const WMO_ICONS: [number, string][] = [
 const WMO_LABELS_EN: [number, string][] = [
   [0, "Clear sky"], [1, "Mainly clear"], [2, "Partly cloudy"], [3, "Overcast"],
   [45, "Foggy"], [48, "Icy fog"],
-  [51, "Light drizzle"], [53, "Drizzle"], [55, "Heavy drizzle"],
-  [57, "Freezing drizzle"],
+  [51, "Light drizzle"], [53, "Drizzle"], [55, "Heavy drizzle"], [57, "Freezing drizzle"],
   [61, "Light rain"], [63, "Rain"], [65, "Heavy rain"],
   [71, "Light snow"], [73, "Snow"], [75, "Heavy snow"], [77, "Snow grains"],
   [80, "Rain showers"], [81, "Heavy showers"], [82, "Violent showers"],
@@ -51,8 +50,7 @@ const WMO_LABELS_EN: [number, string][] = [
 const WMO_LABELS_FR: [number, string][] = [
   [0, "Ciel dégagé"], [1, "Principalement dégagé"], [2, "Partiellement nuageux"], [3, "Couvert"],
   [45, "Brouillard"], [48, "Brouillard givrant"],
-  [51, "Bruine légère"], [53, "Bruine"], [55, "Bruine dense"],
-  [57, "Bruine verglaçante"],
+  [51, "Bruine légère"], [53, "Bruine"], [55, "Bruine dense"], [57, "Bruine verglaçante"],
   [61, "Pluie légère"], [63, "Pluie"], [65, "Forte pluie"],
   [71, "Neige légère"], [73, "Neige"], [75, "Forte neige"], [77, "Grains de neige"],
   [80, "Averses"], [81, "Fortes averses"], [82, "Averses violentes"],
@@ -78,13 +76,10 @@ function dayLabelFn(dateStr: string, index: number, language: "en" | "fr" = "en"
   if (index === 1) return language === "fr" ? "Demain" : "Tomorrow";
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
+    weekday: "short", month: "short", day: "numeric",
   });
 }
 
-// Simple temp bar showing min/max range
 function TempBar({ min, max, absMin, absMax }: { min: number; max: number; absMin: number; absMax: number }) {
   const range = absMax - absMin || 1;
   const left = ((min - absMin) / range) * 100;
@@ -103,6 +98,19 @@ function TempBar({ min, max, absMin, absMax }: { min: number; max: number; absMi
   );
 }
 
+/** Geocode a location name → {lat, lon} using Open-Meteo's free API */
+async function geocodeName(name: string): Promise<{ lat: number; lon: number } | null> {
+  try {
+    const res = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`
+    );
+    const data = await res.json();
+    const r = data.results?.[0];
+    if (r) return { lat: r.latitude, lon: r.longitude };
+  } catch {}
+  return null;
+}
+
 export function WeatherForecastModal({
   open, onClose, lat, lon, locationName, currentTempC, currentLabel, feelsLikeC,
   language = "en",
@@ -110,13 +118,41 @@ export function WeatherForecastModal({
   const [days, setDays] = useState<14 | 7>(7);
   const [forecast, setForecast] = useState<DayForecast[]>([]);
   const [loading, setLoading] = useState(false);
+  const [resolvedCoords, setResolvedCoords] = useState<{ lat: number; lon: number } | null>(
+    lat != null && lon != null ? { lat, lon } : null
+  );
+  const [geoError, setGeoError] = useState(false);
 
+  // When lat/lon props change (e.g. browser geo comes in later), sync them
+  useEffect(() => {
+    if (lat != null && lon != null) {
+      setResolvedCoords({ lat, lon });
+    }
+  }, [lat, lon]);
+
+  // When modal opens and we still don't have coords, geocode from name
   useEffect(() => {
     if (!open) return;
+    if (resolvedCoords) return;
+    if (!locationName || locationName === "Your location" || locationName === "Votre région") {
+      setGeoError(true);
+      return;
+    }
+    setGeoError(false);
+    geocodeName(locationName).then(c => {
+      if (c) setResolvedCoords(c);
+      else setGeoError(true);
+    });
+  }, [open, locationName, resolvedCoords]);
+
+  // Fetch forecast once we have coords
+  useEffect(() => {
+    if (!open || !resolvedCoords) return;
     setLoading(true);
+    const { lat: la, lon: lo } = resolvedCoords;
     fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-      `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum,wind_speed_10m_max,uv_index_max` +
+      `https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}` +
+      `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum,wind_speed_10m_max` +
       `&timezone=auto&forecast_days=${days}`
     )
       .then(r => r.json())
@@ -130,23 +166,22 @@ export function WeatherForecastModal({
           weatherCode: d.weather_code[i],
           precipitationSum: Math.round(d.precipitation_sum[i] * 10) / 10,
           windSpeedMax: Math.round(d.wind_speed_10m_max[i]),
-          uvIndexMax: d.uv_index_max?.[i] != null ? Math.round(d.uv_index_max[i]) : undefined,
         }));
         setForecast(result);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [open, lat, lon, days, language]);
+  }, [open, resolvedCoords, days, language]);
 
-  const absMin = Math.min(...forecast.map(d => d.tempMin));
-  const absMax = Math.max(...forecast.map(d => d.tempMax));
+  const absMin = forecast.length ? Math.min(...forecast.map(d => d.tempMin)) : 0;
+  const absMax = forecast.length ? Math.max(...forecast.map(d => d.tempMax)) : 0;
 
   const ui = {
     feelsLike: language === "fr" ? "Ressenti" : "Feels like",
     loading: language === "fr" ? "Chargement des prévisions…" : "Loading forecast…",
+    locating: language === "fr" ? "Localisation en cours…" : "Locating…",
+    noCoords: language === "fr" ? "Impossible de localiser cette ville." : "Could not locate this city.",
     poweredBy: language === "fr" ? "Données météo par" : "Powered by",
-    precipitation: language === "fr" ? "Précip." : "Precip.",
-    wind: language === "fr" ? "Vent" : "Wind",
   };
 
   return (
@@ -158,16 +193,11 @@ export function WeatherForecastModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          {/* Backdrop */}
           <motion.div
             className="absolute inset-0 bg-background/80 backdrop-blur-md"
             onClick={onClose}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
           />
 
-          {/* Modal */}
           <motion.div
             className="relative w-full sm:max-w-lg bg-card border border-border rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
             initial={{ opacity: 0, y: 60 }}
@@ -175,10 +205,14 @@ export function WeatherForecastModal({
             exit={{ opacity: 0, y: 60 }}
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
-            {/* Gradient header */}
-            <div className="relative px-6 pt-6 pb-5 overflow-hidden"
-              style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.15), hsl(var(--primary)/0.05))", borderBottom: "1px solid hsl(var(--border))" }}>
-              {/* Decorative blob */}
+            {/* Header */}
+            <div
+              className="relative px-6 pt-6 pb-5 overflow-hidden"
+              style={{
+                background: "linear-gradient(135deg, hsl(var(--primary)/0.15), hsl(var(--primary)/0.05))",
+                borderBottom: "1px solid hsl(var(--border))",
+              }}
+            >
               <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-20 blur-3xl"
                 style={{ background: "hsl(var(--primary))" }} />
 
@@ -197,7 +231,7 @@ export function WeatherForecastModal({
                 </div>
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground relative z-10"
+                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground"
                 >
                   <X size={14} />
                 </button>
@@ -222,14 +256,22 @@ export function WeatherForecastModal({
               </div>
             </div>
 
-            {/* Forecast list */}
+            {/* Body */}
             <div className="overflow-y-auto max-h-[55vh] px-3 py-3 space-y-0.5">
-              {loading ? (
+              {geoError ? (
                 <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}>
-                    <Cloud size={20} className="mr-2 opacity-50" />
-                  </motion.div>
-                  {ui.loading}
+                  {ui.noCoords}
+                </div>
+              ) : loading || !resolvedCoords ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground text-sm gap-2">
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+                    className="inline-block"
+                  >
+                    🌀
+                  </motion.span>
+                  {!resolvedCoords ? ui.locating : ui.loading}
                 </div>
               ) : (
                 forecast.map((day, i) => (
@@ -240,30 +282,19 @@ export function WeatherForecastModal({
                     transition={{ delay: i * 0.03 }}
                     className={cn(
                       "flex items-center gap-2 px-3 py-2.5 rounded-2xl transition-colors",
-                      i === 0
-                        ? "bg-primary/8 border border-primary/20"
-                        : "hover:bg-accent/5"
+                      i === 0 ? "bg-primary/8 border border-primary/20" : "hover:bg-accent/5"
                     )}
                   >
-                    {/* Day label */}
                     <div className="w-20 shrink-0">
                       <p className={cn("text-xs font-semibold", i === 0 ? "text-primary" : "text-foreground")}>
                         {day.dayLabel}
                       </p>
                     </div>
-
-                    {/* Weather icon */}
                     <span className="text-xl w-7 text-center shrink-0">{wmoIcon(day.weatherCode)}</span>
-
-                    {/* Condition label — hidden on xs */}
                     <p className="text-[11px] text-muted-foreground w-24 hidden sm:block truncate">
                       {wmoLabel(day.weatherCode, language)}
                     </p>
-
-                    {/* Temp bar */}
                     <TempBar min={day.tempMin} max={day.tempMax} absMin={absMin} absMax={absMax} />
-
-                    {/* Stats */}
                     <div className="flex items-center gap-2 ml-auto shrink-0">
                       {day.precipitationSum > 0 && (
                         <span className="flex items-center gap-0.5 text-[10px] text-sky-400 font-medium">
