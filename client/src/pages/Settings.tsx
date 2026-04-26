@@ -6,8 +6,9 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'wouter';
 import { useLanguage } from '@/contexts/LanguageContext';
+import PricingCard from '@/components/PricingCard';
 
-type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'referral' | 'integrations';
+type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'referral' | 'integrations' | 'subscription';
 
 const RADIO_URLS: Record<string, string> = {
   'radio-focus': 'https://ice6.somafm.com/groovesalad-128-mp3',
@@ -84,6 +85,15 @@ export function Settings() {
   const [voiceId, setVoiceId] = useState('');
   const [buddyPersonality, setBuddyPersonality] = useState('');
   const [voicePreviewLoading, setVoicePreviewLoading] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<any>(null);
+
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = "robots";
+    meta.content = "noindex";
+    document.head.appendChild(meta);
+    return () => { document.head.removeChild(meta); };
+  }, []);
 
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
 
@@ -110,6 +120,14 @@ export function Settings() {
     setPersonaName(data.personaName ?? '');
     setPersonaStyle(data.personaStyle ?? '');
   }, [personaQuery.data]);
+
+  const subscriptionQuery = trpc.settings.getSubscription.useQuery(undefined);
+
+  useEffect(() => {
+    if (subscriptionQuery.data) {
+      setSubscription(subscriptionQuery.data);
+    }
+  }, [subscriptionQuery.data]);
 
   const voicesQuery = trpc.settings.getVoices.useQuery(undefined, {
     staleTime: Infinity,
@@ -185,6 +203,7 @@ export function Settings() {
 
   const TABS = [
     { id: 'profile' as Tab, label: t('settings_tab_profile'), icon: User },
+    { id: 'subscription' as Tab, label: 'Subscription', icon: Sparkles },
     { id: 'memory' as Tab, label: t('settings_tab_memory'), icon: Brain },
     { id: 'persona' as Tab, label: t('settings_tab_persona'), icon: Wand2 },
     { id: 'instructions' as Tab, label: t('settings_tab_instructions'), icon: MessageSquare },
@@ -328,6 +347,12 @@ export function Settings() {
                   <Save size={14} />{saveProfileMutation.isPending ? t('settings_profile_saving') : t('settings_profile_save')}
                 </button>
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'subscription' && (
+            <motion.div key="subscription" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+              <PricingCard userId={profileQuery.data?.id as any} isPremium={subscription?.status === 'active'} />
             </motion.div>
           )}
 
@@ -592,7 +617,12 @@ export function Settings() {
 
 /* ── Integrations Panel (fetches live status) ──────────────────────── */
 function IntegrationsPanel() {
-  const [status, setStatus] = React.useState<{ googleCalendar: boolean; googleCalendarLabel?: string }>({ googleCalendar: false });
+  const [status, setStatus] = React.useState<{ 
+    googleCalendar: boolean; 
+    googleCalendarLabel?: string;
+    spotify: boolean;
+    spotifyLabel?: string;
+  }>({ googleCalendar: false, spotify: false });
   const [loading, setLoading] = React.useState(true);
 
   const fetchStatus = async () => {
@@ -654,6 +684,40 @@ function IntegrationsPanel() {
           ) : (
             <button
               onClick={() => window.location.href = '/api/integrations/google-calendar/start'}
+              className="w-full xs:w-auto px-8 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-lg shadow-primary/20"
+            >
+              Connect
+            </button>
+          )}
+        </div>
+
+        {/* Spotify */}
+        <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between p-4 bg-background border border-border rounded-2xl gap-3">
+          <div className="flex items-center gap-3 min-w-0 w-full">
+            <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.306c-.215.353-.673.464-1.026.249-2.853-1.743-6.444-2.138-10.672-1.173-.404.092-.81-.157-.902-.561-.092-.404.157-.81.561-.902 4.629-1.059 8.6-0.598 11.79 1.353.353.215.464.673.249 1.026h-.001zm1.464-3.262c-.271.442-.846.582-1.288.311-3.266-2.008-8.243-2.593-12.103-1.42-.499.151-1.03-.131-1.181-.63-.151-.499.131-1.03.63-1.181 4.41-1.338 9.897-.686 13.642 1.619.442.271.582.846.311 1.288l-.001.013zm.126-3.411c-3.918-2.327-10.375-2.542-14.135-1.402-.6.182-1.239-.161-1.421-.761-.182-.6.161-1.239.761-1.421 4.316-1.31 11.439-1.042 15.962 1.644.538.319.717 1.015.398 1.553-.319.538-1.015.717-1.553.398l-.052-.03z"/>
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold">Spotify</p>
+              {status.spotify ? (
+                <p className="text-[10px] text-green-500 uppercase tracking-wider font-semibold truncate">Connected as {status.spotifyLabel ?? 'User'}</p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Music & Playlists</p>
+              )}
+            </div>
+          </div>
+          {status.spotify ? (
+            <button
+              onClick={() => disconnect('spotify')}
+              className="w-full xs:w-auto px-6 py-3 rounded-2xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
+            >
+              Disconnect
+            </button>
+          ) : (
+            <button
+              onClick={() => window.location.href = '/api/integrations/spotify/start'}
               className="w-full xs:w-auto px-8 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-lg shadow-primary/20"
             >
               Connect

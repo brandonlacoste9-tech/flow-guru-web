@@ -15,6 +15,9 @@ const Lists = lazy(() => import("./pages/Lists"));
 const Settings = lazy(() => import("./pages/Settings").then(m => ({ default: m.Settings })));
 const Blog = lazy(() => import("./pages/Blog"));
 const BlogPost = lazy(() => import("./pages/BlogPost"));
+const Pricing = lazy(() => import("./pages/LegalPages").then(m => ({ default: m.PricingPage })));
+const Terms = lazy(() => import("./pages/LegalPages").then(m => ({ default: m.TermsPage })));
+const Privacy = lazy(() => import("./pages/LegalPages").then(m => ({ default: m.PrivacyPage })));
 
 function Router() {
   return (
@@ -24,9 +27,11 @@ function Router() {
         <Route path={"/calendar"} component={Calendar} />
         <Route path={"/lists"} component={Lists} />
         <Route path={"/settings"} component={Settings} />
-        <Route path={"/blog"} component={Blog} />
-        <Route path={"/blog/:slug"} component={BlogPost} />
-        <Route path={"/404"} component={NotFound} />
+        <Route path="/blog" component={Blog} />
+        <Route path="/blog/:slug" component={BlogPost} />
+        <Route path="/pricing" component={Pricing} />
+        <Route path="/terms" component={Terms} />
+        <Route path="/privacy" component={Privacy} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

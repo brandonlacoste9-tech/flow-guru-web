@@ -68,6 +68,22 @@ CREATE TABLE IF NOT EXISTS fg_list_items (
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
+CREATE TABLE IF NOT EXISTS fg_waitlist (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(320) NOT NULL UNIQUE,
+    source VARCHAR(64),
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_subscriptions (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL UNIQUE,
+    "stripeCustomerId" VARCHAR(255) UNIQUE,
+    "stripeSubscriptionId" VARCHAR(255) UNIQUE,
+    status VARCHAR(64) DEFAULT 'inactive' NOT NULL,
+    plan VARCHAR(64) DEFAULT 'free' NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
 CREATE TABLE IF NOT EXISTS fg_messages (
     id SERIAL PRIMARY KEY,
     "threadId" INTEGER NOT NULL,
@@ -149,6 +165,40 @@ ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "voiceId" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "buddyPersonality" TEXT;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "reminderAt" TIMESTAMP;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "locationTrigger" TEXT;
+
+DO $$ 
+BEGIN 
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'fg_provider_type') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'fg_provider_type' AND e.enumlabel = 'spotify') THEN
+            ALTER TYPE fg_provider_type ADD VALUE 'spotify';
+        END IF;
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS fg_waitlist (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(320) NOT NULL UNIQUE,
+    source VARCHAR(64),
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fg_subscriptions (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL UNIQUE,
+    "stripeCustomerId" VARCHAR(255) UNIQUE,
+    "stripeSubscriptionId" VARCHAR(255) UNIQUE,
+    status VARCHAR(64) DEFAULT 'inactive' NOT NULL,
+    plan VARCHAR(64) DEFAULT 'free' NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fg_stripe_events (
+    id SERIAL PRIMARY KEY,
+    event_id TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL,
+    processed_at TIMESTAMP DEFAULT NOW()
+);
 `;
 
 async function ensureSchemaOnce(): Promise<void> {
@@ -776,6 +826,17 @@ export async function updateListItem(userId: number, itemId: number, content: st
   await ensureTables(db);
   await db.update(schema.listItems).set({ content, updatedAt: new Date() })
     .where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
+}
+export async function getSubscription(userId: number): Promise<schema.Subscription | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    await ensureTables(db);
+    const results = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.userId, userId)).limit(1);
+    return results[0] || null;
+  } catch (err) {
+    return null;
+  }
 }
 
 export async function setListItemReminder(userId: number, itemId: number, reminderAt: Date | null): Promise<void> {

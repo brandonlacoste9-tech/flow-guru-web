@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight, Calendar, User, Clock } from 'lucide-react';
 import { Link } from 'wouter';
+import Waitlist from '@/components/Waitlist';
 
 export const BLOG_POSTS = [
   {
@@ -102,14 +103,10 @@ const Blog = () => {
 
       {/* Footer Nudge */}
       <section className="pb-24 px-6 text-center">
-        <div className="max-w-2xl mx-auto p-12 rounded-[3rem] bg-primary/5 border border-primary/20 backdrop-blur-xl">
+        <div className="max-w-2xl mx-auto p-8 sm:p-12 rounded-[3rem] bg-primary/5 border border-primary/20 backdrop-blur-xl">
           <h2 className="text-3xl font-bold mb-4">Experience the future today</h2>
           <p className="text-muted-foreground mb-8">Join the thousands of users orchestrating their lives with Flow Guru.</p>
-          <Link href="/">
-            <button className="px-8 py-4 bg-primary text-primary-foreground rounded-full font-bold hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/25">
-              Launch App
-            </button>
-          </Link>
+          <Waitlist />
         </div>
       </section>
     </div>

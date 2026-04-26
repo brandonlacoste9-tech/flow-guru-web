@@ -63,6 +63,35 @@ async function requireUser(req: Request, res: Response) {
 }
 
 export function registerProviderConnectionRoutes(app: Express) {
+  app.get("/api/integrations/status", async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req);
+      if (!user) {
+        return res.json({
+          googleCalendar: false,
+          spotify: false,
+        });
+      }
+
+      const [gcal, spotify] = await Promise.all([
+        getProviderConnection(user.id, "google-calendar"),
+        getProviderConnection(user.id, "spotify"),
+      ]);
+
+      res.json({
+        googleCalendar: gcal?.status === "connected",
+        googleCalendarLabel: gcal?.externalAccountLabel,
+        spotify: spotify?.status === "connected",
+        spotifyLabel: spotify?.externalAccountLabel,
+      });
+    } catch {
+      res.json({
+        googleCalendar: false,
+        spotify: false,
+      });
+    }
+  });
+
   app.get("/api/integrations/:provider/status", async (req, res) => {
     const providerParam = req.params.provider;
     if (!isSupportedProvider(providerParam)) {

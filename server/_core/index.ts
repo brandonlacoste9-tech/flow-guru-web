@@ -12,6 +12,8 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerProviderConnectionRoutes } from "./providerConnections";
 import { registerStorageProxy } from "./storageProxy";
 import { registerElevenLabsRoutes } from "./elevenLabs";
+import { registerStripeRoutes } from "./stripe";
+import { registerWaitlistRoutes } from "./waitlist";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 // Removed static import of vite/dev-tools to prevent Vercel 500 errors
@@ -48,11 +50,7 @@ export async function createMainApp() {
   app.use("/api/trpc", trpcMiddleware);
   app.use("/trpc", trpcMiddleware);
 
-  // 2. Body parsers
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  
-  // 3. Health & Logging
+  // 2. Health & Logging
   app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
   app.use((req, res, next) => {
     if (req.url.includes("/api/trpc")) {
@@ -61,8 +59,18 @@ export async function createMainApp() {
     next();
   });
 
-  // 4. Integrations
+  // 3. Webhook (Must be registered BEFORE global body parsers for raw body access)
+  registerStripeRoutes(app);
+
+  // 4. Body parsers
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  
+  // 5. Integrations
   registerElevenLabsRoutes(app);
+  registerWaitlistRoutes(app);
+  registerOAuthRoutes(app);
+  registerProviderConnectionRoutes(app);
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
@@ -75,8 +83,6 @@ export async function createMainApp() {
     const distPath = path.resolve(process.cwd(), "dist", "public");
     app.use(express.static(distPath));
     registerStorageProxy(app);
-    registerOAuthRoutes(app);
-    registerProviderConnectionRoutes(app);
     
     app.use("*", (req, res) => {
       const indexPath = path.resolve(distPath, "index.html");

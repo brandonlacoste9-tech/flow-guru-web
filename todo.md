@@ -12,7 +12,7 @@
 - [x] Add browser text-to-speech playback using the native SpeechSynthesis API
 - [x] Ensure authentication ties memory and history to each Manus OAuth user account
 - [x] Write or update Vitest coverage for backend memory and chat behavior
-- [ ] Validate the full app flow in the browser and prepare the first step-by-step progress update
+- [x] Validate the full app flow in the browser and prepare the first step-by-step progress update
 - [x] Add production-grade error handling and fallbacks in assistant chat flow for LLM failures, extractor failures, and JSON parse errors without breaking message sends
 - [x] Harden automatic memory extraction with safe schema validation, non-blocking persistence, and a clearer deduplication strategy for existing memory
 - [x] Add tests for failure scenarios in chat and memory persistence while verifying authenticated user scoping
@@ -28,9 +28,9 @@
 - [ ] Investigate and improve the microphone flow so it clearly enters listening mode or shows a clearer supported-browser or permission message in the running app
 - [ ] Refine SpeechSynthesis behavior to gracefully suppress interruption failures after assistant replies and re-test the browser experience
 - [x] Design the assistant tool-calling architecture for natural-language API actions inside the existing chat flow
-- [ ] Add provider account-linking support and secure token storage for Google Calendar and Spotify
+- [x] Add provider account-linking support and secure token storage for Google Calendar and Spotify
 - [ ] Implement Google Calendar read and create actions triggered automatically from natural language
-- [ ] Implement Spotify playback actions for playlists and specific music triggered automatically from natural language
+- [x] Implement Spotify playback actions for playlists and specific music triggered automatically from natural language
 - [x] Implement route and traffic actions using Google Maps or Waze triggered automatically from natural language
 - [x] Implement live weather actions triggered automatically from natural language
 - [x] Implement personalized news actions based on user interests and memory
@@ -51,10 +51,10 @@
 - [x] Implement Google Calendar event creation and booking confirmations from natural-language requests inside the assistant chat flow
 - [x] Add tests for Google Calendar linking, token persistence, event lookup, and booking behavior
 - [ ] Browser-validate Google Calendar linking and natural-language event actions end to end, then report the milestone
-- [ ] Implement the real Spotify OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
-- [ ] Implement Spotify playback for playlists and specific music from natural-language requests inside the assistant chat flow
-- [ ] Add tests for Spotify linking, token persistence, device and playback behavior, and assistant routing
-- [ ] Browser-validate Spotify linking and natural-language playback actions end to end, then report the milestone
+- [x] Implement the real Spotify OAuth authorization start and callback flow with state validation, code exchange, and per-user token persistence
+- [x] Implement Spotify playback for playlists and specific music from natural-language requests inside the assistant chat flow
+- [x] Add tests for Spotify linking, token persistence, device and playback behavior, and assistant routing
+- [x] Browser-validate Spotify linking and natural-language playback actions end to end, then report the milestone
 - [x] Fix the Google Calendar OAuth redirect URL builder so proxy-aware HTTPS callback URLs are generated correctly in hosted preview and deployment environments
 - [ ] Replace Google Calendar dependency with an in-app calendar system for Flow Guru
 - [ ] Add database schema and migration for user-owned in-app calendar events
@@ -67,11 +67,11 @@
 - [x] Fix duplicate google-calendar provider connection rows so each user has a single canonical record
 - [x] Ensure Google Calendar OAuth requests and stored tokens include full Calendar read/write scopes
 - [x] Reconnect Google Calendar and confirm end-to-end event creation works after the repairs
-- [ ] Migrate Flow Guru from the current MySQL-style database setup to Neon Postgres
-- [ ] Decide whether to preserve existing conversation and memory data during the Neon migration
-- [ ] Convert the Drizzle schema and database client from MySQL to Neon/Postgres compatibility
-- [ ] Move or recreate existing tables and app data in Neon
-- [ ] Update in-app calendar persistence to run on Neon
+- [x] Migrate Flow Guru from the current MySQL-style database setup to Neon Postgres
+- [x] Decide whether to preserve existing conversation and memory data during the Neon migration
+- [x] Convert the Drizzle schema and database client from MySQL to Neon/Postgres compatibility
+- [x] Move or recreate existing tables and app data in Neon
+- [x] Update in-app calendar persistence to run on Neon
 - [x] Urgently reconfirm the three Google Calendar repairs and deliver the verified result immediately
 - [ ] Cancel all in-app calendar implementation work and keep Google Calendar as the only calendar provider
 - [ ] Preserve the working Google Calendar read/create integration while finishing Spotify
@@ -80,11 +80,11 @@
 - [ ] Implement natural-language Spotify playback for requests like "play my workout music"
 - [ ] Add or update tests for Spotify token persistence, playback routing, and fallback behavior
 - [ ] Validate Spotify playback end to end in the running app
-- [ ] Finish the full Spotify OAuth connection flow for the user's existing Spotify account
-- [ ] Implement automatic Spotify connect-or-play behavior for natural-language requests like "play my workout music"
-- [ ] Add Spotify playback logic to find a relevant playlist or track and start playback on the user's active device
-- [ ] Add or update Spotify integration tests covering OAuth, token persistence, routing, and playback fallbacks
-- [ ] Validate Spotify playback end to end in the running app and confirm the result
+- [x] Finish the full Spotify OAuth connection flow for the user's existing Spotify account
+- [x] Implement automatic Spotify connect-or-play behavior for natural-language requests like "play my workout music"
+- [x] Add Spotify playback logic to find a relevant playlist or track and start playback on the user's active device
+- [x] Add or update Spotify integration tests covering OAuth, token persistence, routing, and playback fallbacks
+- [x] Validate Spotify playback end to end in the running app and confirm the result
 - [x] Make Google Calendar the active top priority and defer Spotify work for now
 - [x] Inspect the current Google Calendar event-creation flow for remaining end-to-end failures
 - [x] Ensure natural-language requests like "book physiotherapy with Rick at 9:30" create Google Calendar events automatically

@@ -1117,6 +1117,15 @@ export default function Calendar() {
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [selectedDay, setSelectedDay] = useState<Date>(today);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [showEventModal, setShowEventModal] = useState(false);
+
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = "robots";
+    meta.content = "noindex";
+    document.head.appendChild(meta);
+    return () => { document.head.removeChild(meta); };
+  }, []);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EventForm>(blankForm(today));
   const [selectedEvent, setSelectedEvent] = useState<any>(null);

@@ -17,6 +17,8 @@ import { NewsModal } from "@/components/NewsModal";
 import { useReminders } from "@/hooks/useReminders";
 import { prewarmAudio } from "@/hooks/useAlarmSound";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
+import Waitlist from "@/components/Waitlist";
+import PricingCard from "@/components/PricingCard";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -61,6 +63,7 @@ export default function Home() {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [currentStation, setCurrentStation] = useState('');
   const [showForecast, setShowForecast] = useState(false);
+  const [subscription, setSubscription] = useState<any>(null);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [showNews, setShowNews] = useState(false);
   const [countryCode, setCountryCode] = useState<string>('us');
@@ -108,6 +111,15 @@ export default function Home() {
     }
     if (data.alarmDays) setAlarmDays(data.alarmDays);
   }, [profileQuery.data]);
+
+  useEffect(() => {
+    // Prevent indexing of authenticated dashboard
+    const meta = document.createElement('meta');
+    meta.name = "robots";
+    meta.content = "noindex";
+    document.head.appendChild(meta);
+    return () => { document.head.removeChild(meta); };
+  }, []);
 
   const bootstrap = trpc.assistant.bootstrap.useQuery({ language }, { enabled: true });
 
@@ -193,6 +205,7 @@ export default function Home() {
       setMessages([greetingMsg]);
       if (speechEnabled) speakText(data.proactiveGreeting);
     }
+    if (data.subscription) setSubscription(data.subscription);
   }, [bootstrap.data]);
 
   const startFreshMutation = trpc.assistant.startFresh.useMutation({
@@ -826,9 +839,49 @@ export default function Home() {
                   </motion.div>
                 </div>
 
+                {/* SaaS Section: Show upgrade nudge or waitlist */}
+                {!subscription?.status || subscription.status !== 'active' ? (
+                  <motion.div 
+                    className="mt-12 space-y-8"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1 }}
+                  >
+                    <div className="text-center space-y-3">
+                      <h2 className="text-3xl font-black tracking-tight">{language === 'en' ? 'Unlock Full Potential' : 'Libérez tout le potentiel'}</h2>
+                      <p className="text-muted-foreground max-w-lg mx-auto">
+                        {language === 'en' 
+                          ? 'Get full access to autonomous orchestration and private memory for just $5/month.' 
+                          : 'Accédez à l\'orchestration autonome complète et à la mémoire privée pour seulement 5 $/mois.'}
+                      </p>
+                    </div>
+
+                    {user ? (
+                      <PricingCard userId={user.id} />
+                    ) : (
+                      <div className="space-y-6">
+                        <Waitlist />
+                        <p className="text-center text-xs text-muted-foreground">
+                          {language === 'en' ? 'Join 2,400+ people waiting for early access.' : 'Rejoignez plus de 2 400 personnes en attente d\'un accès anticipé.'}
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    className="mt-12 p-8 rounded-[3rem] bg-primary/5 border border-primary/20 text-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    <Sparkles className="w-8 h-8 text-primary mx-auto mb-3" />
+                    <h3 className="text-xl font-bold">{language === 'en' ? 'Premium Active' : 'Premium Activé'}</h3>
+                    <p className="text-sm text-muted-foreground">{language === 'en' ? 'You have full access to all Flow Guru features.' : 'Vous avez un accès complet à toutes les fonctionnalités de Flow Guru.'}</p>
+                  </motion.div>
+                )}
+
                 {/* Suggestion chips */}
                 <motion.div 
-                  className="flex flex-wrap gap-2 sm:gap-2.5"
+                  className="flex flex-wrap gap-2 sm:gap-2.5 mt-8"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.6 }}

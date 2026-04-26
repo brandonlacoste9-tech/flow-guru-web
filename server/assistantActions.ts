@@ -297,6 +297,10 @@ export async function planAssistantAction(params: {
           "For weather.get, populate the weather field:",
           '{ "action": "weather.get", "rationale": "...", "weather": { "location": "...", "timeframe": "current" }, ... }',
           "",
+          "For music.play, populate the music field:",
+          '{ "action": "music.play", "rationale": "...", "music": { "query": "jazz", "targetType": "track" }, ... }',
+          "targetType can be: playlist, artist, album, track, liked",
+          "",
           "ONLY respond with the JSON object. No other text.",
         ].join("\n"),
       },
@@ -1077,11 +1081,15 @@ async function executeMusicAction(
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Spotify failed.";
+    const status = msg.includes("not connected") ? "needs_connection" : "failed";
+    
     return {
       action: "music.play",
-      status: "failed",
-      title: "Spotify snag",
-      summary: msg,
+      status,
+      title: status === "needs_connection" ? "Spotify Connection Required" : "Spotify snag",
+      summary: status === "needs_connection" 
+        ? "You haven't linked your Spotify account yet. Please connect it in the Integrations settings to enable voice-controlled music."
+        : msg,
       provider: "spotify",
     };
   }

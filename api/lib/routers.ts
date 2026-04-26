@@ -44,6 +44,7 @@ import {
   deleteUserMemoryFact,
   updateUserPersona,
   upsertPushSubscription,
+  getSubscription,
 } from "./db.js";
 import { generateBriefing, generateQuickSound } from "./_core/briefing.js";
 import { textToSpeech, getVoices } from "./_core/elevenLabs.js";
@@ -575,11 +576,12 @@ export const appRouter = router({
   assistant: router({
     bootstrap: publicProcedure.input(z.object({ language: z.enum(['en', 'fr']).optional() })).query(async ({ ctx, input }) => {
       const userId = await resolveAssistantUserId(ctx.user);
-      const [profile, memoryFacts, thread, providerConnections] = await Promise.all([
+      const [profile, memoryFacts, thread, providerConnections, subscription] = await Promise.all([
         getUserMemoryProfile(userId),
         listUserMemoryFacts(userId),
         findLatestConversationThread(userId),
         listProviderConnections(userId),
+        getSubscription(userId),
       ]);
       const safeThread = thread && thread.userId === userId ? thread : null;
       const messages = safeThread ? await listConversationMessages(safeThread.id) : [];
@@ -690,6 +692,7 @@ export const appRouter = router({
         weather,
         todayEvents,
         proactiveGreeting,
+        subscription,
       };
     }),
     startFresh: publicProcedure.mutation(async ({ ctx }) => {
@@ -1256,6 +1259,10 @@ export const appRouter = router({
         await setListItemReminder(userId, input.itemId, input.reminderAt ? new Date(input.reminderAt) : null);
         return { success: true };
       }),
+    getSubscription: publicProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      return await getSubscription(userId);
+    }),
   }),
 });
 

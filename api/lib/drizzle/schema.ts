@@ -4,7 +4,7 @@ import { pgTable, serial, text, varchar, timestamp, pgEnum, integer, index, bigi
 export const roleEnum = pgEnum("fg_role", ["user", "admin"]);
 export const memoryCategoryEnum = pgEnum("fg_memory_category", ["wake_up_time", "daily_routine", "preference", "recurring_event", "general"]);
 export const roleMessageEnum = pgEnum("fg_message_role", ["system", "user", "assistant"]);
-export const providerTypeEnum = pgEnum("fg_provider_type", ["google-calendar"]);
+export const providerTypeEnum = pgEnum("fg_provider_type", ["google-calendar", "spotify"]);
 export const connectionStatusEnum = pgEnum("fg_connection_status", ["not_connected", "pending", "connected", "error"]);
 
 export const users = pgTable("fg_users", {
@@ -172,3 +172,32 @@ export const localEvents = pgTable(
 
 export type LocalEvent = typeof localEvents.$inferSelect;
 export type InsertLocalEvent = typeof localEvents.$inferInsert;
+
+export const waitlist = pgTable("fg_waitlist", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  source: varchar("source", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const subscriptions = pgTable("fg_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }).unique(),
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }).unique(),
+  status: varchar("status", { length: 64 }).notNull().default("inactive"),
+  plan: varchar("plan", { length: 64 }).notNull().default("free"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export const stripeEvents = pgTable("fg_stripe_events", {
+  id: serial("id").primaryKey(),
+  eventId: text("event_id").notNull().unique(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at").defaultNow(),
+});
+
+export type Waitlist = typeof waitlist.$inferSelect;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type StripeEvent = typeof stripeEvents.$inferSelect;

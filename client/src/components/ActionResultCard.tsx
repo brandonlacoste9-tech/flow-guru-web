@@ -65,12 +65,30 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
       </p>
     );
   } else if (result.action === "music.play") {
-    const audioDataUri = (data as { audioDataUri?: string }).audioDataUri;
-    const query = (data as { query?: string }).query;
-    if (audioDataUri) {
+    const item = (data as any).item;
+    const externalUrl = (data as any).externalUrl;
+    const audioDataUri = (data as any).audioDataUri;
+    
+    if (item) {
+      body = (
+        <div className="flex items-center gap-3 mt-1">
+          {item.album?.images?.[0]?.url && (
+            <img src={item.album.images[0].url} alt={item.name} className="w-12 h-12 rounded-lg shadow-md object-cover" />
+          )}
+          <div className="min-w-0">
+            <p className="text-foreground text-sm font-bold truncate">{item.name}</p>
+            <p className="text-muted-foreground text-[11px] truncate">{item.artists?.[0]?.name || 'Unknown Artist'}</p>
+            {externalUrl && (
+              <a href={externalUrl} target="_blank" rel="noopener noreferrer" className="text-primary text-[10px] font-bold uppercase tracking-wider mt-1 inline-block hover:underline">
+                Open in Spotify
+              </a>
+            )}
+          </div>
+        </div>
+      );
+    } else if (audioDataUri) {
       body = (
         <div>
-          {query && <p className="text-muted-foreground text-sm mb-2">{query}</p>}
           <AudioPlayer audioDataUri={audioDataUri} />
         </div>
       );

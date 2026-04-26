@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 const ROUTES = [
   '/', 
   '/blog',
+  '/pricing',
+  '/terms',
+  '/privacy',
   '/blog/why-privacy-matters-in-the-age-of-ai',
   '/blog/orchestrating-your-life-with-autonomous-companions'
 ];

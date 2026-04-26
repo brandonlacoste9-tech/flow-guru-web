@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useRoute, Link } from 'wouter';
 import { ArrowLeft, Calendar, User, Clock, Share2 } from 'lucide-react';
 import { BLOG_POSTS } from './Blog';
+import Waitlist from '@/components/Waitlist';
 
 const BlogPost = () => {
   const [match, params] = useRoute('/blog/:slug');
@@ -133,6 +134,19 @@ const BlogPost = () => {
             <p>
               The future of AI is not just about intelligence; it's about trust. As we continue to build Flow Guru, we remain committed to transparency and user sovereignty. Thank you for being part of this journey toward a more private, more autonomous digital life.
             </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="mt-16 pt-16 border-t border-border/50"
+          >
+            <div className="bg-primary/5 border border-primary/20 rounded-[3rem] p-8 sm:p-12 text-center">
+              <h3 className="text-2xl font-bold mb-4">Start your private AI journey</h3>
+              <p className="text-muted-foreground mb-8">Join the thousands of users orchestrating their lives with Flow Guru.</p>
+              <Waitlist />
+            </div>
           </motion.div>
         </div>
       </article>

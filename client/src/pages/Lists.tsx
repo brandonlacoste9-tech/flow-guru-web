@@ -10,6 +10,15 @@ import { useLanguage } from '@/contexts/LanguageContext';
 export default function Lists() {
   const [, navigate] = useLocation();
   const { t } = useLanguage();
+
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = "robots";
+    meta.content = "noindex";
+    document.head.appendChild(meta);
+    return () => { document.head.removeChild(meta); };
+  }, []);
+
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
   const [newListName, setNewListName] = useState('');
   const [newItemContent, setNewItemContent] = useState('');
