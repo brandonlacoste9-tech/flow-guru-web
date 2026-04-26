@@ -108,3 +108,29 @@ Node `>=20`. pnpm 10.4.1. License MIT. Tests cover assistant router, assistant a
 ## 9. Conclusion
 
 TypeScript across the stack, tRPC for type-safe APIs, Drizzle ORM (MySQL) for the data layer, and a dedicated AI assistant orchestration layer combine to form a responsive personal-assistant platform. OAuth-based third-party integrations (Google Calendar, Spotify) extend its reach.
+
+## 10. Schema Reality (Important)
+
+The repository contains **three distinct schema definitions**. Be aware of which one is actually used by the production runtime.
+
+| Path | Engine | Status |
+| :-- | :-- | :-- |
+| `drizzle/schema.ts` | MySQL (`drizzle-orm/mysql-core`) | **Stale / unused at runtime.** Likely scaffolding from an early iteration. |
+| `api/lib/drizzle/schema.ts` | **Postgres** (`drizzle-orm/pg-core`, tables prefixed `fg_`) | **Production schema.** Imported by `api/lib/db.ts`. |
+| `supabase/schema.sql` | Postgres on Supabase (`auth.users`, `jsonb`, `uuid`) | Independent Supabase project, snake_case tables (`profiles`, `user_memory`, `conversations`, `provider_connections`). Not consumed by `api/lib/db.ts`. |
+
+The production DB layer in `api/lib/db.ts` uses `drizzle-orm/postgres-js` against Neon Postgres and self-heals via idempotent `CREATE TABLE IF NOT EXISTS fg_users` DDL.
+
+The production schema in `api/lib/drizzle/schema.ts` includes fields beyond the seven tables shown above:
+
+- `passwordHash`, `promoCode`, `resetToken`, `resetTokenExpiresAt`
+- Referrals: `referralCode`, `referredBy`, `credits`
+- Assistant persona: `personaName`, `personaStyle`
+- Enums: `fg_role`, `fg_memory_category`, `fg_message_role`, `fg_provider_type`, `fg_connection_status`
+
+### Recommended cleanup
+
+1. Delete `drizzle/schema.ts` (MySQL stub) and the duplicate root-level migration SQL files; keep `api/lib/drizzle/` as the single source of truth.
+2. Update `db:push` in `package.json` to point drizzle-kit at `api/lib/drizzle/` only.
+3. Decide the role of `supabase/`. If unused, archive or delete. If used for a specific feature, document it explicitly.
+4. Update Section 6 of this document once cleanup lands so the table list reflects `fg_`-prefixed Postgres tables.
