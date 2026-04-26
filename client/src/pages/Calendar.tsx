@@ -1122,6 +1122,7 @@ export default function Calendar() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const { t, language } = useLanguage();
   const { theme, themeId, applyTheme } = useCalendarTheme();
 
   const queryStart = useMemo(() => {
