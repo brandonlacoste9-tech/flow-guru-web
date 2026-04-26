@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Cloud, Droplets, Wind, Thermometer } from "lucide-react";
+import { X, Cloud, Droplets, Wind, Eye, Thermometer } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DayForecast {
@@ -11,6 +11,7 @@ interface DayForecast {
   weatherCode: number;
   precipitationSum: number;
   windSpeedMax: number;
+  uvIndexMax?: number;
 }
 
 interface WeatherForecastModalProps {
@@ -22,44 +23,89 @@ interface WeatherForecastModalProps {
   currentTempC: number;
   currentLabel: string;
   feelsLikeC: number;
+  language?: "en" | "fr";
 }
 
 const WMO_ICONS: [number, string][] = [
-  [0, "☀️"], [1, "🌤️"], [3, "☁️"], [45, "🌫️"], [48, "🌫️"],
-  [51, "🌦️"], [57, "🌧️"], [61, "🌧️"], [65, "🌧️"], [71, "🌨️"],
-  [77, "❄️"], [80, "🌦️"], [82, "⛈️"], [85, "🌨️"], [86, "❄️"],
+  [0, "☀️"], [1, "🌤️"], [2, "⛅"], [3, "☁️"], [45, "🌫️"], [48, "🌫️"],
+  [51, "🌦️"], [53, "🌦️"], [55, "🌧️"], [57, "🌧️"],
+  [61, "🌧️"], [63, "🌧️"], [65, "🌧️"],
+  [71, "🌨️"], [73, "🌨️"], [75, "❄️"], [77, "❄️"],
+  [80, "🌦️"], [81, "🌧️"], [82, "⛈️"],
+  [85, "🌨️"], [86, "❄️"],
   [95, "⛈️"], [99, "⛈️"],
 ];
 
-const WMO_LABELS: [number, string][] = [
+const WMO_LABELS_EN: [number, string][] = [
   [0, "Clear sky"], [1, "Mainly clear"], [2, "Partly cloudy"], [3, "Overcast"],
-  [45, "Foggy"], [48, "Icy fog"], [51, "Light drizzle"], [53, "Drizzle"],
-  [55, "Heavy drizzle"], [57, "Freezing drizzle"], [61, "Light rain"],
-  [63, "Rain"], [65, "Heavy rain"], [71, "Light snow"], [73, "Snow"],
-  [75, "Heavy snow"], [77, "Snow grains"], [80, "Rain showers"],
-  [81, "Heavy showers"], [82, "Violent showers"], [85, "Snow showers"],
-  [86, "Heavy snow showers"], [95, "Thunderstorm"], [99, "Thunderstorm w/ hail"],
+  [45, "Foggy"], [48, "Icy fog"],
+  [51, "Light drizzle"], [53, "Drizzle"], [55, "Heavy drizzle"],
+  [57, "Freezing drizzle"],
+  [61, "Light rain"], [63, "Rain"], [65, "Heavy rain"],
+  [71, "Light snow"], [73, "Snow"], [75, "Heavy snow"], [77, "Snow grains"],
+  [80, "Rain showers"], [81, "Heavy showers"], [82, "Violent showers"],
+  [85, "Snow showers"], [86, "Heavy snow showers"],
+  [95, "Thunderstorm"], [99, "Thunderstorm w/ hail"],
+];
+
+const WMO_LABELS_FR: [number, string][] = [
+  [0, "Ciel dégagé"], [1, "Principalement dégagé"], [2, "Partiellement nuageux"], [3, "Couvert"],
+  [45, "Brouillard"], [48, "Brouillard givrant"],
+  [51, "Bruine légère"], [53, "Bruine"], [55, "Bruine dense"],
+  [57, "Bruine verglaçante"],
+  [61, "Pluie légère"], [63, "Pluie"], [65, "Forte pluie"],
+  [71, "Neige légère"], [73, "Neige"], [75, "Forte neige"], [77, "Grains de neige"],
+  [80, "Averses"], [81, "Fortes averses"], [82, "Averses violentes"],
+  [85, "Averses de neige"], [86, "Fortes averses de neige"],
+  [95, "Orage"], [99, "Orage avec grêle"],
 ];
 
 function wmoIcon(code: number): string {
   return [...WMO_ICONS].reverse().find(([max]) => code >= max)?.[1] ?? "🌡️";
 }
 
-function wmoLabel(code: number): string {
-  return WMO_LABELS.find(([c]) => c === code)?.[1]
-    ?? [...WMO_LABELS].reverse().find(([max]) => code >= max)?.[1]
-    ?? "Unknown";
+function wmoLabel(code: number, language: "en" | "fr" = "en"): string {
+  const labels = language === "fr" ? WMO_LABELS_FR : WMO_LABELS_EN;
+  return (
+    labels.find(([c]) => c === code)?.[1] ??
+    [...labels].reverse().find(([max]) => code >= max)?.[1] ??
+    (language === "fr" ? "Inconnu" : "Unknown")
+  );
 }
 
-function dayLabel(dateStr: string, index: number): string {
-  if (index === 0) return "Today";
-  if (index === 1) return "Tomorrow";
+function dayLabelFn(dateStr: string, index: number, language: "en" | "fr" = "en"): string {
+  if (index === 0) return language === "fr" ? "Aujourd'hui" : "Today";
+  if (index === 1) return language === "fr" ? "Demain" : "Tomorrow";
   const d = new Date(dateStr + "T12:00:00");
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return d.toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// Simple temp bar showing min/max range
+function TempBar({ min, max, absMin, absMax }: { min: number; max: number; absMin: number; absMax: number }) {
+  const range = absMax - absMin || 1;
+  const left = ((min - absMin) / range) * 100;
+  const width = ((max - min) / range) * 100;
+  return (
+    <div className="flex-1 h-1.5 rounded-full bg-white/10 relative mx-2 hidden sm:block">
+      <div
+        className="absolute h-full rounded-full"
+        style={{
+          left: `${left}%`,
+          width: `${Math.max(width, 8)}%`,
+          background: "linear-gradient(90deg, #60a5fa, #f97316)",
+        }}
+      />
+    </div>
+  );
 }
 
 export function WeatherForecastModal({
   open, onClose, lat, lon, locationName, currentTempC, currentLabel, feelsLikeC,
+  language = "en",
 }: WeatherForecastModalProps) {
   const [days, setDays] = useState<14 | 7>(7);
   const [forecast, setForecast] = useState<DayForecast[]>([]);
@@ -70,7 +116,7 @@ export function WeatherForecastModal({
     setLoading(true);
     fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-      `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum,wind_speed_10m_max` +
+      `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum,wind_speed_10m_max,uv_index_max` +
       `&timezone=auto&forecast_days=${days}`
     )
       .then(r => r.json())
@@ -78,24 +124,36 @@ export function WeatherForecastModal({
         const d = data.daily;
         const result: DayForecast[] = d.time.map((date: string, i: number) => ({
           date,
-          dayLabel: dayLabel(date, i),
+          dayLabel: dayLabelFn(date, i, language),
           tempMax: Math.round(d.temperature_2m_max[i]),
           tempMin: Math.round(d.temperature_2m_min[i]),
           weatherCode: d.weather_code[i],
           precipitationSum: Math.round(d.precipitation_sum[i] * 10) / 10,
           windSpeedMax: Math.round(d.wind_speed_10m_max[i]),
+          uvIndexMax: d.uv_index_max?.[i] != null ? Math.round(d.uv_index_max[i]) : undefined,
         }));
         setForecast(result);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [open, lat, lon, days]);
+  }, [open, lat, lon, days, language]);
+
+  const absMin = Math.min(...forecast.map(d => d.tempMin));
+  const absMax = Math.max(...forecast.map(d => d.tempMax));
+
+  const ui = {
+    feelsLike: language === "fr" ? "Ressenti" : "Feels like",
+    loading: language === "fr" ? "Chargement des prévisions…" : "Loading forecast…",
+    poweredBy: language === "fr" ? "Données météo par" : "Powered by",
+    precipitation: language === "fr" ? "Précip." : "Precip.",
+    wind: language === "fr" ? "Vent" : "Wind",
+  };
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -111,30 +169,35 @@ export function WeatherForecastModal({
 
           {/* Modal */}
           <motion.div
-            className="relative w-full max-w-lg bg-card border border-border rounded-3xl shadow-2xl overflow-hidden"
-            initial={{ opacity: 0, y: 40, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.97 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="relative w-full sm:max-w-lg bg-card border border-border rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
+            initial={{ opacity: 0, y: 60 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 60 }}
+            transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
-            {/* Header */}
-            <div className="px-6 pt-6 pb-4 border-b border-border">
-              <div className="flex items-start justify-between">
+            {/* Gradient header */}
+            <div className="relative px-6 pt-6 pb-5 overflow-hidden"
+              style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.15), hsl(var(--primary)/0.05))", borderBottom: "1px solid hsl(var(--border))" }}>
+              {/* Decorative blob */}
+              <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-20 blur-3xl"
+                style={{ background: "hsl(var(--primary))" }} />
+
+              <div className="flex items-start justify-between relative z-10">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">
-                    <Cloud className="inline w-3 h-3 mr-1" />{locationName}
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
+                    <Cloud className="inline w-3 h-3" /> {locationName}
                   </p>
                   <div className="flex items-baseline gap-3">
                     <span className="text-5xl font-bold tracking-tight">{currentTempC}°</span>
                     <div>
-                      <p className="text-sm font-semibold capitalize text-foreground">{currentLabel}</p>
-                      <p className="text-xs text-muted-foreground">Feels like {feelsLikeC}°</p>
+                      <p className="text-sm font-semibold capitalize">{currentLabel}</p>
+                      <p className="text-xs text-muted-foreground">{ui.feelsLike} {feelsLikeC}°</p>
                     </div>
                   </div>
                 </div>
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground"
+                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground relative z-10"
                 >
                   <X size={14} />
                 </button>
@@ -149,60 +212,68 @@ export function WeatherForecastModal({
                     className={cn(
                       "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all",
                       days === d
-                        ? "bg-primary text-primary-foreground"
-                        : "border border-border text-muted-foreground hover:border-primary/40"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "border border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                     )}
                   >
-                    {d}-Day
+                    {d}-{language === "fr" ? "Jours" : "Day"}
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Forecast list */}
-            <div className="overflow-y-auto max-h-[60vh] px-4 py-3 space-y-1">
+            <div className="overflow-y-auto max-h-[55vh] px-3 py-3 space-y-0.5">
               {loading ? (
                 <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-                  Loading forecast…
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}>
+                    <Cloud size={20} className="mr-2 opacity-50" />
+                  </motion.div>
+                  {ui.loading}
                 </div>
               ) : (
                 forecast.map((day, i) => (
                   <motion.div
                     key={day.date}
-                    initial={{ opacity: 0, x: -10 }}
+                    initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04 }}
+                    transition={{ delay: i * 0.03 }}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors",
-                      i === 0 ? "bg-primary/8 border border-primary/20" : "hover:bg-accent/5"
+                      "flex items-center gap-2 px-3 py-2.5 rounded-2xl transition-colors",
+                      i === 0
+                        ? "bg-primary/8 border border-primary/20"
+                        : "hover:bg-accent/5"
                     )}
                   >
                     {/* Day label */}
-                    <div className="w-24 shrink-0">
-                      <p className={cn("text-sm font-semibold", i === 0 ? "text-primary" : "text-foreground")}>
+                    <div className="w-20 shrink-0">
+                      <p className={cn("text-xs font-semibold", i === 0 ? "text-primary" : "text-foreground")}>
                         {day.dayLabel}
                       </p>
                     </div>
 
-                    {/* Icon */}
-                    <span className="text-2xl w-8 text-center shrink-0">{wmoIcon(day.weatherCode)}</span>
+                    {/* Weather icon */}
+                    <span className="text-xl w-7 text-center shrink-0">{wmoIcon(day.weatherCode)}</span>
 
-                    {/* Condition */}
-                    <p className="text-xs text-muted-foreground flex-1 hidden sm:block capitalize">
-                      {wmoLabel(day.weatherCode)}
+                    {/* Condition label — hidden on xs */}
+                    <p className="text-[11px] text-muted-foreground w-24 hidden sm:block truncate">
+                      {wmoLabel(day.weatherCode, language)}
                     </p>
 
+                    {/* Temp bar */}
+                    <TempBar min={day.tempMin} max={day.tempMax} absMin={absMin} absMax={absMax} />
+
                     {/* Stats */}
-                    <div className="flex items-center gap-3 ml-auto shrink-0">
+                    <div className="flex items-center gap-2 ml-auto shrink-0">
                       {day.precipitationSum > 0 && (
-                        <span className="flex items-center gap-0.5 text-xs text-amber-400 font-medium">
-                          <Droplets size={10} />{day.precipitationSum}mm
+                        <span className="flex items-center gap-0.5 text-[10px] text-sky-400 font-medium">
+                          <Droplets size={9} />{day.precipitationSum}mm
                         </span>
                       )}
-                      <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                        <Wind size={10} />{day.windSpeedMax}km/h
+                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground hidden sm:flex">
+                        <Wind size={9} />{day.windSpeedMax}
                       </span>
-                      <div className="flex items-center gap-1 text-sm font-semibold">
+                      <div className="flex items-center gap-1 text-sm font-semibold min-w-[52px] justify-end">
                         <span className="text-foreground">{day.tempMax}°</span>
                         <span className="text-muted-foreground text-xs">{day.tempMin}°</span>
                       </div>
@@ -214,7 +285,11 @@ export function WeatherForecastModal({
 
             <div className="px-6 py-3 border-t border-border">
               <p className="text-[10px] text-muted-foreground text-center">
-                Powered by <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Open-Meteo</a> — free & open weather API
+                {ui.poweredBy}{" "}
+                <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                  Open-Meteo
+                </a>{" "}
+                — free &amp; open weather API
               </p>
             </div>
           </motion.div>

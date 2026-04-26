@@ -179,7 +179,22 @@ export default function Home() {
     if (data.messages) setMessages(data.messages as Message[]);
     if (data.thread) setCurrentThreadId(data.thread.id);
     if (data.assistantName) setAssistantName(data.assistantName);
-    if (data.weather) setWeather(data.weather);
+    if (data.weather) {
+      setWeather(data.weather);
+      // Geocode the location so the forecast modal can use lat/lon
+      if (data.weather.location && !coords) {
+        const locName = (data.weather as any).location || (data.weather as any).locationName;
+        if (locName) {
+          fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locName)}&count=1&language=en&format=json`)
+            .then(r => r.json())
+            .then(gd => {
+              const res = gd.results?.[0];
+              if (res) setCoords({ lat: res.latitude, lon: res.longitude });
+            })
+            .catch(() => {});
+        }
+      }
+    }
     if (data.todayEvents) setTodayEvents(data.todayEvents);
     if (data.memoryFacts) setMemoryFacts(data.memoryFacts);
     if (data.providerConnections) {
@@ -986,15 +1001,16 @@ export default function Home() {
 
       {/* Weather Forecast Modal */}
       {coords && weather && (
-        <WeatherForecastModal
+      <WeatherForecastModal
           open={showForecast}
           onClose={() => setShowForecast(false)}
           lat={coords.lat}
           lon={coords.lon}
-          locationName={weather.locationName}
-          currentTempC={weather.tempC}
-          currentLabel={weather.label}
-          feelsLikeC={weather.feelsLikeC}
+          locationName={weather.locationName || (weather as any).location || ''}
+          currentTempC={weather.tempC ?? (weather as any).current?.temperatureC ?? 0}
+          currentLabel={weather.label || (weather as any).current?.weatherLabel || ''}
+          feelsLikeC={weather.feelsLikeC ?? (weather as any).current?.apparentTemperatureC ?? 0}
+          language={language}
         />
       )}
 
