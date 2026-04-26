@@ -30,65 +30,65 @@ const NEWS_ISSUE_SLUGS = [
 
 const plannerSchema = z.object({
   action: z.enum(ACTION_NAMES),
-  rationale: z.string(),
+  rationale: z.string().optional().nullable(),
   browser: z
     .object({
-      task: z.string().nullable(),
+      task: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
   subagent: z
     .object({
-      task: z.string().nullable(),
+      task: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
   route: z
     .object({
-      origin: z.string().nullable(),
-      destination: z.string().nullable(),
-      mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable(),
+      origin: z.string().optional().nullable(),
+      destination: z.string().optional().nullable(),
+      mode: z.enum(["driving", "walking", "bicycling", "transit"]).optional().nullable(),
     })
     .optional()
     .nullable(),
   weather: z
     .object({
-      location: z.string().nullable(),
-      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable(),
+      location: z.string().optional().nullable(),
+      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).optional().nullable(),
     })
     .optional()
     .nullable(),
   news: z
     .object({
-      issueSlug: z.enum(NEWS_ISSUE_SLUGS).nullable(),
-      interestLabel: z.string().nullable(),
-      limit: z.number().int().min(1).max(5).nullable(),
+      issueSlug: z.enum(NEWS_ISSUE_SLUGS).optional().nullable(),
+      interestLabel: z.string().optional().nullable(),
+      limit: z.number().int().min(1).max(5).optional().nullable(),
     })
     .optional()
     .nullable(),
   calendar: z
     .object({
-      title: z.string().nullable(),
-      startDescription: z.string().nullable(),
-      endDescription: z.string().nullable(),
+      title: z.string().optional().nullable(),
+      startDescription: z.string().optional().nullable(),
+      endDescription: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
   music: z
     .object({
-      query: z.string().nullable(),
-      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+      query: z.string().optional().nullable(),
+      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).optional().nullable(),
     })
     .optional()
     .nullable(),
   list: z
     .object({
-      action: z.enum(["create", "add", "remove", "clear", "list", "rename", "update", "remind"]).nullable(),
-      listName: z.string().nullable(),
-      itemContent: z.string().nullable(),
-      newName: z.string().nullable(),
-      time: z.string().nullable(),
-      location: z.string().nullable(),
+      action: z.enum(["create", "add", "remove", "clear", "list", "rename", "update", "remind"]).optional().nullable(),
+      listName: z.string().optional().nullable(),
+      itemContent: z.string().optional().nullable(),
+      newName: z.string().optional().nullable(),
+      time: z.string().optional().nullable(),
+      location: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
