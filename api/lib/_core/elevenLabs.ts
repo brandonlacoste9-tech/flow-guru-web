@@ -1,4 +1,4 @@
-import { ENV } from "./env";
+import { ENV } from "./env.js";
 
 /**
  * ElevenLabs API integration for Voice Synthesis and Voice Conversion

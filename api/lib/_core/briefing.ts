@@ -117,7 +117,7 @@ function formatEventTime(event: CalendarEvent): string {
 
 async function fetchActiveListItems(userId: number): Promise<{ listName: string; count: number; examples: string[] }[]> {
   try {
-    const { listUserLists, getListItems } = await import("../db");
+    const { listUserLists, getListItems } = await import("../db.js");
     const lists = await listUserLists(userId);
     const results = [];
     for (const list of lists) {

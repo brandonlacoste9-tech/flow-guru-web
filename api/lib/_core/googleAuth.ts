@@ -6,13 +6,13 @@
  *   GET /api/auth/google/callback → exchange code, upsert user, set JWT cookie, redirect to /
  */
 
-import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { Express } from "express";
-import * as db from "../db";
-import { getSessionCookieOptions } from "./cookies";
-import { sdk } from "./sdk";
-import { ENV } from "./env";
+import * as db from "../db.js";
+import { getSessionCookieOptions } from "./cookies.js";
+import { sdk } from "./sdk.js";
+import { ENV } from "./env.js";
 
 function getQueryParam(req: VercelRequest, key: string): string | undefined {
   const value = req.query[key];

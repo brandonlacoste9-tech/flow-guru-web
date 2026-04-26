@@ -1,6 +1,6 @@
 import webpush from 'web-push';
-import { ENV } from './env';
-import { getDb } from '../db';
+import { ENV } from './env.js';
+import { getDb } from '../db.js';
 import { pushSubscriptions } from '../drizzle/schema.js';
 import { eq } from 'drizzle-orm';
 

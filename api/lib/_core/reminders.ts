@@ -1,7 +1,7 @@
-import { getDb } from '../db';
+import { getDb } from '../db.js';
 import * as schema from '../drizzle/schema.js';
 import { and, eq, gte, lte } from 'drizzle-orm';
-import { sendPushNotification } from './push';
+import { sendPushNotification } from './push.js';
 
 const firedReminders = new Set<string>();
 
