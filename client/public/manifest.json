@@ -1,37 +1,54 @@
 {
-  "name": "FLO GURU",
-  "short_name": "FLO GURU",
-  "description": "Your AI-powered personal assistant",
+  "name": "Flow Guru",
+  "short_name": "Flow Guru",
+  "description": "Your premium, private, and autonomous AI lifestyle companion.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#7c3aed",
+  "background_color": "#130328",
+  "theme_color": "#b45a14",
   "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "categories": ["productivity", "utilities"],
-  "shortcuts": [
-    {
-      "name": "Open Calendar",
-      "url": "/calendar",
-      "description": "View your calendar"
+      "purpose": "any"
     },
     {
-      "name": "Open Settings",
-      "url": "/settings",
-      "description": "Manage AI settings"
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["productivity", "lifestyle", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/",
+      "description": "View your daily briefing"
+    },
+    {
+      "name": "Calendar",
+      "url": "/calendar",
+      "description": "Manage your schedule"
+    },
+    {
+      "name": "Lists",
+      "url": "/lists",
+      "description": "View your tasks"
     }
   ]
 }
