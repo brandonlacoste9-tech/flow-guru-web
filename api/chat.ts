@@ -1,7 +1,9 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { streamText, tool, convertToModelMessages, stepCountIs, type UIMessage } from 'ai';
 import { z } from 'zod';
-import { createClient } from '@supabase/supabase-js';
+import { and, eq, ilike, desc } from 'drizzle-orm';
+import { db } from './lib/db.js';
+import { userFacts } from './lib/drizzle/schema.js';
 
 export const config = { maxDuration: 60 };
 
@@ -10,11 +12,6 @@ const deepseek = createOpenAICompatible({
   baseURL: 'https://api.deepseek.com/v1',
   apiKey: process.env.DEEPSEEK_API_KEY!,
 });
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
@@ -40,13 +37,17 @@ Use saveMemory when the user shares a fact about themselves.`,
           description: 'Recall stored facts about the user',
           inputSchema: z.object({ query: z.string() }),
           execute: async ({ query }) => {
-            const { data } = await supabase
-              .from('user_facts')
-              .select('fact, category, created_at')
-              .eq('user_id', userId)
-              .ilike('fact', `%${query}%`)
+            const rows = await db
+              .select({
+                fact: userFacts.fact,
+                category: userFacts.category,
+                createdAt: userFacts.createdAt,
+              })
+              .from(userFacts)
+              .where(and(eq(userFacts.userId, userId), ilike(userFacts.fact, `%${query}%`)))
+              .orderBy(desc(userFacts.createdAt))
               .limit(5);
-            return data ?? [];
+            return rows;
           },
         }),
         saveMemory: tool({
@@ -56,10 +57,12 @@ Use saveMemory when the user shares a fact about themselves.`,
             category: z.enum(['preference', 'personal', 'work', 'health', 'general']),
           }),
           execute: async ({ fact, category }) => {
-            const { error } = await supabase
-              .from('user_facts')
-              .insert({ user_id: userId, fact, category });
-            return { saved: !error, error: error?.message };
+            try {
+              await db.insert(userFacts).values({ userId, fact, category });
+              return { saved: true };
+            } catch (err) {
+              return { saved: false, error: (err as Error).message };
+            }
           },
         }),
       },
