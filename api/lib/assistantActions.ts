@@ -1070,7 +1070,7 @@ async function executeMusicAction(
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
   options: { userId: number; userName?: string | null; message: string; memoryContext: string; timeZone?: string | null; language?: 'en' | 'fr'; }
-) {
+): Promise<AssistantActionResult> {
   console.log(`[Assistant Action] Executing: ${plan.action}`, plan);
 
   try {
@@ -1091,16 +1091,16 @@ export async function executeAssistantAction(
         return await executeMusicAction(plan, options as any);
       case "browser.use":
         return {
-          action: "browser.use",
-          status: "executed",
+          action: "browser.use" as const,
+          status: "executed" as const,
           title: "Opening Browser",
           summary: `I'm looking that up for you now.`,
           data: { task: plan.browser?.task },
         };
       case "system.subagent":
         return {
-          action: "system.subagent",
-          status: "executed",
+          action: "system.subagent" as const,
+          status: "executed" as const,
           title: "Working on it",
           summary: `I'm handling that task in the background.`,
           data: { task: plan.subagent?.task },
@@ -1108,8 +1108,8 @@ export async function executeAssistantAction(
       case "none":
       default:
         return {
-          action: "none",
-          status: "executed",
+          action: "none" as const,
+          status: "executed" as const,
           title: "Chatting",
           summary: "I'm just chatting with you.",
         };
@@ -1118,7 +1118,7 @@ export async function executeAssistantAction(
     console.warn("[Flow Guru] External action execution failed.", error);
     return {
       action: plan.action,
-      status: "failed",
+      status: "failed" as const,
       title: "Action unavailable",
       summary: "I understood the live request, but that data source did not return a usable result just now.",
       provider: plan.action.startsWith("route")
