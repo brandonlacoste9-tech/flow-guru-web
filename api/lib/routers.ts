@@ -602,7 +602,9 @@ export const appRouter = router({
             const c = result.data.current as any;
             return { tempC: c.temperatureC, feelsLikeC: c.apparentTemperatureC, label: c.weatherLabel, locationName: result.data.location as string };
           }
-        } catch { /* ignore */ }
+        } catch (e) {
+          console.error("[Flow Guru] Weather bootstrap failed:", e);
+        }
         return null;
       })();
 
