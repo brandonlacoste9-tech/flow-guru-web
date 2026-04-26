@@ -7,6 +7,7 @@ import {
 } from "./_core/googleCalendar";
 import { invokeLLM } from "./_core/llm";
 import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map";
+import { searchAndPlaySpotify } from "./_core/spotify";
 
 const ACTION_NAMES = [
   "none",
@@ -1046,7 +1047,6 @@ async function executeMusicAction(
   const targetType = plan.music?.targetType || "track";
 
   try {
-    const { searchAndPlaySpotify } = await import("./_core/spotify");
     const result = await searchAndPlaySpotify({
       userId: options.userId,
       query,

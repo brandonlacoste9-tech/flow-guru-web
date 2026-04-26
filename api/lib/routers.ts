@@ -42,6 +42,7 @@ import {
   updateListItem,
   setListItemReminder,
 } from "./db.js";
+import { listGoogleCalendarEvents } from "./_core/googleCalendar.js";
 
 const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
@@ -595,7 +596,6 @@ export const appRouter = router({
       const weatherPromise = (async () => {
         if (!userLocation) return null;
         try {
-          const { planAssistantAction, executeAssistantAction } = await import("./assistantActions.js");
           const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather" });
           const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
           if (result.status === "executed" && result.data?.current) {
@@ -620,7 +620,6 @@ export const appRouter = router({
         } catch { /* ignore */ }
 
         try {
-          const { listGoogleCalendarEvents } = await import("./_core/googleCalendar.js");
           const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
           if (conn) {
             const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
