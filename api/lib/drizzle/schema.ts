@@ -172,3 +172,21 @@ export const localEvents = pgTable(
 
 export type LocalEvent = typeof localEvents.$inferSelect;
 export type InsertLocalEvent = typeof localEvents.$inferInsert;
+q
+
+
+q
+q
+
+
+// === Chat memory (added by feat/chat-memory-neon) ===
+export const userFacts = pgTable("user_facts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(),
+  fact: text("fact").notNull(),
+  category: text("category").notNull().default("general"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  userIdIdx: index("user_facts_user_id_idx").on(t.userId),
+  factTrgmIdx: index("user_facts_fact_trgm_idx").using("gin", sql`${t.fact} gin_trgm_ops`),
+}));
