@@ -991,8 +991,8 @@ export default function Home() {
         <WeatherForecastModal
           open={showForecast}
           onClose={() => setShowForecast(false)}
-          lat={coords?.lat ?? null}
-          lon={coords?.lon ?? null}
+          lat={(weather as any).lat ?? coords?.lat ?? null}
+          lon={(weather as any).lon ?? coords?.lon ?? null}
           locationName={(weather as any).locationName || (weather as any).location || ''}
           currentTempC={(weather as any).tempC ?? (weather as any).current?.temperatureC ?? 0}
           currentLabel={(weather as any).label || (weather as any).current?.weatherLabel || ''}

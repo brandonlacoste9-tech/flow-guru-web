@@ -594,7 +594,7 @@ export const appRouter = router({
       );
       const userLocation = locationFact?.factValue || null;
 
-      type WeatherSnapshot = { tempC: number; feelsLikeC: number; label: string; locationName: string };
+      type WeatherSnapshot = { tempC: number; feelsLikeC: number; label: string; locationName: string; lat?: number; lon?: number };
       type CalendarItem = { title: string; start: string | null; allDay: boolean };
       let weather: WeatherSnapshot | null = null;
       let todayEvents: CalendarItem[] = [];
@@ -607,7 +607,14 @@ export const appRouter = router({
           if (result.status === "executed" && result.data) {
             const data = result.data as Record<string, any>;
             const c = data.current as any;
-            if (c) return { tempC: c.temperatureC, feelsLikeC: c.apparentTemperatureC, label: c.weatherLabel, locationName: data.location as string };
+            if (c) return {
+              tempC: c.temperatureC,
+              feelsLikeC: c.apparentTemperatureC,
+              label: c.weatherLabel,
+              locationName: data.location as string,
+              lat: data.lat as number | undefined,
+              lon: data.lon as number | undefined,
+            };
           }
         } catch (e) {
           console.error("[Flow Guru] Weather bootstrap failed:", e);

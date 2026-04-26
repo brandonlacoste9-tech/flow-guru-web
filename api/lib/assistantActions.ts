@@ -549,6 +549,8 @@ async function executeWeatherAction(plan: AssistantActionPlan, options?: { langu
     provider: "open-meteo",
     data: {
       location: geocode.formatted_address,
+      lat,
+      lon: lng,
       timezone: weather.timezone ?? null,
       current: current
         ? {
