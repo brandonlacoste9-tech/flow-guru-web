@@ -13,6 +13,8 @@ const Home = lazy(() => import("./pages/Home"));
 const Calendar = lazy(() => import("./pages/Calendar"));
 const Lists = lazy(() => import("./pages/Lists"));
 const Settings = lazy(() => import("./pages/Settings").then(m => ({ default: m.Settings })));
+const Blog = lazy(() => import("./pages/Blog"));
+const BlogPost = lazy(() => import("./pages/BlogPost"));
 
 function Router() {
   return (
@@ -22,6 +24,8 @@ function Router() {
         <Route path={"/calendar"} component={Calendar} />
         <Route path={"/lists"} component={Lists} />
         <Route path={"/settings"} component={Settings} />
+        <Route path={"/blog"} component={Blog} />
+        <Route path={"/blog/:slug"} component={BlogPost} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

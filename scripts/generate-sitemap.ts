@@ -4,10 +4,9 @@ import { resolve } from 'node:path';
 // Define the public routes for search engine indexing
 const ROUTES = [
   '/', 
-  // Add new public routes here as you ship them
-  // '/pricing',
-  // '/about',
-  // '/blog'
+  '/blog',
+  '/blog/why-privacy-matters-in-the-age-of-ai',
+  '/blog/orchestrating-your-life-with-autonomous-companions'
 ];
 
 const DOMAIN = 'https://floguru.com';
