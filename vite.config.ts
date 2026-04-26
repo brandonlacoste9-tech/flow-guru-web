@@ -167,6 +167,29 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-framer": ["framer-motion"],
+          "vendor-icons": ["lucide-react"],
+          "vendor-charts": ["recharts"],
+          "vendor-date": ["date-fns"],
+          "vendor-query": ["@tanstack/react-query", "@trpc/client", "@trpc/react-query"],
+          "vendor-ui": [
+            "@radix-ui/react-accordion",
+            "@radix-ui/react-alert-dialog",
+            "@radix-ui/react-avatar",
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-popover",
+            "@radix-ui/react-select",
+            "@radix-ui/react-tooltip",
+            "sonner",
+            "vaul"
+          ],
+        },
+      },
+    },
   },
   server: {
     host: true,
