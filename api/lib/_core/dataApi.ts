@@ -4,7 +4,7 @@
  *     query: { gl: "US", hl: "en", q: "manus" },
  *   })
  */
-import { ENV } from "./env.js";
+import { ENV } from "./env";
 
 export type DataApiCallOptions = {
   query?: Record<string, unknown>;

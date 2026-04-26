@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import { ENV } from "./env.js";
-import { getProviderConnection, upsertProviderConnection } from "../db.js";
-import { encryptToken, decryptToken } from "./crypto.js";
+import { ENV } from "./env";
+import { getProviderConnection, upsertProviderConnection } from "../db";
+import { encryptToken, decryptToken } from "./crypto";
 
 type GoogleOAuthState = {
   provider: "google-calendar";
@@ -208,24 +208,14 @@ export async function connectGoogleCalendar(params: {
     code: params.code,
     redirectUri: params.redirectUri,
   });
-
-  // Best-effort profile fetch for a friendly label (non-fatal if scopes are missing)
-  let accountLabel = "Google Calendar";
-  let accountId = "google-calendar";
-  try {
-    const profile = await fetchGoogleProfile(token.access_token!);
-    accountLabel = profile.email ?? profile.name ?? accountLabel;
-    accountId = profile.id ?? profile.email ?? accountId;
-  } catch (err) {
-    console.warn("[Google Calendar] Profile fetch failed (cosmetic only, continuing):", (err as Error).message);
-  }
+  const profile = await fetchGoogleProfile(token.access_token!);
 
   await upsertProviderConnection({
     userId: params.userId,
     provider: "google-calendar",
     status: "connected",
-    externalAccountId: accountId,
-    externalAccountLabel: accountLabel,
+    externalAccountId: profile.id ?? profile.email ?? "google-calendar",
+    externalAccountLabel: profile.email ?? profile.name ?? "Google Calendar",
     accessToken: encryptToken(token.access_token ?? null),
     refreshToken: encryptToken(token.refresh_token ?? null),
     scope: token.scope ?? null,
@@ -235,7 +225,7 @@ export async function connectGoogleCalendar(params: {
   });
 
   return {
-    accountLabel,
+    accountLabel: profile.email ?? profile.name ?? "Google Calendar",
   };
 }
 

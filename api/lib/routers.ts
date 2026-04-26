@@ -1,10 +1,10 @@
-import { COOKIE_NAME } from "./shared/const.js";
+import { COOKIE_NAME } from "../shared/const.js";
 import fs from "fs";
 import { z } from "zod";
-import { getSessionCookieOptions } from "./_core/cookies.js";
-import { invokeLLM, type Tool, type ToolCall } from "./_core/llm.js";
-import { systemRouter } from "./_core/systemRouter.js";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc.js";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { invokeLLM, type Tool, type ToolCall } from "./_core/llm";
+import { systemRouter } from "./_core/systemRouter";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   buildActionFallbackReply,
   executeAssistantAction,
@@ -12,7 +12,7 @@ import {
   planAssistantAction,
   type AssistantActionResult,
   type AssistantActionPlan,
-} from "./assistantActions.js";
+} from "./assistantActions";
 import {
   createConversationMessage,
   createConversationThread,
@@ -41,7 +41,7 @@ import {
   updateList,
   updateListItem,
   setListItemReminder,
-} from "./db.js";
+} from "./db";
 
 const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
@@ -595,7 +595,7 @@ export const appRouter = router({
       const weatherPromise = (async () => {
         if (!userLocation) return null;
         try {
-          const { planAssistantAction, executeAssistantAction } = await import("./assistantActions.js");
+          const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
           const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather" });
           const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
           if (result.status === "executed" && result.data?.current) {
@@ -620,7 +620,7 @@ export const appRouter = router({
         } catch { /* ignore */ }
 
         try {
-          const { listGoogleCalendarEvents } = await import("./_core/googleCalendar.js");
+          const { listGoogleCalendarEvents } = await import("./_core/googleCalendar");
           const conn = providerConnections.find((c: any) => c.provider === "google-calendar" && c.status === "connected");
           if (conn) {
             const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
@@ -920,13 +920,15 @@ export const appRouter = router({
       const location = locationFact?.factValue || null;
 
       // Dynamic import to keep the bundle lean
-      const { generateBriefing } = await import("./_core/briefing.js");
+      const { generateBriefing } = await import("./_core/briefing");
       const result = await generateBriefing({
         userId,
         userName,
         assistantName,
         location,
         wakeUpTime: profile?.wakeUpTime ?? null,
+        buddyPersonality: profile?.buddyPersonality ?? null,
+        voiceId: profile?.voiceId ?? undefined,
       });
 
       return result;
@@ -937,7 +939,7 @@ export const appRouter = router({
         durationSeconds: z.number().min(5).max(30).optional(),
       }))
       .mutation(async ({ input }) => {
-        const { generateQuickSound } = await import("./_core/briefing.js");
+        const { generateQuickSound } = await import("./_core/briefing");
         return await generateQuickSound(input.type, input.durationSeconds ?? 15);
       }),
     speak: publicProcedure
@@ -945,11 +947,21 @@ export const appRouter = router({
         text: z.string().min(1).max(2000),
         voiceId: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
-        const { textToSpeech } = await import("./_core/elevenLabs.js");
+      .mutation(async ({ ctx, input }) => {
+        const userId = await resolveAssistantUserId(ctx.user);
+        let finalVoiceId = input.voiceId;
+        
+        if (!finalVoiceId && userId) {
+          const profile = await getUserMemoryProfile(userId);
+          if (profile?.voiceId) {
+            finalVoiceId = profile.voiceId;
+          }
+        }
+
+        const { textToSpeech } = await import("./_core/elevenLabs");
         const buffer = await textToSpeech({
           text: input.text,
-          voiceId: input.voiceId,
+          voiceId: finalVoiceId,
           stability: 0.6,
           similarityBoost: 0.8,
         });
@@ -977,7 +989,7 @@ export const appRouter = router({
         let weather = null;
         if (userLocation) {
           try {
-            const { planAssistantAction, executeAssistantAction } = await import("./assistantActions.js");
+            const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
             const plan = await planAssistantAction({ message: "current weather", memoryContext: `Location: ${userLocation}` });
             const result = await executeAssistantAction(plan, { userId, message: "current weather", memoryContext: `Location: ${userLocation}` });
             if (result.status === "executed") weather = result.data;
@@ -1047,7 +1059,7 @@ export const appRouter = router({
         return { success: true };
       }),
     getVoices: publicProcedure.query(async () => {
-      const { getVoices } = await import("./_core/elevenLabs.js");
+      const { getVoices } = await import("./_core/elevenLabs");
       return await getVoices();
     }),
     getMemoryFacts: publicProcedure.query(async ({ ctx }) => {
@@ -1161,7 +1173,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { upsertPushSubscription } = await import("./db.js");
+        const { upsertPushSubscription } = await import("./db");
         await upsertPushSubscription(userId, input.subscription);
         return { success: true };
       }),

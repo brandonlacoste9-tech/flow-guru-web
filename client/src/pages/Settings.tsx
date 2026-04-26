@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Gift, Copy, Share2 } from 'lucide-react';
+import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Gift, Copy, Share2, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';

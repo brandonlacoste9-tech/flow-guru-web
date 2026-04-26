@@ -27,7 +27,7 @@ async function getValidSpotifyToken(userId: number): Promise<string | null> {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const user = await sdk.authenticateRequest(req);
+    const user = await sdk.authenticateRequest(req as any);
     if (!user) {
       return res.status(401).json({ connected: false, nowPlaying: null, playlists: [] });
     }

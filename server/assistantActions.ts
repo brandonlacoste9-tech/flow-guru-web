@@ -1089,7 +1089,7 @@ async function executeMusicAction(
 
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
-  options: { userId: number; threadId?: number }
+  options: { userId: number; threadId?: number; userName?: string | null; message?: string; memoryContext?: string; timeZone?: string | null }
 ): Promise<AssistantActionResult> {
   console.log(`[Assistant Action] Executing: ${plan.action}`, plan);
 
@@ -1102,9 +1102,9 @@ export async function executeAssistantAction(
       case "calendar.list_events":
         return await executeCalendarListAction(plan, options as any);
       case "route.get":
-        return await executeRouteAction(plan, options as any);
+        return await executeRouteAction(plan);
       case "weather.get":
-        return await executeWeatherAction(plan, options as any);
+        return await executeWeatherAction(plan);
       case "news.get":
         return await executeNewsAction(plan, options as any);
       case "music.play":

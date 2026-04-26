@@ -559,7 +559,7 @@ export const appRouter = router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      (ctx.res as any).clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return {
         success: true,
       } as const;
@@ -990,7 +990,7 @@ export const appRouter = router({
         if (userLocation) {
           try {
             const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
-            const plan = await planAssistantAction({ message: "current weather", memoryContext: `Location: ${userLocation}` });
+            const plan = await planAssistantAction({ userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
             const result = await executeAssistantAction(plan, { userId, message: "current weather", memoryContext: `Location: ${userLocation}` });
             if (result.status === "executed") weather = result.data;
           } catch {}

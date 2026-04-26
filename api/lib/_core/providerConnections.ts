@@ -1,20 +1,19 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { Express } from "express";
-import { ENV } from "./env.js";
-import { sdk } from "./sdk.js";
-import { getProviderConnection, upsertProviderConnection } from "../db.js";
+import type { Express, Request, Response } from "express";
+import { ENV } from "./env";
+import { sdk } from "./sdk";
+import { getProviderConnection, upsertProviderConnection } from "../db";
 import {
   buildGoogleOAuthState,
   connectGoogleCalendar,
   getGoogleCalendarCallbackUrl,
   parseGoogleOAuthState,
-} from "./googleCalendar.js";
+} from "./googleCalendar";
 import {
   buildSpotifyOAuthState,
   connectSpotify,
   getSpotifyCallbackUrl,
   parseSpotifyOAuthState,
-} from "./spotify.js";
+} from "./spotify";
 
 type SupportedProvider = "google-calendar" | "spotify";
 
@@ -49,25 +48,23 @@ function getProviderConfig(provider: SupportedProvider) {
   };
 }
 
-async function requireUser(req: VercelRequest, res: VercelResponse) {
+async function requireUser(req: Request, res: Response) {
   try {
     const user = await sdk.authenticateRequest(req);
     if (!user) {
-      res.status(401).json({ error: "Authentication required." } as any);
+      res.status(401).json({ error: "Authentication required." });
       return null;
     }
     return user;
   } catch {
-    res.status(401).json({ error: "Authentication required." } as any);
+    res.status(401).json({ error: "Authentication required." });
     return null;
   }
 }
 
 export function registerProviderConnectionRoutes(app: Express) {
-  app.get("/api/integrations/:provider/status", async (req: any, res: any) => {
-    const vReq = req as VercelRequest;
-    const vRes = res as VercelResponse;
-    const providerParam = (vReq.query.provider as string) || (vReq as any).params?.provider;
+  app.get("/api/integrations/:provider/status", async (req, res) => {
+    const providerParam = req.params.provider;
     if (!isSupportedProvider(providerParam)) {
       res.status(404).json({ error: "Unknown provider." });
       return;
@@ -95,16 +92,14 @@ export function registerProviderConnectionRoutes(app: Express) {
     });
   });
 
-  app.get("/api/integrations/:provider/start", async (req: any, res: any) => {
-    const vReq = req as VercelRequest;
-    const vRes = res as VercelResponse;
-    const providerParam = (vReq.query.provider as string) || (vReq as any).params?.provider;
+  app.get("/api/integrations/:provider/start", async (req, res) => {
+    const providerParam = req.params.provider;
     if (!isSupportedProvider(providerParam)) {
-      vRes.status(404).json({ error: "Unknown provider." } as any);
+      res.status(404).json({ error: "Unknown provider." });
       return;
     }
 
-    const user = await requireUser(vReq, vRes);
+    const user = await requireUser(req, res);
     if (!user) return;
 
     const config = getProviderConfig(providerParam);
@@ -116,13 +111,13 @@ export function registerProviderConnectionRoutes(app: Express) {
         status: "error",
         lastError: `${config.label} credentials have not been added yet.`,
       });
-      vRes.status(503).json({
+      res.status(503).json({
         provider: providerParam,
         configured: false,
         status: "error",
         message: `${config.label} credentials have not been added yet. Add the provider secrets to activate account linking.`,
         scopes: config.scopes,
-      } as any);
+      });
       return;
     }
 
@@ -134,7 +129,7 @@ export function registerProviderConnectionRoutes(app: Express) {
         lastError: null,
       });
 
-      const redirectUri = getGoogleCalendarCallbackUrl(vReq as any);
+      const redirectUri = getGoogleCalendarCallbackUrl(req);
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       authUrl.searchParams.set("client_id", ENV.googleClientId);
       authUrl.searchParams.set("redirect_uri", redirectUri);
@@ -144,7 +139,7 @@ export function registerProviderConnectionRoutes(app: Express) {
       authUrl.searchParams.set("prompt", "consent");
       authUrl.searchParams.set("state", buildGoogleOAuthState(user.id));
 
-      vRes.redirect(authUrl.toString());
+      res.redirect(302, authUrl.toString());
       return;
     }
 
@@ -156,7 +151,7 @@ export function registerProviderConnectionRoutes(app: Express) {
         lastError: null,
       });
 
-      const redirectUri = getSpotifyCallbackUrl(vReq as any);
+      const redirectUri = getSpotifyCallbackUrl(req);
       const authUrl = new URL("https://accounts.spotify.com/authorize");
       authUrl.searchParams.set("client_id", ENV.spotifyClientId);
       authUrl.searchParams.set("response_type", "code");
@@ -164,30 +159,34 @@ export function registerProviderConnectionRoutes(app: Express) {
       authUrl.searchParams.set("scope", config.scopes.join(" "));
       authUrl.searchParams.set("state", buildSpotifyOAuthState(user.id));
 
-      vRes.redirect(authUrl.toString());
+      res.redirect(302, authUrl.toString());
       return;
     }
 
-    vRes.status(501).json({ error: "Provider not fully implemented." } as any);
+    res.status(501).json({
+      provider: providerParam,
+      configured: true,
+      status: "error",
+      message: `${config.label} provider is not fully implemented yet.`,
+      scopes: config.scopes,
+    });
   });
 
-  app.get("/api/integrations/:provider/callback", async (req: any, res: any) => {
-    const vReq = req as VercelRequest;
-    const vRes = res as VercelResponse;
-    const providerParam = (vReq.query.provider as string) || (vReq as any).params?.provider;
+  app.get("/api/integrations/:provider/callback", async (req, res) => {
+    const providerParam = req.params.provider;
     if (!isSupportedProvider(providerParam)) {
-      vRes.status(404).json({ error: "Unknown provider." } as any);
+      res.status(404).json({ error: "Unknown provider." });
       return;
     }
 
-    const user = await requireUser(vReq, vRes);
+    const user = await requireUser(req, res);
     if (!user) return;
 
     if (providerParam === "google-calendar") {
-      const code = typeof vReq.query.code === "string" ? vReq.query.code : null;
-      const state = typeof vReq.query.state === "string" ? vReq.query.state : null;
+      const code = typeof req.query.code === "string" ? req.query.code : null;
+      const state = typeof req.query.state === "string" ? req.query.state : null;
       if (!code || !state) {
-        vRes.status(400).json({ error: "Google callback requires code and state." } as any);
+        res.status(400).json({ error: "Google callback requires code and state." });
         return;
       }
 
@@ -200,10 +199,10 @@ export function registerProviderConnectionRoutes(app: Express) {
         const result = await connectGoogleCalendar({
           userId: user.id,
           code,
-          redirectUri: getGoogleCalendarCallbackUrl(vReq as any),
+          redirectUri: getGoogleCalendarCallbackUrl(req),
         });
 
-        vRes.redirect(`/?integration=google-calendar&status=connected&account=${encodeURIComponent(result.accountLabel)}`);
+        res.redirect(302, `/?integration=google-calendar&status=connected&account=${encodeURIComponent(result.accountLabel)}`);
         return;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Google Calendar connection failed.";
@@ -213,16 +212,16 @@ export function registerProviderConnectionRoutes(app: Express) {
           status: "error",
           lastError: message,
         });
-        vRes.redirect(`/?integration=google-calendar&status=error&message=${encodeURIComponent(message)}`);
+        res.redirect(302, `/?integration=google-calendar&status=error&message=${encodeURIComponent(message)}`);
         return;
       }
     }
 
     if (providerParam === "spotify") {
-      const code = typeof vReq.query.code === "string" ? vReq.query.code : null;
-      const state = typeof vReq.query.state === "string" ? vReq.query.state : null;
+      const code = typeof req.query.code === "string" ? req.query.code : null;
+      const state = typeof req.query.state === "string" ? req.query.state : null;
       if (!code || !state) {
-        vRes.status(400).json({ error: "Spotify callback requires code and state." } as any);
+        res.status(400).json({ error: "Spotify callback requires code and state." });
         return;
       }
 
@@ -235,10 +234,10 @@ export function registerProviderConnectionRoutes(app: Express) {
         const result = await connectSpotify({
           userId: user.id,
           code,
-          redirectUri: getSpotifyCallbackUrl(vReq as any),
+          redirectUri: getSpotifyCallbackUrl(req),
         });
 
-        vRes.redirect(`/?integration=spotify&status=connected&account=${encodeURIComponent(result.externalAccountLabel)}`);
+        res.redirect(302, `/?integration=spotify&status=connected&account=${encodeURIComponent(result.externalAccountLabel)}`);
         return;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Spotify connection failed.";
@@ -248,11 +247,15 @@ export function registerProviderConnectionRoutes(app: Express) {
           status: "error",
           lastError: message,
         });
-        vRes.redirect(`/?integration=spotify&status=error&message=${encodeURIComponent(message)}`);
+        res.redirect(302, `/?integration=spotify&status=error&message=${encodeURIComponent(message)}`);
         return;
       }
     }
 
-    vRes.status(501).json({ error: "Provider callback not implemented." } as any);
+    res.status(501).json({
+      provider: providerParam,
+      status: "error",
+      message: "Provider callback is not implemented yet.",
+    });
   });
 }

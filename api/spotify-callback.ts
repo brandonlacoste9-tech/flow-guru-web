@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await connectSpotify({
       userId: user.id,
       code,
-      redirectUri: getSpotifyCallbackUrl(req),
+      redirectUri: getSpotifyCallbackUrl(req as any),
     });
 
     // Success! Redirect to home with a success flag

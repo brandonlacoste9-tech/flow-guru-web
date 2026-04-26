@@ -1,12 +1,12 @@
 import fs from "fs";
 import { z } from "zod";
-import { getProviderConnection, createLocalEvent } from "./db.js";
+import { getProviderConnection, createLocalEvent } from "./db";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
-} from "./_core/googleCalendar.js";
-import { invokeLLM } from "./_core/llm.js";
-import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map.js";
+} from "./_core/googleCalendar";
+import { invokeLLM } from "./_core/llm";
+import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map";
 
 const ACTION_NAMES = [
   "none",
@@ -30,64 +30,65 @@ const NEWS_ISSUE_SLUGS = [
 
 const plannerSchema = z.object({
   action: z.enum(ACTION_NAMES),
-  rationale: z.string(),
+  rationale: z.string().optional().nullable(),
   browser: z
     .object({
-      task: z.string().nullable(),
+      task: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
   subagent: z
     .object({
-      task: z.string().nullable(),
+      task: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
   route: z
     .object({
-      origin: z.string().nullable(),
-      destination: z.string().nullable(),
-      mode: z.enum(["driving", "walking", "bicycling", "transit"]).nullable(),
+      origin: z.string().optional().nullable(),
+      destination: z.string().optional().nullable(),
+      mode: z.enum(["driving", "walking", "bicycling", "transit"]).optional().nullable(),
     })
     .optional()
     .nullable(),
   weather: z
     .object({
-      location: z.string().nullable(),
-      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).nullable(),
+      location: z.string().optional().nullable(),
+      timeframe: z.enum(["current", "today", "tomorrow", "next_days"]).optional().nullable(),
     })
     .optional()
     .nullable(),
   news: z
     .object({
-      issueSlug: z.enum(NEWS_ISSUE_SLUGS).nullable(),
-      interestLabel: z.string().nullable(),
-      limit: z.number().int().min(1).max(5).nullable(),
+      issueSlug: z.enum(NEWS_ISSUE_SLUGS).optional().nullable(),
+      interestLabel: z.string().optional().nullable(),
+      limit: z.number().int().min(1).max(5).optional().nullable(),
     })
     .optional()
     .nullable(),
   calendar: z
     .object({
-      title: z.string().nullable(),
-      startDescription: z.string().nullable(),
-      endDescription: z.string().nullable(),
+      title: z.string().optional().nullable(),
+      startDescription: z.string().optional().nullable(),
+      endDescription: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
   music: z
     .object({
-      query: z.string().nullable(),
-      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).nullable(),
+      query: z.string().optional().nullable(),
+      targetType: z.enum(["playlist", "artist", "album", "track", "liked"]).optional().nullable(),
     })
     .optional()
     .nullable(),
   list: z
     .object({
-      action: z.enum(["create", "add", "remove", "clear", "list", "rename", "update", "remind"]).nullable(),
-      listName: z.string().nullable(),
-      itemContent: z.string().nullable(),
-      newName: z.string().nullable(),
-      time: z.string().nullable(),
+      action: z.enum(["create", "add", "remove", "clear", "list", "rename", "update", "remind"]).optional().nullable(),
+      listName: z.string().optional().nullable(),
+      itemContent: z.string().optional().nullable(),
+      newName: z.string().optional().nullable(),
+      time: z.string().optional().nullable(),
+      location: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
@@ -257,7 +258,7 @@ export async function planAssistantAction(params: {
           "ALWAYS choose an action when possible — err on the side of calling a tool rather than returning 'none'.",
           "",
           "AVAILABLE TOOLS:",
-          "- calendar.create_event: For scheduling appointments, meetings, or time-based events. NEVER use this for grocery lists, shopping items, or todos.",
+          "- calendar.create_event: For scheduling appointments, meetings, or time-based events. NEVER use this for grocery lists, shopping items, chores, tasks, or todos. If it's a chore or a list item, use list.manage instead.",
           "- calendar.list_events: For checking a schedule or listing upcoming items.",
           "- weather.get: For checking current or future weather conditions.",
           "- route.get: For travel times, directions, or distances between points.",
@@ -270,11 +271,14 @@ export async function planAssistantAction(params: {
           "",
           "AGENT DELEGATION RULES:",
           "- If the user asks to 'Add [item] to my [list]', 'Create a [list] list', or 'What's on my [list]?', use 'list.manage'.",
+          "- If the user mentions single items, groceries, chores, or shopping items, use 'list.manage'.",
+          "- NEVER use 'calendar.create_event' for groceries, bread, milk, eggs, or simple shopping items.",
+          "- Only use 'calendar.create_event' for meetings, appointments, or scheduled blocks of time with a specific duration.",
+          "- If the user says 'Remind me to [item]' and the item is a grocery or small task, use 'list.manage' with action 'remind'.",
           "- If the user asks to 'Check XYZ website', 'Search for...', or 'Find out who won...', use 'browser.use'.",
           "- If the user asks to 'Add a file', 'Create a folder', 'Python script', 'Run a command', or 'Do a system audit', use 'system.subagent'.",
-          "- Prefer 'system.subagent' for ALL file system and shell operations.",
           "",
-          "CRITICAL: If the user mentions 'list' (e.g. grocery list, shopping list, todo list, pack list), you MUST use 'list.manage'.",
+          "CRITICAL: Any mention of 'list', 'shopping', 'grocery', 'bread', 'milk', 'eggs', 'todo', 'pack' MUST go to 'list.manage'.",
           "",
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
           "",
@@ -282,8 +286,10 @@ export async function planAssistantAction(params: {
           '{ "action": "<tool_name>", "rationale": "<why>", "route": null, "weather": null, "news": null, "calendar": null, "music": null, "browser": null, "subagent": null, "list": null }',
           "",
           "For list.manage, populate the list field:",
-          '{ "action": "list.manage", "rationale": "...", "list": { "action": "add", "listName": "Grocery", "itemContent": "bread", "newName": null, "time": null }, ... }',
+          '{ "action": "list.manage", "rationale": "...", "list": { "action": "add", "listName": "Grocery", "itemContent": "bread", "newName": null, "time": null, "location": null }, ... }',
           "list.action can be: create, add, remove, clear, list, rename, update, remind",
+          "For list.action 'remind', you can provide 'time' for time-based reminders or 'location' for location-based reminders (e.g. 'store', 'work').",
+          "Example location reminder: { \"action\": \"remind\", \"listName\": \"Grocery\", \"itemContent\": \"milk\", \"location\": \"store\" }",
           "",
           "For calendar.create_event, populate the calendar field:",
           '{ "action": "calendar.create_event", "rationale": "...", "calendar": { "title": "...", "startDescription": "...", "endDescription": "..." }, ... }',
@@ -353,16 +359,37 @@ export async function planAssistantAction(params: {
   }
 }
 
-async function geocodeAddress(address: string) {
-  const result = await makeRequest<GeocodingResult>("/maps/api/geocode/json", {
-    address,
-  });
+async function freeGeocodeAddress(address: string) {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(address)}&count=1&language=en&format=json`;
+  const resp = await fetch(url);
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const result = data.results?.[0];
+  if (!result) return null;
+  return {
+    formatted_address: result.name + (result.admin1 ? `, ${result.admin1}` : "") + `, ${result.country}`,
+    geometry: {
+      location: { lat: result.latitude, lng: result.longitude }
+    }
+  };
+}
 
-  if (result.status !== "OK" || !result.results[0]) {
-    throw new Error(`Could not geocode address: ${address}`);
+async function geocodeAddress(address: string) {
+  try {
+    const result = await makeRequest<GeocodingResult>("/maps/api/geocode/json", {
+      address,
+    });
+    if (result.status === "OK" && result.results[0]) {
+      return result.results[0];
+    }
+  } catch (err) {
+    console.warn("[Weather] Google Geocoding failed, trying Open-Meteo fallback:", err);
   }
 
-  return result.results[0];
+  const fallback = await freeGeocodeAddress(address);
+  if (fallback) return fallback;
+
+  throw new Error(`Could not geocode address: ${address}`);
 }
 
 async function resolveCalendarDetails(params: {
@@ -803,7 +830,8 @@ async function executeCalendarCreateAction(
 }
 
 async function executeListAction(plan: AssistantActionPlan, options: { userId: number, timeZone?: string | null }): Promise<AssistantActionResult> {
-  const { action, listName, itemContent, newName, time } = plan.list ?? {};
+  const { action, listName, itemContent, newName, time, location: locationTrigger } = plan.list ?? {};
+  console.log(`[DEBUG] executeListAction: userId=${options.userId}, action=${action}, listName=${listName}, itemContent=${itemContent}`);
 
   if (!action || !listName) {
     return {
@@ -817,7 +845,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
   const { 
     listUserLists, createList, addListItem, deleteListItem, 
     deleteList, getListItems, updateList, updateListItem 
-  } = await import("./db.js");
+  } = await import("./db");
   
   const allLists = await listUserLists(options.userId);
   
@@ -957,34 +985,50 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
         };
       }
       case "remind": {
-        if (!targetList || !itemContent || !time) {
-          return { action: "list.manage", status: "needs_input", title: "Time needed", summary: `When should I remind you about '${itemContent}' on your ${listName} list?` };
+        if (!targetList || !itemContent) {
+          return { action: "list.manage", status: "needs_input", title: "Item needed", summary: `Which item on your ${listName} list should I set a reminder for?` };
         }
+        
         const items = await getListItems(options.userId, targetList.id);
         const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
         if (!item) {
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
         }
 
-        const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar.js");
-        const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
-        
-        if (!resolvedTime) {
-          return { action: "list.manage", status: "failed", title: "Time resolution failed", summary: `I couldn't understand the time '${time}'. Could you be more specific?` };
+        const { setListItemReminder, setListItemLocationTrigger } = await import("./db");
+
+        if (locationTrigger) {
+          await setListItemLocationTrigger(options.userId, item.id, locationTrigger);
+          return {
+            action: "list.manage",
+            status: "executed",
+            title: "Location Reminder Set",
+            summary: `Got it. I'll remind you to '${item.content}' when you're at the ${locationTrigger}.`,
+            data: { itemId: item.id, content: item.content, listName, locationTrigger },
+          };
         }
 
-        const { setListItemReminder } = await import("./db.js");
-        await setListItemReminder(options.userId, item.id, new Date(resolvedTime));
+        if (time) {
+          const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar");
+          const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
+          
+          if (!resolvedTime) {
+            return { action: "list.manage", status: "failed", title: "Time resolution failed", summary: `I couldn't understand the time '${time}'. Could you be more specific?` };
+          }
 
-        const timeStr = new Date(resolvedTime).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+          await setListItemReminder(options.userId, item.id, new Date(resolvedTime));
+          const timeStr = new Date(resolvedTime).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-        return {
-          action: "list.manage",
-          status: "executed",
-          title: "Reminder Set",
-          summary: `Done! I'll remind you to '${item.content}' on ${timeStr}.`,
-          data: { itemId: item.id, content: item.content, listName, reminderAt: resolvedTime },
-        };
+          return {
+            action: "list.manage",
+            status: "executed",
+            title: "Reminder Set",
+            summary: `Done! I'll remind you to '${item.content}' on ${timeStr}.`,
+            data: { itemId: item.id, content: item.content, listName, reminderAt: resolvedTime },
+          };
+        }
+
+        return { action: "list.manage", status: "needs_input", title: "Trigger needed", summary: `When or where should I remind you about '${itemContent}'?` };
       }
       default:
         throw new Error("Invalid list action");
@@ -1002,7 +1046,7 @@ async function executeMusicAction(
   const targetType = plan.music?.targetType || "track";
 
   try {
-    const { searchAndPlaySpotify } = await import("./_core/spotify.js");
+    const { searchAndPlaySpotify } = await import("./_core/spotify");
     const result = await searchAndPlaySpotify({
       userId: options.userId,
       query,

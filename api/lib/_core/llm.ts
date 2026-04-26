@@ -1,4 +1,4 @@
-import { ENV } from "./env.js";
+import { ENV } from "./env";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -30,6 +30,7 @@ export type Message = {
   content: MessageContent | MessageContent[];
   name?: string;
   tool_call_id?: string;
+  tool_calls?: ToolCall[];
 };
 
 export type Tool = {
@@ -137,7 +138,7 @@ const normalizeContentPart = (
 };
 
 const normalizeMessage = (message: Message) => {
-  const { role, name, tool_call_id } = message;
+  const { role, name, tool_call_id, tool_calls } = message;
 
   if (role === "tool" || role === "function") {
     const content = ensureArray(message.content)
@@ -156,18 +157,22 @@ const normalizeMessage = (message: Message) => {
 
   // If there's only text content, collapse to a single string for compatibility
   if (contentParts.length === 1 && contentParts[0].type === "text") {
-    return {
+    const result: Record<string, unknown> = {
       role,
       name,
       content: contentParts[0].text,
     };
+    if (tool_calls && tool_calls.length > 0) result.tool_calls = tool_calls;
+    return result;
   }
 
-  return {
+  const result: Record<string, unknown> = {
     role,
     name,
     content: contentParts,
   };
+  if (tool_calls && tool_calls.length > 0) result.tool_calls = tool_calls;
+  return result;
 };
 
 const normalizeToolChoice = (
@@ -210,8 +215,7 @@ const normalizeToolChoice = (
 };
 
 const resolveApiUrl = () => {
-  if (ENV.deepSeekApiKey) return "https://api.deepseek.com/v1/chat/completions";
-  if (ENV.moonshotApiKey) return "https://api.moonshot.ai/v1/chat/completions";
+  if (process.env.DEEPSEEK_API_KEY) return "https://api.deepseek.com/v1/chat/completions";
   return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
@@ -269,12 +273,27 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  const hasDeepSeek = ENV.deepSeekApiKey && ENV.deepSeekApiKey.trim().length > 0;
-  const hasMoonshot = ENV.moonshotApiKey && ENV.moonshotApiKey.trim().length > 0;
+  const hasDeepSeek = process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY.trim().length > 0;
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   // --- Creative Mock Fallback ---
-  // Simulation Mode Removed as requested. proceeding to real API calls.
+  if (!hasDeepSeek && !hasForge) {
+    console.warn("[Flow Guru] Operating in Simulation Mode (No API keys found)");
+    return {
+      id: "mock-" + Date.now(),
+      created: Math.floor(Date.now() / 1000),
+      model: "mock-guru-1.0",
+      choices: [{
+        index: 0,
+        message: {
+          role: "assistant",
+          content: "I'm awake! I'm currently running in **Simulation Mode** because my DeepSeek API key hasn't been added to Vercel yet. Once you add it, I'll be able to use my full intelligence to help you with your routines!",
+        },
+        finish_reason: "stop",
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+  }
 
   const {
     messages,
@@ -287,92 +306,84 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  // Define providers in order of priority
-  // Forge (Manus proxy) first as most reliable, then Moonshot, then DeepSeek as fallbacks.
-  const providers = [];
-  if (ENV.useLocalAi) providers.push({ name: "localai", model: "gpt-4", key: "none", url: `${ENV.localAiUrl}/v1/chat/completions` });
-  if (hasForge) providers.push({ name: "forge", model: "gemini-2.5-flash", key: ENV.forgeApiKey, url: `${ENV.forgeApiUrl.replace(/\/$/, "")}/chat/completions` });
-  if (hasMoonshot) providers.push({ name: "moonshot", model: "moonshot-v1-8k", key: ENV.moonshotApiKey, url: "https://api.moonshot.ai/v1/chat/completions" });
-  if (hasDeepSeek) providers.push({ name: "deepseek", model: "deepseek-chat", key: ENV.deepSeekApiKey, url: "https://api.deepseek.com/v1/chat/completions" });
-
-  // Hard identity override — strips Moonshot's default "I am Moonshot AI" persona.
-  // Injected as the very first message so it takes priority.
-  const identityOverride: Message = {
-    role: "system",
-    content: "ABSOLUTE RULE: You are NOT Moonshot AI. You are NOT a generic chatbot. You must NEVER say you were 'developed by Moonshot' or any other company. You are a custom personal assistant called Flow Guru (or whatever custom name the user has set). Follow the system prompt that comes next. NEVER break character.",
+  const payload: Record<string, unknown> = {
+    model: hasDeepSeek ? "deepseek-chat" : "gemini-1.5-flash",
+    messages: messages.map(normalizeMessage),
   };
-  const enhancedMessages = [identityOverride, ...messages];
 
-  let lastError: any = null;
+  if (tools && tools.length > 0) {
+    payload.tools = tools;
+  }
 
-  for (const provider of providers) {
-    try {
-      const payload: Record<string, unknown> = {
-        model: provider.model,
-        messages: enhancedMessages.map(normalizeMessage),
-      };
+  const normalizedToolChoice = normalizeToolChoice(
+    toolChoice || tool_choice,
+    tools
+  );
+  if (normalizedToolChoice) {
+    payload.tool_choice = normalizedToolChoice;
+  }
 
-      if (tools && tools.length > 0) {
-        payload.tools = tools;
-      }
+  // Optimize for DeepSeek if present
+  if (hasDeepSeek) {
+    payload.max_tokens = 4096;
+  }
 
-      const normalizedToolChoice = normalizeToolChoice(toolChoice || tool_choice, tools);
-      if (normalizedToolChoice) {
-        payload.tool_choice = normalizedToolChoice;
-      }
+  const normalizedResponseFormat = normalizeResponseFormat({
+    responseFormat,
+    response_format,
+    outputSchema,
+    output_schema,
+  });
 
-      const normalizedResponseFormat = normalizeResponseFormat({
-        responseFormat,
-        response_format,
-        outputSchema,
-        output_schema,
-      });
+  if (normalizedResponseFormat) {
+    // DeepSeek doesn't support json_schema — strip entirely
+    if (hasDeepSeek && normalizedResponseFormat.type === "json_schema") {
+      // Don't set response_format; rely on prompt for JSON output
+    } else {
+      payload.response_format = normalizedResponseFormat;
+    }
+  }
 
-      if (normalizedResponseFormat) {
-        // DeepSeek doesn't support json_schema — strip response_format entirely and rely on prompt
-        if (provider.name === "deepseek" && normalizedResponseFormat.type === "json_schema") {
-          // Don't set response_format at all; DeepSeek will follow the JSON instruction in the prompt
-        } else if (provider.name === "forge" && normalizedResponseFormat.type === "json_schema") {
-          // Forge (Manus/Gemini proxy) supports json_schema natively — pass it through
-          payload.response_format = normalizedResponseFormat;
-        } else {
-          payload.response_format = normalizedResponseFormat;
-        }
-      }
+  const apiUrl = resolveApiUrl();
+  const apiKey = process.env.DEEPSEEK_API_KEY || ENV.forgeApiKey;
 
-      const response = await fetch(provider.url, {
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[Flow Guru] LLM API failed (${response.status}):`, errorText.slice(0, 300));
+
+    // If json_schema was rejected, retry WITHOUT response_format
+    if (normalizedResponseFormat && response.status === 400) {
+      console.warn("[Flow Guru] Retrying LLM call without response_format...");
+      delete payload.response_format;
+      
+      const retryResponse = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${provider.key}`,
+          authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
-        return (await response.json()) as InvokeResult;
+      if (retryResponse.ok) {
+        return (await retryResponse.json()) as InvokeResult;
       }
-
-      const errorText = await response.text();
-      lastError = new Error(`LLM API error ${response.status} from ${provider.name}: ${errorText.slice(0, 200)}`);
       
-      // Only log loudly when we've exhausted all providers
-      if (providers.indexOf(provider) < providers.length - 1) {
-        // Silent fallback — don't spam logs with expected provider failures
-        continue;
-      }
-
-      // No more providers — throw so the caller can handle it properly
-      throw lastError;
-    } catch (err) {
-      lastError = err;
-      // Only log loudly if this is the LAST provider
-      if (providers.indexOf(provider) >= providers.length - 1) {
-        console.error(`[Flow Guru] All LLM providers exhausted. Last error (${provider.name}):`, err);
-      }
+      const retryError = await retryResponse.text();
+      throw new Error(`LLM API retry also failed (${retryResponse.status}): ${retryError.slice(0, 200)}`);
     }
+
+    throw new Error(`LLM API failed (${response.status}): ${errorText.slice(0, 200)}`);
   }
 
-  // If we get here, all providers failed with exceptions
-  throw lastError ?? new Error("All LLM providers failed with no error details.");
-}
+  return (await response.json()) as InvokeResult;
+}

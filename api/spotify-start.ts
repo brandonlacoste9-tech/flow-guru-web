@@ -1,16 +1,16 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ENV } from "./lib/_core/env.js";
 import { sdk } from "./lib/_core/sdk.js";
-import { buildSpotifyOAuthState } from "./lib/_core/spotify.js";
+import { buildSpotifyOAuthState, getSpotifyCallbackUrl } from "./lib/_core/spotify.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const user = await sdk.authenticateRequest(req);
+  const user = await sdk.authenticateRequest(req as any);
   if (!user) {
     return res.status(401).send("Authentication required");
   }
 
   const clientId = ENV.spotifyClientId;
-  const redirectUri = `${ENV.oAuthServerUrl}/api/integrations/spotify/callback`;
+  const redirectUri = getSpotifyCallbackUrl(req as any);
   
   if (!clientId) {
     return res.status(500).send("Spotify Client ID not configured");

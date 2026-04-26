@@ -205,7 +205,8 @@ export async function buildBriefingData(params: {
     ],
   });
 
-  const script = response.choices[0]?.message.content?.trim() || 
+  const contentRaw = response.choices[0]?.message.content;
+  const script = (typeof contentRaw === "string" ? contentRaw.trim() : "") || 
     `${greeting}, ${params.userName}. Weather is ${weather?.label || "clear"}. You have ${events.length} events and some list items. Have a great day!`;
 
   return { script, weather, events, lists, greeting };

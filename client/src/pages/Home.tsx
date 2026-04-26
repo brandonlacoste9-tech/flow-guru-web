@@ -95,7 +95,7 @@ export default function Home() {
   // Load wake-up time and alarm sound from profile for reminders
   const utils = trpc.useUtils();
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
-  const memoryFactsQuery = trpc.assistant.getMemoryFacts.useQuery(undefined, { enabled: !!user });
+
   useEffect(() => {
     const data = profileQuery.data as any;
     if (!data) return;
@@ -397,9 +397,10 @@ export default function Home() {
         
         let prompt = `Good morning, ${data.userName}! I'm ${data.assistantName}, and I've got your briefing ready. `;
         if (w) {
-          const temp = Math.round(w.current?.temperatureC || w.tempC || 0);
-          const label = w.current?.weatherLabel || w.label || 'fair';
-          prompt += `It's currently ${temp}°C and ${label} in ${w.location || w.locationName || 'your area'}. `;
+          const weatherAny = w as any;
+          const temp = Math.round(weatherAny.current?.temperatureC || weatherAny.tempC || 0);
+          const label = weatherAny.current?.weatherLabel || weatherAny.label || 'fair';
+          prompt += `It's currently ${temp}°C and ${label} in ${weatherAny.location || weatherAny.locationName || 'your area'}. `;
         }
         
         if (calCount > 0) {

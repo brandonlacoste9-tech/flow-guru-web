@@ -20,7 +20,7 @@ export async function sendPushNotification(userId: number, payload: { title: str
   
   if (subs.length === 0) return;
 
-  const promises = subs.map(async (sub: any) => {
+  const promises = subs.map(async (sub) => {
     try {
       const pushSubscription = {
         endpoint: sub.endpoint,

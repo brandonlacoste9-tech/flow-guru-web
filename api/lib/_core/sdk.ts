@@ -1,19 +1,19 @@
-import { AXIOS_TIMEOUT_MS, COOKIE_NAME, ONE_YEAR_MS } from "../shared/const.js";
-import { ForbiddenError } from "../shared/_core/errors.js";
+import { AXIOS_TIMEOUT_MS, COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { ForbiddenError } from "@shared/_core/errors";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
-import type { VercelRequest } from "@vercel/node";
+import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
-import type { User } from "../drizzle/schema.js";
-import * as db from "../db.js";
-import { ENV } from "./env.js";
+import type { User } from "../../api/lib/drizzle/schema";
+import * as db from "../db";
+import { ENV } from "./env";
 import type {
   ExchangeTokenRequest,
   ExchangeTokenResponse,
   GetUserInfoResponse,
   GetUserInfoWithJwtRequest,
   GetUserInfoWithJwtResponse,
-} from "./types/manusTypes.js";
+} from "./types/manusTypes";
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
@@ -256,7 +256,7 @@ class SDKServer {
     } as GetUserInfoWithJwtResponse;
   }
 
-  async authenticateRequest(req: VercelRequest): Promise<User> {
+  async authenticateRequest(req: Request): Promise<User> {
     // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);

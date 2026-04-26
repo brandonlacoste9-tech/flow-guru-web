@@ -1,4 +1,4 @@
-import type { VercelRequest } from "@vercel/node";
+import type { CookieOptions, Request } from "express";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -8,9 +8,8 @@ function isIpAddress(host: string) {
   return host.includes(":");
 }
 
-function isSecureRequest(req: VercelRequest) {
-  const protocol = (req as any).protocol;
-  if (protocol === "https") return true;
+function isSecureRequest(req: Request) {
+  if (req.protocol === "https") return true;
 
   const forwardedProto = req.headers["x-forwarded-proto"];
   if (!forwardedProto) return false;
@@ -19,43 +18,31 @@ function isSecureRequest(req: VercelRequest) {
     ? forwardedProto
     : forwardedProto.split(",");
 
-  return protoList.some((proto: string) => proto.trim().toLowerCase() === "https");
-}
-
-function extractHostname(req: VercelRequest): string | undefined {
-  const host = (req as any).hostname
-    || (req.headers?.["x-forwarded-host"] as string)?.split(",")[0]?.trim()
-    || (req.headers?.host as string)?.split(":")[0];
-  return host || undefined;
+  return protoList.some(proto => proto.trim().toLowerCase() === "https");
 }
 
 export function getSessionCookieOptions(
-  req: VercelRequest
-): any {
-  const hostname = extractHostname(req);
-  const isLocal =
-    !hostname ||
-    LOCAL_HOSTS.has(hostname) ||
-    isIpAddress(hostname);
+  req: Request
+): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
+  // const hostname = req.hostname;
+  // const shouldSetDomain =
+  //   hostname &&
+  //   !LOCAL_HOSTS.has(hostname) &&
+  //   !isIpAddress(hostname) &&
+  //   hostname !== "127.0.0.1" &&
+  //   hostname !== "::1";
 
-  const secure = isSecureRequest(req);
-
-  // For production domains, set domain to apex with leading dot
-  // so sessions survive www↔apex and future subdomains.
-  let domain: string | undefined;
-  if (!isLocal && hostname) {
-    // Extract apex domain (e.g. "floguru.com" from "www.floguru.com" or "flow-guru-web.vercel.app")
-    const parts = hostname.split(".");
-    if (parts.length >= 2) {
-      domain = `.${parts.slice(-2).join(".")}`;
-    }
-  }
+  // const domain =
+  //   shouldSetDomain && !hostname.startsWith(".")
+  //     ? `.${hostname}`
+  //     : shouldSetDomain
+  //       ? hostname
+  //       : undefined;
 
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "lax" as const,
-    secure,
-    ...(domain ? { domain } : {}),
+    sameSite: "none",
+    secure: isSecureRequest(req),
   };
 }
