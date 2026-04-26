@@ -359,16 +359,37 @@ export async function planAssistantAction(params: {
   }
 }
 
-async function geocodeAddress(address: string) {
-  const result = await makeRequest<GeocodingResult>("/maps/api/geocode/json", {
-    address,
-  });
+async function freeGeocodeAddress(address: string) {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(address)}&count=1&language=en&format=json`;
+  const resp = await fetch(url);
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const result = data.results?.[0];
+  if (!result) return null;
+  return {
+    formatted_address: result.name + (result.admin1 ? `, ${result.admin1}` : "") + `, ${result.country}`,
+    geometry: {
+      location: { lat: result.latitude, lng: result.longitude }
+    }
+  };
+}
 
-  if (result.status !== "OK" || !result.results[0]) {
-    throw new Error(`Could not geocode address: ${address}`);
+async function geocodeAddress(address: string) {
+  try {
+    const result = await makeRequest<GeocodingResult>("/maps/api/geocode/json", {
+      address,
+    });
+    if (result.status === "OK" && result.results[0]) {
+      return result.results[0];
+    }
+  } catch (err) {
+    console.warn("[Weather] Google Geocoding failed, trying Open-Meteo fallback:", err);
   }
 
-  return result.results[0];
+  const fallback = await freeGeocodeAddress(address);
+  if (fallback) return fallback;
+
+  throw new Error(`Could not geocode address: ${address}`);
 }
 
 async function resolveCalendarDetails(params: {
