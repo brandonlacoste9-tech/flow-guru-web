@@ -603,10 +603,11 @@ export const appRouter = router({
         if (!userLocation) return null;
         try {
           const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather", language: input.language ?? 'en' });
-          const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
-          if (result.status === "executed" && result.data?.current) {
-            const c = result.data.current as any;
-            return { tempC: c.temperatureC, feelsLikeC: c.apparentTemperatureC, label: c.weatherLabel, locationName: result.data.location as string };
+          const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: input.language ?? 'en' });
+          if (result.status === "executed" && result.data) {
+            const data = result.data as Record<string, any>;
+            const c = data.current as any;
+            if (c) return { tempC: c.temperatureC, feelsLikeC: c.apparentTemperatureC, label: c.weatherLabel, locationName: data.location as string };
           }
         } catch (e) {
           console.error("[Flow Guru] Weather bootstrap failed:", e);
@@ -820,8 +821,8 @@ export const appRouter = router({
       } catch (error) {
         console.error("[Flow Guru] SYSTEM FAILURE IN SEND:", error);
         actionResult = {
-          action: "none",
-          status: "failed",
+          action: "none" as const,
+          status: "failed" as const,
           title: "Action unavailable",
           summary: "I hit a snag while trying to carry that out, so I'll respond conversationally instead.",
         };
@@ -997,8 +998,8 @@ export const appRouter = router({
         if (userLocation) {
           try {
             const { planAssistantAction, executeAssistantAction } = await import("./assistantActions.js");
-            const plan = await planAssistantAction({ userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
-            const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
+            const plan = await planAssistantAction({ userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
+            const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
             if (result.status === "executed") weather = result.data;
           } catch {}
         }
