@@ -138,39 +138,25 @@ function toJsonSchemaEnum<T extends readonly string[]>(values: T) {
   return [...values];
 }
 
-function weatherCodeToLabel(code: number | null | undefined) {
-  const labels: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mostly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Fog",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    56: "Freezing drizzle",
-    57: "Dense freezing drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    66: "Light freezing rain",
-    67: "Heavy freezing rain",
-    71: "Slight snow",
-    73: "Moderate snow",
-    75: "Heavy snow",
-    77: "Snow grains",
-    80: "Rain showers",
-    81: "Moderate rain showers",
-    82: "Violent rain showers",
-    85: "Snow showers",
-    86: "Heavy snow showers",
-    95: "Thunderstorm",
-    96: "Thunderstorm with hail",
-    99: "Severe thunderstorm with hail",
+function weatherCodeToLabel(code: number | null | undefined, language: 'en' | 'fr' = 'en') {
+  const enLabels: Record<number, string> = {
+    0: "Clear sky", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Depositing rime fog",
+    51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle", 56: "Freezing drizzle", 57: "Dense freezing drizzle",
+    61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain", 66: "Light freezing rain", 67: "Heavy freezing rain",
+    71: "Slight snow", 73: "Moderate snow", 75: "Heavy snow", 77: "Snow grains", 80: "Rain showers",
+    81: "Moderate rain showers", 82: "Violent rain showers", 85: "Snow showers", 86: "Heavy snow showers",
+    95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Severe thunderstorm with hail",
   };
-
-  return labels[code ?? -1] ?? "Unspecified conditions";
+  const frLabels: Record<number, string> = {
+    0: "Ciel dégagé", 1: "Principalement dégagé", 2: "Partiellement nuageux", 3: "Couvert", 45: "Brouillard", 48: "Brouillard givrant",
+    51: "Bruine légère", 53: "Bruine modérée", 55: "Bruine dense", 56: "Bruine verglaçante", 57: "Bruine verglaçante dense",
+    61: "Pluie légère", 63: "Pluie modérée", 65: "Forte pluie", 66: "Pluie verglaçante légère", 67: "Forte pluie verglaçante",
+    71: "Neige légère", 73: "Neige modérée", 75: "Forte neige", 77: "Grains de neige", 80: "Averses de pluie",
+    81: "Averses de pluie modérées", 82: "Violentes averses de pluie", 85: "Averses de neige", 86: "Fortes averses de neige",
+    95: "Orage", 96: "Orage avec grêle", 99: "Fort orage avec grêle",
+  };
+  const labels = language === 'fr' ? frLabels : enLabels;
+  return labels[code ?? -1] ?? (language === 'fr' ? "Conditions non spécifiées" : "Unspecified conditions");
 }
 
 type ActuallyRelevantStory = {
@@ -519,7 +505,8 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
   };
 }
 
-async function executeWeatherAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
+async function executeWeatherAction(plan: AssistantActionPlan, options?: { language?: 'en' | 'fr' }): Promise<AssistantActionResult> {
+  const language = options?.language ?? 'en';
   const location = normalizeText(plan.weather?.location);
   const timeframe = plan.weather?.timeframe ?? "current";
 
@@ -557,8 +544,8 @@ async function executeWeatherAction(plan: AssistantActionPlan): Promise<Assistan
     status: "executed",
     title: `Weather for ${geocode.formatted_address}`,
     summary: current
-      ? `${weatherCodeToLabel(current.weather_code)} and ${current.temperature_2m}°C right now, feeling like ${current.apparent_temperature}°C.`
-      : "The latest conditions are available.",
+      ? `${weatherCodeToLabel(current.weather_code, language)} and ${current.temperature_2m}°C right now, feeling like ${current.apparent_temperature}°C.`
+      : (language === 'fr' ? "Les conditions actuelles sont disponibles." : "The latest conditions are available."),
     provider: "open-meteo",
     data: {
       location: geocode.formatted_address,
@@ -568,7 +555,7 @@ async function executeWeatherAction(plan: AssistantActionPlan): Promise<Assistan
             time: current.time ?? null,
             temperatureC: current.temperature_2m ?? null,
             apparentTemperatureC: current.apparent_temperature ?? null,
-            weatherLabel: weatherCodeToLabel(current.weather_code),
+            weatherLabel: weatherCodeToLabel(current.weather_code, language),
             windSpeedKph: current.wind_speed_10m ?? null,
           }
         : null,
@@ -576,7 +563,7 @@ async function executeWeatherAction(plan: AssistantActionPlan): Promise<Assistan
         daily && daily.time?.[todayIndex]
           ? {
               date: daily.time[todayIndex],
-              weatherLabel: weatherCodeToLabel(daily.weather_code?.[todayIndex]),
+              weatherLabel: weatherCodeToLabel(daily.weather_code?.[todayIndex], language),
               temperatureMaxC: daily.temperature_2m_max?.[todayIndex] ?? null,
               temperatureMinC: daily.temperature_2m_min?.[todayIndex] ?? null,
               precipitationProbabilityMax: daily.precipitation_probability_max?.[todayIndex] ?? null,
@@ -1082,8 +1069,8 @@ async function executeMusicAction(
 
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
-  options: { userId: number; userName?: string | null; message: string; memoryContext: string; timeZone?: string | null; }
-): Promise<AssistantActionResult> {
+  options: { userId: number; userName?: string | null; message: string; memoryContext: string; timeZone?: string | null; language?: 'en' | 'fr'; }
+) {
   console.log(`[Assistant Action] Executing: ${plan.action}`, plan);
 
   try {
@@ -1097,7 +1084,7 @@ export async function executeAssistantAction(
       case "route.get":
         return await executeRouteAction(plan);
       case "weather.get":
-        return await executeWeatherAction(plan);
+        return await executeWeatherAction(plan, options as any);
       case "news.get":
         return await executeNewsAction(plan, options as any);
       case "music.play":

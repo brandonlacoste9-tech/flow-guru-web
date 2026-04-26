@@ -315,9 +315,9 @@ export default function Home() {
   };
 
   const formatEventTime = (iso: string | null, allDay: boolean) => {
-    if (allDay || !iso) return "All day";
+    if (allDay || !iso) return t('calendar_all_day');
     try {
-      return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      return new Date(iso).toLocaleTimeString(language === 'en' ? 'en-US' : 'fr-FR', { hour: "numeric", minute: "2-digit", hour12: language === 'en' });
     } catch { return ""; }
   };
 
@@ -384,43 +384,47 @@ export default function Home() {
     teal: 'bg-stone-500',    // Slate leather
   };
 
-  const greeting = currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening";
+  const greeting = language === 'en'
+    ? (currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening")
+    : (currentTime.getHours() < 12 ? "Bonjour" : currentTime.getHours() < 17 ? "Bon après-midi" : "Bonsoir");
   const userName = user?.name?.split(' ')[0] || "Brandon";
 
   // AI reminders — checks calendar events and wake-up time every minute
   const handleBriefing = async () => {
     toast.promise(utils.assistant.getBriefing.fetch(), {
-      loading: 'Gathering your morning briefing...',
+      loading: t('briefing_loading'),
       success: (data) => {
         const calCount = data.calendar.length;
         const listCount = data.lists.reduce((acc, l) => acc + l.items.length, 0);
         const w = data.weather;
         
-        let prompt = `Good morning, ${data.userName}! I'm ${data.assistantName}, and I've got your briefing ready. `;
+        let prompt = (language === 'en' ? `Good morning, ${data.userName}! I'm ${data.assistantName}, and I've got your briefing ready. ` : `Bonjour, ${data.userName} ! Je suis ${data.assistantName}, et j'ai préparé votre briefing. `);
+        
         if (w) {
           const weatherAny = w as any;
           const temp = Math.round(weatherAny.current?.temperatureC || weatherAny.tempC || 0);
-          const label = weatherAny.current?.weatherLabel || weatherAny.label || 'fair';
-          prompt += `It's currently ${temp}°C and ${label} in ${weatherAny.location || weatherAny.locationName || 'your area'}. `;
+          const label = weatherAny.current?.weatherLabel || weatherAny.label || (language === 'en' ? 'fair' : 'beau');
+          const loc = weatherAny.location || weatherAny.locationName || (language === 'en' ? 'your area' : 'votre région');
+          prompt += t('briefing_weather').replace('{temp}', temp.toString()).replace('{label}', label).replace('{location}', loc) + ' ';
         }
         
         if (calCount > 0) {
-          prompt += `You have ${calCount} event${calCount > 1 ? 's' : ''} on your calendar today. `;
+          prompt += t('briefing_events').replace('{count}', calCount.toString()).replace('{s}', calCount > 1 ? 's' : '') + ' ';
         } else {
-          prompt += `Your calendar is clear for today. `;
+          prompt += t('briefing_clear') + ' ';
         }
         
         if (listCount > 0) {
-          prompt += `Don't forget, you also have ${listCount} item${listCount > 1 ? 's' : ''} across your lists that need attention. `;
+          prompt += t('briefing_tasks').replace('{count}', listCount.toString()).replace('{s}', listCount > 1 ? 's' : '') + ' ';
         }
         
-        prompt += `How can I help you get started?`;
+        prompt += t('briefing_start');
         
         speakText(prompt);
         setMessages(prev => [...prev, { id: Date.now(), role: 'assistant', content: prompt }]);
-        return 'Briefing complete!';
+        return t('briefing_success');
       },
-      error: 'Failed to generate briefing.',
+      error: t('briefing_error'),
     });
   };
 

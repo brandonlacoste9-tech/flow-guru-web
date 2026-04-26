@@ -8,11 +8,13 @@ import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc-client";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { useLanguage } from "@/contexts/LanguageContext";
 
-const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const WEEKDAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// These are fallbacks if t() is not available, but we will use dynamic t() calls below
+const WEEKDAYS_SHORT_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS_FULL_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MONTHS_SHORT_EN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 // ─── Calendar Theme Palettes ──────────────────────────────────────────────────
 // Each theme defines CSS variables injected on the calendar root.
@@ -250,6 +252,7 @@ function useCalendarTheme() {
   return { theme, themeId, applyTheme };
 }
 
+
 // ─── Event Colors (Leather Palette) ──────────────────────────────────────────
 // IDs kept the same so existing saved events don't lose their color
 const EVENT_COLORS = [
@@ -335,7 +338,7 @@ const blankForm = (day: Date): EventForm => {
 };
 
 // ─── Theme Palette Picker ─────────────────────────────────────────────────────
-function ThemePicker({ themeId, onSelect }: { themeId: CalendarThemeId; onSelect: (id: CalendarThemeId) => void }) {
+function ThemePicker({ themeId, onSelect, t }: { themeId: CalendarThemeId; onSelect: (id: CalendarThemeId) => void; t: any }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -373,7 +376,7 @@ function ThemePicker({ themeId, onSelect }: { themeId: CalendarThemeId; onSelect
             }}
           >
             <p className="text-xs font-bold uppercase tracking-widest mb-2.5 px-1" style={{ color: "var(--cal-text-muted)" }}>
-              Calendar Theme
+              {t('calendar_color')}
             </p>
             <div className="grid grid-cols-4 gap-1.5">
               {CALENDAR_THEMES.map(t => (
@@ -397,7 +400,7 @@ function ThemePicker({ themeId, onSelect }: { themeId: CalendarThemeId; onSelect
             </div>
             <div className="mt-2 pt-2 border-t" style={{ borderColor: "var(--cal-border)" }}>
               <p className="text-xs text-center" style={{ color: "var(--cal-text-muted)" }}>
-                Current: <span className="font-semibold" style={{ color: "var(--cal-text)" }}>{current.label}</span>
+                {t('music_playing')}: <span className="font-semibold" style={{ color: "var(--cal-text)" }}>{current.label}</span>
               </p>
             </div>
           </motion.div>
@@ -408,9 +411,9 @@ function ThemePicker({ themeId, onSelect }: { themeId: CalendarThemeId; onSelect
 }
 
 // ─── Mini Calendar (sidebar) ──────────────────────────────────────────────────
-function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, events }: {
+function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, events, t }: {
   viewDate: Date; selectedDay: Date; onSelectDay: (d: Date) => void;
-  onChangeMonth: (d: Date) => void; events: any[];
+  onChangeMonth: (d: Date) => void; events: any[]; t: any;
 }) {
   const today = new Date();
   const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
@@ -429,7 +432,7 @@ function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, event
   return (
     <div className="p-3 select-none">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold" style={{ color: "var(--cal-text)" }}>{MONTHS_SHORT[viewDate.getMonth()]} {viewDate.getFullYear()}</span>
+        <span className="text-sm font-semibold" style={{ color: "var(--cal-text)" }}>{t(`month_${viewDate.getMonth()}` as any)} {viewDate.getFullYear()}</span>
         <div className="flex gap-1">
           <button onClick={() => onChangeMonth(new Date(viewDate.getFullYear(), viewDate.getMonth()-1,1))}
             className="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--cal-cell-today)]"
@@ -444,8 +447,8 @@ function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, event
         </div>
       </div>
       <div className="grid grid-cols-7 mb-1">
-        {WEEKDAYS_SHORT.map(d => (
-          <div key={d} className="text-center text-xs font-bold py-0.5" style={{ color: "var(--cal-text-muted)" }}>{d[0]}</div>
+        {[0,1,2,3,4,5,6].map(d => (
+          <div key={d} className="text-center text-xs font-bold py-0.5" style={{ color: "var(--cal-text-muted)" }}>{t(`weekday_${d}` as any)[0]}</div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-px">
@@ -474,11 +477,13 @@ function MiniCalendar({ viewDate, selectedDay, onSelectDay, onChangeMonth, event
 }
 
 // ─── Event Detail Popover (with inline editing) ───────────────────────────────
-function EventPopover({ event, onClose, onDelete, onUpdated }: {
+function EventPopover({ event, onClose, onDelete, onUpdated, t, language }: {
   event: any;
   onClose: () => void;
   onDelete: (id: number) => void;
   onUpdated: () => void;
+  t: any;
+  language: string;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(event.title ?? "");
@@ -490,15 +495,15 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
   const [editAllDay, setEditAllDay] = useState(!!event.allDay);
 
   const updateMutation = trpc.calendar.update.useMutation({
-    onSuccess: () => { toast.success("Event updated"); onUpdated(); onClose(); },
-    onError: () => toast.error("Couldn't update event"),
+    onSuccess: () => { toast.success(t('calendar_toast_updated')); onUpdated(); onClose(); },
+    onError: () => toast.error(t('calendar_toast_error')),
   });
 
   const color = getColor(isEditing ? editColor : event.color);
   const isDark = false; // Calendar uses fixed leather colors, not dark mode
 
   const handleSave = () => {
-    if (!editTitle.trim()) { toast.error("Title is required"); return; }
+    if (!editTitle.trim()) { toast.error(t('calendar_placeholder_title')); return; }
     updateMutation.mutate({
       id: event.id,
       title: editTitle.trim(),
@@ -533,7 +538,7 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                 autoFocus
                 className="flex-1 text-lg font-bold bg-transparent border-0 border-b-2 outline-none pb-1 placeholder:opacity-40"
                 style={{ borderColor: "var(--cal-accent)", color: "var(--cal-text)" }}
-                placeholder="Event title"
+                placeholder={t('calendar_placeholder_title')}
               />
             ) : (
               <h3 className="text-lg font-bold leading-tight flex-1" style={{ color: "var(--cal-text)" }}>{event.title}</h3>
@@ -582,13 +587,13 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
               {!event.allDay && (
                 <div className="flex items-center gap-3 text-sm" style={{ color: "var(--cal-text-muted)" }}>
                   <Clock size={14} className="shrink-0" style={{ color: "var(--cal-accent)" }}/>
-                  <span>{new Date(event.startAt).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} · {formatTime(new Date(event.startAt))} – {formatTime(new Date(event.endAt))}</span>
+                  <span>{new Date(event.startAt).toLocaleDateString(language === 'en' ? 'en-US' : 'fr-FR',{weekday:"long",month:"long",day:"numeric"})} · {formatTime(new Date(event.startAt))} – {formatTime(new Date(event.endAt))}</span>
                 </div>
               )}
               {event.allDay === 1 && (
                 <div className="flex items-center gap-3 text-sm" style={{ color: "var(--cal-text-muted)" }}>
                   <CalendarIcon size={14} className="shrink-0" style={{ color: "var(--cal-accent)" }}/>
-                  <span>{new Date(event.startAt).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} · All day</span>
+                  <span>{new Date(event.startAt).toLocaleDateString(language === 'en' ? 'en-US' : 'fr-FR',{weekday:"long",month:"long",day:"numeric"})} · {t('calendar_all_day')}</span>
                 </div>
               )}
               {event.location && (
@@ -616,7 +621,7 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                   style={{ backgroundColor: editAllDay ? "var(--cal-accent)" : "var(--cal-cell-today)" }}>
                   <span className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all", editAllDay ? "left-4" : "left-0.5")}/>
                 </button>
-                <span className="text-sm" style={{ color: "var(--cal-text-muted)" }}>All day</span>
+                <span className="text-sm" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_all_day')}</span>
               </div>
 
               {/* Date/time */}
@@ -629,7 +634,7 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                       style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>End</label>
+                    <label className="text-xs font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_end')}</label>
                     <input type="datetime-local" value={editEndAt} onChange={e => setEditEndAt(e.target.value)}
                       className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2"
                       style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
@@ -637,7 +642,7 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                 </div>
               ) : (
                 <div>
-                  <label className="text-xs font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Date</label>
+                  <label className="text-xs font-semibold mb-1 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_date')}</label>
                   <input type="date" value={editStartAt.split("T")[0]} onChange={e => { setEditStartAt(e.target.value+"T09:00"); setEditEndAt(e.target.value+"T10:00"); }}
                     className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none"
                     style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
@@ -649,7 +654,7 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                 style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
                 <MapPin size={13} style={{ color: "var(--cal-text-muted)" }} className="shrink-0"/>
                 <input value={editLocation} onChange={e => setEditLocation(e.target.value)}
-                  placeholder="Add location"
+                  placeholder={t('calendar_placeholder_location')}
                   className="flex-1 bg-transparent text-sm outline-none placeholder:opacity-40"
                   style={{ color: "var(--cal-text)" }}/>
               </div>
@@ -659,14 +664,14 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                 style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
                 <AlignLeft size={13} style={{ color: "var(--cal-text-muted)" }} className="shrink-0 mt-0.5"/>
                 <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)}
-                  placeholder="Add description" rows={2}
+                  placeholder={t('calendar_placeholder_description')} rows={2}
                   className="flex-1 bg-transparent text-sm outline-none resize-none placeholder:opacity-40"
                   style={{ color: "var(--cal-text)" }}/>
               </div>
 
               {/* Color picker */}
               <div>
-                <label className="text-xs font-semibold mb-2 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>Color</label>
+                <label className="text-xs font-semibold mb-2 block uppercase tracking-wide" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_color')}</label>
                 <div className="flex gap-2 flex-wrap">
                   {EVENT_COLORS.map(c => (
                     <button key={c.id} type="button" onClick={() => setEditColor(c.id)}
@@ -682,12 +687,12 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
                 <button type="button" onClick={() => setIsEditing(false)}
                   className="flex-1 py-2 rounded-xl text-sm font-semibold transition-colors hover:opacity-80"
                   style={{ border: "1px solid var(--cal-border)", color: "var(--cal-text)", background: "transparent" }}>
-                  Cancel
+                  {t('calendar_cancel')}
                 </button>
                 <button type="button" onClick={handleSave} disabled={updateMutation.isPending}
                   className="flex-1 py-2 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-50 hover:opacity-90"
                   style={{ background: "var(--cal-accent)", color: "var(--cal-accent-fg)" }}>
-                  {updateMutation.isPending ? "Saving…" : "Save changes"}
+                  {updateMutation.isPending ? t('calendar_saving') : t('calendar_save')}
                 </button>
               </div>
             </div>
@@ -699,9 +704,9 @@ function EventPopover({ event, onClose, onDelete, onUpdated }: {
 }
 
 // ─── New Event Modal ──────────────────────────────────────────────────────────
-function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
+function NewEventModal({ form, setForm, onSubmit, onClose, isPending, t }: {
   form: EventForm; setForm: (f: EventForm) => void;
-  onSubmit: (e: React.FormEvent) => void; onClose: () => void; isPending: boolean;
+  onSubmit: (e: React.FormEvent) => void; onClose: () => void; isPending: boolean; t: any;
 }) {
   const titleRef = useRef<HTMLInputElement>(null);
   useEffect(() => { setTimeout(() => titleRef.current?.focus(), 50); }, []);
@@ -719,7 +724,7 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
         <div className={cn("h-1.5 w-full transition-colors", color.bg)} />
         <div className="p-6">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-bold" style={{ color: "var(--cal-text)" }}>New event</h2>
+            <h2 className="text-lg font-bold" style={{ color: "var(--cal-text)" }}>{t('calendar_new_event')}</h2>
             <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--cal-cell-today)]"
               style={{ color: "var(--cal-text-muted)" }}><X size={15}/></button>
           </div>
@@ -727,7 +732,7 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
           <form onSubmit={onSubmit} className="space-y-4">
             {/* Title */}
             <input ref={titleRef} value={form.title} onChange={e => setForm({...form, title: e.target.value})}
-              placeholder="Add title" required
+              placeholder={t('calendar_placeholder_title')} required
               className="w-full text-xl font-semibold bg-transparent border-0 border-b-2 outline-none pb-2 placeholder:opacity-40 transition-colors"
               style={{ borderColor: "var(--cal-border)", color: "var(--cal-text)" }}
               onFocus={e => (e.target as HTMLElement).style.borderColor = "var(--cal-accent)"}
@@ -740,20 +745,20 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
                 style={{ backgroundColor: form.allDay ? "var(--cal-accent)" : "var(--cal-cell-today)" }}>
                 <span className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all", form.allDay ? "left-5" : "left-0.5")}/>
               </button>
-              <span className="text-sm" style={{ color: "var(--cal-text-muted)" }}>All day</span>
+              <span className="text-sm" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_all_day')}</span>
             </div>
 
             {/* Date/time */}
             {!form.allDay ? (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>Start</label>
+                  <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_start')}</label>
                   <input type="datetime-local" value={form.startAt} onChange={e => setForm({...form, startAt: e.target.value})}
                     className="w-full rounded-lg px-3 py-2 text-sm outline-none"
                     style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
                 </div>
                 <div>
-                  <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>End</label>
+                  <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_end')}</label>
                   <input type="datetime-local" value={form.endAt} onChange={e => setForm({...form, endAt: e.target.value})}
                     className="w-full rounded-lg px-3 py-2 text-sm outline-none"
                     style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
@@ -761,7 +766,7 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
               </div>
             ) : (
               <div>
-                <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>Date</label>
+                <label className="text-xs mb-1 block" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_date')}</label>
                 <input type="date" value={form.startAt.split("T")[0]} onChange={e => setForm({...form, startAt: e.target.value+"T09:00", endAt: e.target.value+"T10:00"})}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none"
                   style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
@@ -773,7 +778,7 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
               style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
               <MapPin size={14} style={{ color: "var(--cal-text-muted)" }} className="shrink-0"/>
               <input value={form.location} onChange={e => setForm({...form, location: e.target.value})}
-                placeholder="Add location" className="flex-1 bg-transparent text-sm outline-none placeholder:opacity-40"
+                placeholder={t('calendar_placeholder_location')} className="flex-1 bg-transparent text-sm outline-none placeholder:opacity-40"
                 style={{ color: "var(--cal-text)" }}/>
             </div>
 
@@ -782,24 +787,27 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
               style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
               <AlignLeft size={14} style={{ color: "var(--cal-text-muted)" }} className="shrink-0 mt-0.5"/>
               <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})}
-                placeholder="Add description" rows={2}
+                placeholder={t('calendar_placeholder_description')} rows={2}
                 className="flex-1 bg-transparent text-sm outline-none resize-none placeholder:opacity-40"
                 style={{ color: "var(--cal-text)" }}/>
             </div>
 
             {/* Recurrence */}
-            <div className="flex items-center gap-2 rounded-lg px-3 py-2"
-              style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
-              <RefreshCw size={14} style={{ color: "var(--cal-text-muted)" }} className="shrink-0"/>
-              <select value={form.recurrence} onChange={e => setForm({...form, recurrence: e.target.value as RecurrenceType})}
-                className="flex-1 bg-transparent text-sm outline-none" style={{ color: "var(--cal-text)" }}>
-                <option value="none">Does not repeat</option>
-                <option value="daily">Every day</option>
-                <option value="weekdays">Every weekday (Mon–Fri)</option>
-                <option value="weekly">Every week</option>
-                <option value="monthly">Every month</option>
-                <option value="yearly">Every year</option>
-              </select>
+            <div>
+              <label className="text-xs mb-2 block" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_recurrence')}</label>
+              <div className="flex items-center gap-2 rounded-lg px-3 py-2"
+                style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)" }}>
+                <RefreshCw size={14} style={{ color: "var(--cal-text-muted)" }} className="shrink-0"/>
+                <select value={form.recurrence} onChange={e => setForm({...form, recurrence: e.target.value as RecurrenceType})}
+                  className="flex-1 bg-transparent text-sm outline-none" style={{ color: "var(--cal-text)" }}>
+                  <option value="none">{t('calendar_recurrence_none')}</option>
+                  <option value="daily">{t('calendar_recurrence_daily')}</option>
+                  <option value="weekdays">{t('calendar_recurrence_weekdays')}</option>
+                  <option value="weekly">{t('calendar_recurrence_weekly')}</option>
+                  <option value="monthly">{t('calendar_recurrence_monthly')}</option>
+                  <option value="yearly">{t('calendar_recurrence_yearly')}</option>
+                </select>
+              </div>
             </div>
 
             {/* Reminder */}
@@ -824,7 +832,7 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
 
             {/* Color picker */}
             <div>
-              <label className="text-xs mb-2 block" style={{ color: "var(--cal-text-muted)" }}>Color</label>
+              <label className="text-xs mb-2 block" style={{ color: "var(--cal-text-muted)" }}>{t('calendar_color')}</label>
               <div className="flex gap-2 flex-wrap">
                 {EVENT_COLORS.map(c => (
                   <button key={c.id} type="button" onClick={() => setForm({...form, color: c.id})}
@@ -836,16 +844,16 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-3 pt-2">
               <button type="button" onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors hover:opacity-80"
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-80"
                 style={{ border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}>
-                Cancel
+                {t('calendar_cancel')}
               </button>
               <button type="submit" disabled={isPending}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-50 hover:opacity-90"
                 style={{ background: "var(--cal-accent)", color: "var(--cal-accent-fg)" }}>
-                {isPending ? "Saving…" : "Save"}
+                {isPending ? t('calendar_saving') : t('calendar_save')}
               </button>
             </div>
           </form>
@@ -856,9 +864,10 @@ function NewEventModal({ form, setForm, onSubmit, onClose, isPending }: {
 }
 
 // ─── Month View ───────────────────────────────────────────────────────────────
-function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, themeId }: {
+function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, themeId, t }: {
   viewDate: Date; selectedDay: Date; events: any[];
   onDayClick: (d: Date) => void; onEventClick: (e: any) => void; themeId: CalendarThemeId;
+  t: any;
 }) {
   const today = new Date();
   const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
@@ -876,11 +885,11 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, th
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Weekday headers */}
       <div className="grid grid-cols-7" style={{ borderBottom: "1px solid var(--cal-border)", background: "var(--cal-header-bg)" }}>
-        {WEEKDAYS_SHORT.map(d => (
+        {[0,1,2,3,4,5,6].map(d => (
           <div key={d} className="py-2 sm:py-2.5 text-center text-[10px] sm:text-sm font-bold uppercase tracking-wider"
             style={{ color: "var(--cal-text-muted)" }}>
-            <span className="hidden sm:inline">{d}</span>
-            <span className="sm:hidden">{d[0]}</span>
+            <span className="hidden sm:inline">{t(`weekday_${d}` as any)}</span>
+            <span className="sm:hidden">{t(`weekday_${d}` as any)[0]}</span>
           </div>
         ))}
       </div>
@@ -932,7 +941,7 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, th
                 ))}
                 {dayEvents.length > 3 && (
                   <div className="text-[10px] pl-1 font-semibold" style={{ color: "var(--cal-text-muted)" }}>
-                    +{dayEvents.length - 3} more
+                    +{dayEvents.length - 3}
                   </div>
                 )}
               </div>
@@ -952,8 +961,9 @@ function MonthView({ viewDate, selectedDay, events, onDayClick, onEventClick, th
 }
 
 // ─── Week View ────────────────────────────────────────────────────────────────
-function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
+function WeekView({ viewDate, events, onEventClick, onSlotClick, t }: {
   viewDate: Date; events: any[]; onEventClick: (e: any) => void; onSlotClick: (d: Date) => void;
+  t: any;
 }) {
   const today = new Date();
   const startOfWeek = new Date(viewDate);
@@ -980,8 +990,8 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
           return (
             <div key={i} className="py-1.5 sm:py-2 text-center">
               <div className="text-[10px] sm:text-sm font-bold uppercase" style={{ color: "var(--cal-text-muted)" }}>
-                <span className="sm:hidden">{WEEKDAYS_SHORT[d.getDay()][0]}</span>
-                <span className="hidden sm:inline">{WEEKDAYS_SHORT[d.getDay()]}</span>
+                <span className="sm:hidden">{t(`weekday_${d.getDay()}` as any)[0]}</span>
+                <span className="hidden sm:inline">{t(`weekday_${d.getDay()}` as any).slice(0,3)}</span>
               </div>
               <div className="w-7 h-7 sm:w-9 sm:h-9 mx-auto mt-0.5 flex items-center justify-center rounded-full text-sm sm:text-base font-bold"
                 style={{
@@ -1032,8 +1042,9 @@ function WeekView({ viewDate, events, onEventClick, onSlotClick }: {
 }
 
 // ─── Day View ─────────────────────────────────────────────────────────────────
-function DayView({ viewDate, events, onEventClick, onSlotClick }: {
+function DayView({ viewDate, events, onEventClick, onSlotClick, t, language }: {
   viewDate: Date; events: any[]; onEventClick: (e: any) => void; onSlotClick: (d: Date) => void;
+  t: any; language: string;
 }) {
   const today = new Date();
   const isToday = isSameDay(viewDate, today);
@@ -1059,8 +1070,8 @@ function DayView({ viewDate, events, onEventClick, onSlotClick }: {
           {viewDate.getDate()}
         </div>
         <div>
-          <div className="font-semibold" style={{ color: "var(--cal-text)" }}>{WEEKDAYS_FULL[viewDate.getDay()]}</div>
-          <div className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}</div>
+          <div className="font-semibold" style={{ color: "var(--cal-text)" }}>{t(`weekday_${viewDate.getDay()}` as any)}</div>
+          <div className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{t(`month_${viewDate.getMonth()}` as any)} {viewDate.getFullYear()}</div>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -1267,7 +1278,7 @@ export default function Calendar() {
         <button onClick={goToToday}
           className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors hover:bg-[var(--cal-cell-today)] shrink-0"
           style={{ border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}>
-          Today
+          {t('card_calendar_today')}
         </button>
 
         {/* Prev / Next */}
@@ -1286,7 +1297,7 @@ export default function Calendar() {
           {showSearch && (
             <motion.input initial={{ width: 0, opacity: 0 }} animate={{ width: window.innerWidth < 640 ? 100 : 180, opacity: 1 }}
               value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search…" autoFocus
+              placeholder="..." autoFocus
               className="rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm outline-none"
               style={{ background: "var(--cal-cell-today)", border: "1px solid var(--cal-border)", color: "var(--cal-text)" }}/>
           )}
@@ -1299,7 +1310,7 @@ export default function Calendar() {
 
         {/* Theme picker */}
         <div className="shrink-0">
-          <ThemePicker themeId={themeId} onSelect={applyTheme}/>
+          <ThemePicker themeId={themeId} onSelect={applyTheme} t={t}/>
         </div>
 
         {/* View mode toggle */}
@@ -1312,7 +1323,7 @@ export default function Calendar() {
                 color: viewMode === v ? "var(--cal-text)" : "var(--cal-text-muted)",
                 boxShadow: viewMode === v ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
               }}>
-              {v}
+              {t(`calendar_view_${v}` as any)}
             </button>
           ))}
         </div>
@@ -1321,7 +1332,7 @@ export default function Calendar() {
         <button onClick={() => { setForm(blankForm(selectedDay)); setShowForm(true); }}
           className="flex items-center justify-center w-8 h-8 sm:w-auto sm:px-3.5 sm:py-2 rounded-full text-sm font-semibold transition-opacity hover:opacity-90 shrink-0 shadow-sm"
           style={{ background: "var(--cal-accent)", color: "var(--cal-accent-fg)" }}>
-          <Plus size={14}/><span className="hidden sm:inline ml-1.5">New</span>
+          <Plus size={14}/><span className="hidden sm:inline ml-1.5">{t('calendar_save')}</span>
         </button>
       </header>
 
@@ -1336,10 +1347,11 @@ export default function Calendar() {
             onSelectDay={d => { handleDayClick(d); if (viewMode !== "month") setViewMode("day"); }}
             onChangeMonth={d => setViewDate(d)}
             events={events}
+            t={t}
           />
           {/* Upcoming events */}
           <div className="px-3 pb-3 mt-2">
-            <p className="text-xs font-bold uppercase tracking-widest mb-2 px-1" style={{ color: "var(--cal-text-muted)" }}>Upcoming</p>
+            <p className="text-xs font-bold uppercase tracking-widest mb-2 px-1" style={{ color: "var(--cal-text-muted)" }}>{language === 'en' ? 'Upcoming' : 'À venir'}</p>
             {events
               .filter(e => new Date(e.startAt) >= new Date())
               .sort((a,b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
@@ -1352,13 +1364,13 @@ export default function Calendar() {
                     <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", color.dot)}/>
                     <div className="min-w-0">
                       <p className="text-xs font-medium truncate" style={{ color: "var(--cal-text)" }}>{e.title}</p>
-                      <p className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{new Date(e.startAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</p>
+                      <p className="text-xs" style={{ color: "var(--cal-text-muted)" }}>{new Date(e.startAt).toLocaleDateString(language === 'en' ? 'en-US' : 'fr-FR',{month:"short",day:"numeric"})}</p>
                     </div>
                   </button>
                 );
               })}
             {events.filter(e => new Date(e.startAt) >= new Date()).length === 0 && (
-              <p className="text-xs px-1" style={{ color: "var(--cal-text-muted)" }}>No upcoming events</p>
+              <p className="text-xs px-1" style={{ color: "var(--cal-text-muted)" }}>{language === 'en' ? 'No upcoming events' : 'Aucun événement à venir'}</p>
             )}
           </div>
         </aside>
@@ -1371,15 +1383,15 @@ export default function Calendar() {
               transition={{ duration: 0.15 }}>
               {viewMode === "month" && (
                 <MonthView viewDate={viewDate} selectedDay={selectedDay} events={filteredEvents}
-                  onDayClick={handleDayClick} onEventClick={setSelectedEvent} themeId={themeId}/>
+                  onDayClick={handleDayClick} onEventClick={setSelectedEvent} themeId={themeId} t={t}/>
               )}
               {viewMode === "week" && (
                 <WeekView viewDate={viewDate} events={filteredEvents}
-                  onEventClick={setSelectedEvent} onSlotClick={handleSlotClick}/>
+                  onEventClick={setSelectedEvent} onSlotClick={handleSlotClick} t={t}/>
               )}
               {viewMode === "day" && (
                 <DayView viewDate={viewDate} events={filteredEvents}
-                  onEventClick={setSelectedEvent} onSlotClick={handleSlotClick}/>
+                  onEventClick={setSelectedEvent} onSlotClick={handleSlotClick} t={t} language={language}/>
               )}
             </motion.div>
           </AnimatePresence>
@@ -1390,7 +1402,7 @@ export default function Calendar() {
       <AnimatePresence>
         {showForm && (
           <NewEventModal form={form} setForm={setForm} onSubmit={handleSubmit}
-            onClose={() => setShowForm(false)} isPending={createMutation.isPending}/>
+            onClose={() => setShowForm(false)} isPending={createMutation.isPending} t={t}/>
         )}
         {selectedEvent && (
           <EventPopover
@@ -1398,6 +1410,8 @@ export default function Calendar() {
             onClose={() => setSelectedEvent(null)}
             onDelete={id => deleteMutation.mutate({ id })}
             onUpdated={() => eventsQuery.refetch()}
+            t={t}
+            language={language}
           />
         )}
       </AnimatePresence>

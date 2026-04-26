@@ -739,14 +739,14 @@ export const appRouter = router({
 
       // --- Name change detection (fast path, before planner) ---
       const nameChangeMatch = input.message.match(
-        /(?:call\s+(?:you|yourself)|your\s+name\s+is|rename\s+(?:you|yourself)\s+(?:to)?|I(?:'ll| will)\s+call\s+you)\s+["']?([A-Za-z][A-Za-z0-9 ]{0,29})["']?/i
+        /(?:call\s+(?:you|yourself)|your\s+name\s+is|rename\s+(?:you|yourself)\s+(?:to)?|I(?:'ll| will)\s+call\s+you|appelle-moi|ton\s+nom\s+est|nomme-toi|je\s+t'appellerai)\s+["']?([A-Za-z][A-Za-z0-9 ]{0,29})["']?/i
       );
       if (nameChangeMatch) {
         const newName = nameChangeMatch[1].trim();
         await createUserMemoryFacts(userId, [
           { category: "preference", factKey: "assistant_name", factValue: newName, confidence: 100 },
         ]);
-        const reply = `Got it! From now on I'm ${newName} 😊`;
+        const reply = input.language === 'fr' ? `C'est noté ! Désormais, je m'appelle ${newName} 😊` : `Got it! From now on I'm ${newName} 😊`;
         await createConversationMessage({ threadId, userId, role: "assistant", content: reply });
         await touchConversationThread(threadId);
         const messages = await listConversationMessages(threadId);
@@ -815,6 +815,7 @@ export const appRouter = router({
           message: input.message,
           memoryContext,
           timeZone: input.timeZone ?? null,
+          language: input.language ?? 'en',
         });
       } catch (error) {
         console.error("[Flow Guru] SYSTEM FAILURE IN SEND:", error);

@@ -10,16 +10,12 @@ import {
   parseGoogleOAuthState,
 } from "./googleCalendar.js";
 import {
-  buildSpotifyOAuthState,
-  connectSpotify,
-  getSpotifyCallbackUrl,
-  parseSpotifyOAuthState,
-  SPOTIFY_SCOPES,
-} from "./spotify.js";
+  parseGoogleOAuthState,
+} from "./googleCalendar.js";
 
-type SupportedProvider = "google-calendar" | "spotify";
+type SupportedProvider = "google-calendar";
 
-const PROVIDERS: SupportedProvider[] = ["google-calendar", "spotify"];
+const PROVIDERS: SupportedProvider[] = ["google-calendar"];
 
 function isSupportedProvider(value: string): value is SupportedProvider {
   return PROVIDERS.includes(value as SupportedProvider);
@@ -39,9 +35,9 @@ function getProviderConfig(provider: SupportedProvider) {
   }
 
   return {
-    configured: Boolean(ENV.spotifyClientId && ENV.spotifyClientSecret),
-    label: "Spotify",
-    scopes: SPOTIFY_SCOPES,
+    configured: false,
+    label: "Unknown",
+    scopes: [],
   };
 }
 
@@ -144,26 +140,6 @@ export function registerProviderConnectionRoutes(app: Express) {
       return;
     }
 
-    if (providerParam === "spotify") {
-      await upsertProviderConnection({
-        userId: user.id,
-        provider: providerParam,
-        status: "pending",
-        lastError: null,
-      });
-
-      const redirectUri = getSpotifyCallbackUrl(vReq as any);
-      const authUrl = new URL("https://accounts.spotify.com/authorize");
-      authUrl.searchParams.set("client_id", ENV.spotifyClientId);
-      authUrl.searchParams.set("response_type", "code");
-      authUrl.searchParams.set("redirect_uri", redirectUri);
-      authUrl.searchParams.set("scope", config.scopes.join(" "));
-      authUrl.searchParams.set("state", buildSpotifyOAuthState(user.id));
-
-      vRes.redirect(authUrl.toString());
-      return;
-    }
-
     vRes.status(501).json({ error: "Provider not fully implemented." } as any);
   });
 
@@ -210,41 +186,6 @@ export function registerProviderConnectionRoutes(app: Express) {
           lastError: message,
         });
         vRes.redirect(`/?integration=google-calendar&status=error&message=${encodeURIComponent(message)}`);
-        return;
-      }
-    }
-
-    if (providerParam === "spotify") {
-      const code = typeof vReq.query.code === "string" ? vReq.query.code : null;
-      const state = typeof vReq.query.state === "string" ? vReq.query.state : null;
-      if (!code || !state) {
-        vRes.status(400).json({ error: "Spotify callback requires code and state." } as any);
-        return;
-      }
-
-      try {
-        const parsedState = parseSpotifyOAuthState(state);
-        if (parsedState.userId !== user.id) {
-          throw new Error("Spotify OAuth state did not match the authenticated user.");
-        }
-
-        const result = await connectSpotify({
-          userId: user.id,
-          code,
-          redirectUri: getSpotifyCallbackUrl(vReq as any),
-        });
-
-        vRes.redirect(`/?integration=spotify&status=connected&account=${encodeURIComponent(result.externalAccountLabel)}`);
-        return;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Spotify connection failed.";
-        await upsertProviderConnection({
-          userId: user.id,
-          provider: "spotify",
-          status: "error",
-          lastError: message,
-        });
-        vRes.redirect(`/?integration=spotify&status=error&message=${encodeURIComponent(message)}`);
         return;
       }
     }

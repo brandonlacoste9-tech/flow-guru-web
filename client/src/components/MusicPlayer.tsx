@@ -17,7 +17,7 @@ const STATIONS: { id: StationId; label: string; desc: string; urls: string[] }[]
   {
     id: "focus",
     label: "Focus",
-    desc: "Groove Salad · ambient & downtempo",
+    desc: "music_focus_desc",
     urls: [
       "https://ice1.somafm.com/groovesalad-128-mp3",
       "https://ice2.somafm.com/groovesalad-128-mp3",
@@ -27,7 +27,7 @@ const STATIONS: { id: StationId; label: string; desc: string; urls: string[] }[]
   {
     id: "chill",
     label: "Chill",
-    desc: "Lush · soft & quiet",
+    desc: "music_chill_desc",
     urls: [
       "https://ice1.somafm.com/lush-128-mp3",
       "https://ice2.somafm.com/lush-128-mp3",
@@ -37,7 +37,7 @@ const STATIONS: { id: StationId; label: string; desc: string; urls: string[] }[]
   {
     id: "energy",
     label: "Energy",
-    desc: "Beat Blender · mid-tempo electronic",
+    desc: "music_energy_desc",
     urls: [
       "https://ice1.somafm.com/beatblender-128-mp3",
       "https://ice2.somafm.com/beatblender-128-mp3",
@@ -47,7 +47,7 @@ const STATIONS: { id: StationId; label: string; desc: string; urls: string[] }[]
   {
     id: "sleep",
     label: "Sleep",
-    desc: "Sleep Bot · slow ambient",
+    desc: "music_sleep_desc",
     urls: [
       "https://ice1.somafm.com/sleepbot-192-mp3",
       "https://ice2.somafm.com/sleepbot-192-mp3",
@@ -57,7 +57,7 @@ const STATIONS: { id: StationId; label: string; desc: string; urls: string[] }[]
   {
     id: "space",
     label: "Space",
-    desc: "Deep Space One · space ambient",
+    desc: "music_space_desc",
     urls: [
       "https://ice1.somafm.com/deepspaceone-128-mp3",
       "https://ice2.somafm.com/deepspaceone-128-mp3",
@@ -235,7 +235,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
 
         <div className="flex-1 min-w-0">
           <p className="text-foreground text-[14px] font-semibold leading-tight">{station.label}</p>
-          <p className="text-muted-foreground text-[10px] sm:text-[11px] truncate">{station.desc}</p>
+          <p className="text-muted-foreground text-[10px] sm:text-[11px] truncate">{t(station.desc as any)}</p>
         </div>
 
         <AnimatePresence>

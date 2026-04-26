@@ -5,9 +5,11 @@ import { useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function Lists() {
   const [, navigate] = useLocation();
+  const { t } = useLanguage();
   const [selectedListId, setSelectedListId] = useState<number | null>(null);
   const [newListName, setNewListName] = useState('');
   const [newItemContent, setNewItemContent] = useState('');
@@ -32,9 +34,9 @@ export default function Lists() {
       utils.list.all.invalidate();
       setNewListName('');
       setIsAddingList(false);
-      toast.success('List created');
+      toast.success(t('lists_toast_created'));
     },
-    onError: (err) => toast.error(err.message || 'Failed to create list')
+    onError: (err) => toast.error(err.message || t('calendar_toast_error'))
   });
 
   const addItemMutation = trpc.list.addItem.useMutation({
@@ -42,7 +44,7 @@ export default function Lists() {
       utils.list.items.invalidate({ listId: selectedListId! });
       setNewItemContent('');
     },
-    onError: (err) => toast.error(err.message || 'Failed to add item')
+    onError: (err) => toast.error(err.message || t('calendar_toast_error'))
   });
 
   const toggleItemMutation = trpc.list.toggleItem.useMutation({
@@ -61,7 +63,7 @@ export default function Lists() {
     onSuccess: () => {
       utils.list.all.invalidate();
       setSelectedListId(null);
-      toast.success('List deleted');
+      toast.success(t('lists_toast_deleted'));
     }
   });
 
@@ -69,7 +71,7 @@ export default function Lists() {
     onSuccess: () => {
       utils.list.all.invalidate();
       setEditingListId(null);
-      toast.success('List renamed');
+      toast.success(t('lists_toast_renamed'));
     }
   });
 
@@ -152,7 +154,7 @@ export default function Lists() {
             </form>
           ) : (
             <h1 className="text-xl font-bold tracking-tight flex items-center gap-2 group">
-              {selectedListId ? selectedList?.name : "Your Lists"}
+              {selectedListId ? selectedList?.name : t('lists_main_title')}
               {selectedListId && (
                 <button 
                   onClick={(e) => startEditingList(e, selectedList)}
@@ -164,7 +166,7 @@ export default function Lists() {
               )}
             </h1>
           )}
-          {!selectedListId && <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Collections</p>}
+          {!selectedListId && <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">{t('lists_collections')}</p>}
         </div>
         {!selectedListId && (
           <button 
@@ -198,22 +200,21 @@ export default function Lists() {
                         autoFocus
                         value={newListName}
                         onChange={(e) => setNewListName(e.target.value)}
-                        placeholder="List name (e.g. Groceries)"
+                        placeholder={t('lists_placeholder_name')}
                         className="w-full bg-transparent text-center text-lg font-bold placeholder:text-muted-foreground/40 focus:outline-none"
                       />
                       <div className="flex gap-2 justify-center">
-                        <button 
-                          type="button"
+                        <button                           type="button"
                           onClick={() => setIsAddingList(false)}
                           className="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest text-muted-foreground hover:bg-accent/10"
                         >
-                          Cancel
+                          {t('lists_cancel')}
                         </button>
                         <button 
                           type="submit"
                           className="px-6 py-2 rounded-full bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest shadow-lg shadow-primary/10"
                         >
-                          Create
+                          {t('lists_create')}
                         </button>
                       </div>
                     </form>
@@ -227,10 +228,10 @@ export default function Lists() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
                     onClick={() => setSelectedListId(list.id)}
-                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-6 shadow-lg group hover:border-primary/30 transition-all cursor-pointer relative overflow-hidden"
+                    className="bg-card backdrop-blur-xl border border-border rounded-3xl p-6 shadow-lg group hover:border-primary/30 transition-all cursor-pointer relative overflow-hidden hover:shadow-[0_0_30px_-5px_rgba(181,101,29,0.3)] dark:hover:shadow-[0_0_40px_-10px_rgba(245,158,11,0.2)]"
                     style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
                   >
-                    <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all" />
+                    <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/20 transition-all" />
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                         <ListTodo size={20} />
@@ -260,7 +261,7 @@ export default function Lists() {
                         <p className="text-xs text-muted-foreground font-medium">{new Date(list.createdAt).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-primary">View list →</p>
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-primary">{t('card_calendar_open')} →</p>
                   </motion.div>
                 ))}
 
@@ -269,8 +270,8 @@ export default function Lists() {
                     <div className="w-20 h-20 rounded-full bg-accent/5 flex items-center justify-center mx-auto mb-4">
                       <ListTodo size={32} className="text-muted-foreground/30" />
                     </div>
-                    <h3 className="text-lg font-bold text-muted-foreground/60">No lists yet</h3>
-                    <p className="text-sm text-muted-foreground/40 mt-1">Create your first collection to stay organized.</p>
+                    <h3 className="text-lg font-bold text-muted-foreground/60">{t('lists_empty_title')}</h3>
+                    <p className="text-sm text-muted-foreground/40 mt-1">{t('lists_empty_desc')}</p>
                   </div>
                 )}
               </motion.div>
@@ -286,11 +287,11 @@ export default function Lists() {
                 <div className="flex items-center justify-between px-2">
                   <div className="flex items-center gap-2">
                     <Sparkles size={14} className="text-primary" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Manage List</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t('lists_manage')}</span>
                   </div>
                   <button 
                     onClick={() => {
-                      if (confirm(`Delete the entire "${selectedList?.name}" list?`)) {
+                      if (confirm(t('lists_delete_confirm').replace('{name}', selectedList?.name || ''))) {
                         deleteListMutation.mutate({ listId: selectedListId });
                       }
                     }}
@@ -308,7 +309,7 @@ export default function Lists() {
                       autoFocus
                       value={newItemContent}
                       onChange={(e) => setNewItemContent(e.target.value)}
-                      placeholder="Add an item..."
+                      placeholder={t('lists_placeholder_item')}
                       className="flex-1 bg-transparent text-[15px] focus:outline-none placeholder:text-muted-foreground/40"
                     />
                     <button 
@@ -370,7 +371,7 @@ export default function Lists() {
                               {item.reminderAt && !item.completed && (
                                 <div className="flex items-center gap-1 text-[10px] text-primary font-bold uppercase tracking-wider mt-0.5">
                                   <Sparkles size={10} />
-                                  <span>Reminding: {new Date(item.reminderAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                                  <span>{t('calendar_reminder')}: {new Date(item.reminderAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                                 </div>
                               )}
                               {(item as any).locationTrigger && !item.completed && (
@@ -403,7 +404,7 @@ export default function Lists() {
                   
                   {listItems.data?.length === 0 && (
                     <div className="py-12 text-center">
-                      <p className="text-sm text-muted-foreground/40 italic">This list is empty. Add something above!</p>
+                      <p className="text-sm text-muted-foreground/40 italic">{t('lists_item_empty')}</p>
                     </div>
                   )}
                 </div>

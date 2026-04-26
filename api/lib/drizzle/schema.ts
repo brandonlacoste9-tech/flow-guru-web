@@ -4,7 +4,7 @@ import { pgTable, serial, text, varchar, timestamp, pgEnum, integer, index, bigi
 export const roleEnum = pgEnum("fg_role", ["user", "admin"]);
 export const memoryCategoryEnum = pgEnum("fg_memory_category", ["wake_up_time", "daily_routine", "preference", "recurring_event", "general"]);
 export const roleMessageEnum = pgEnum("fg_message_role", ["system", "user", "assistant"]);
-export const providerTypeEnum = pgEnum("fg_provider_type", ["google-calendar", "spotify"]);
+export const providerTypeEnum = pgEnum("fg_provider_type", ["google-calendar"]);
 export const connectionStatusEnum = pgEnum("fg_connection_status", ["not_connected", "pending", "connected", "error"]);
 
 export const users = pgTable("fg_users", {

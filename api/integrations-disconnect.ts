@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Expected: ["", "api", "integrations", "<provider>", "disconnect"]
     const provider = parts[3] ?? (req.body as any)?.provider;
 
-    if (!provider || !["google-calendar", "spotify"].includes(provider)) {
+    if (!provider || !["google-calendar"].includes(provider)) {
       return res.status(400).json({ error: "Invalid provider" });
     }
 
