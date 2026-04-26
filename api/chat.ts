@@ -1,7 +1,7 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { streamText, tool, convertToModelMessages, stepCountIs, type UIMessage } from 'ai';
 import { z } from 'zod';
-import { and, eq, ilike, desc } from 'drizzle-orm';
+import { and, eq, ilike, desc, sql } from 'drizzle-orm';
 import { db } from './lib/db.js';
 import { userFacts } from './lib/drizzle/schema.js';
 
