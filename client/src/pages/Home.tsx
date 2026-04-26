@@ -180,10 +180,11 @@ export default function Home() {
     if (data.thread) setCurrentThreadId(data.thread.id);
     if (data.assistantName) setAssistantName(data.assistantName);
     if (data.weather) {
-      setWeather(data.weather);
-      // Geocode the location so the forecast modal can use lat/lon
-      if (data.weather.location && !coords) {
-        const locName = (data.weather as any).location || (data.weather as any).locationName;
+      const w = data.weather as any;
+      setWeather(w);
+      // Geocode location name so the forecast modal has lat/lon
+      if (!coords) {
+        const locName = w.locationName || w.location || null;
         if (locName) {
           fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locName)}&count=1&language=en&format=json`)
             .then(r => r.json())
@@ -671,7 +672,27 @@ export default function Home() {
                   {/* Weather Card */}
                   <motion.div 
                     className="bg-card backdrop-blur-xl border border-border rounded-3xl p-4 sm:p-5 shadow-lg relative overflow-hidden group hover:border-primary/30 transition-colors cursor-pointer leather-glow" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E')", backgroundBlendMode: "overlay" }}
-                    onClick={() => weather && coords && setShowForecast(true)}
+                    onClick={() => {
+                      if (!weather) return;
+                      if (coords) {
+                        setShowForecast(true);
+                      } else {
+                        // Try to geocode on-demand from location name
+                        const locName = (weather as any).locationName || (weather as any).location;
+                        if (locName) {
+                          fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locName)}&count=1&language=en&format=json`)
+                            .then(r => r.json())
+                            .then(gd => {
+                              const res = gd.results?.[0];
+                              if (res) {
+                                setCoords({ lat: res.latitude, lon: res.longitude });
+                                setShowForecast(true);
+                              }
+                            })
+                            .catch(() => {});
+                        }
+                      }
+                    }}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
@@ -687,7 +708,7 @@ export default function Home() {
                           <p className="text-3xl sm:text-4xl font-bold tracking-tight">{weather.tempC}°</p>
                         </div>
                         <p className="text-xs sm:text-sm text-muted-foreground capitalize mt-1 font-medium">{weather.label} <span className="text-border">•</span> {language === 'en' ? 'Feels like' : 'Ressenti'} {weather.feelsLikeC}°</p>
-                        {coords && <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-2">{t('card_weather_forecast')} →</p>}
+                        <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-2">{t('card_weather_forecast')} →</p>
                       </>
                     ) : (
                       <div className="h-16 flex items-center justify-between bg-primary/5 rounded-2xl px-4 border border-primary/10 cursor-pointer group/loc" 
@@ -1000,16 +1021,16 @@ export default function Home() {
       <NewsModal open={showNews} onClose={() => setShowNews(false)} locale={countryCode} locationName={weather?.locationName} />
 
       {/* Weather Forecast Modal */}
-      {coords && weather && (
-      <WeatherForecastModal
+      {weather && coords && (
+        <WeatherForecastModal
           open={showForecast}
           onClose={() => setShowForecast(false)}
           lat={coords.lat}
           lon={coords.lon}
-          locationName={weather.locationName || (weather as any).location || ''}
-          currentTempC={weather.tempC ?? (weather as any).current?.temperatureC ?? 0}
-          currentLabel={weather.label || (weather as any).current?.weatherLabel || ''}
-          feelsLikeC={weather.feelsLikeC ?? (weather as any).current?.apparentTemperatureC ?? 0}
+          locationName={(weather as any).locationName || (weather as any).location || ''}
+          currentTempC={(weather as any).tempC ?? (weather as any).current?.temperatureC ?? 0}
+          currentLabel={(weather as any).label || (weather as any).current?.weatherLabel || ''}
+          feelsLikeC={(weather as any).feelsLikeC ?? (weather as any).current?.apparentTemperatureC ?? 0}
           language={language}
         />
       )}
