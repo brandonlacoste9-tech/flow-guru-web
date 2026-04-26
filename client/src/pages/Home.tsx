@@ -476,7 +476,6 @@ export default function Home() {
         >
           <div className="hidden md:flex gap-1.5 mr-2">
             {isGoogleConnected && <Calendar className="w-3.5 h-3.5 text-primary/60" />}
-            {isSpotifyConnected && <Volume2 className="w-3.5 h-3.5 text-primary/60" />}
           </div>
 
           {view === 'chat' && (
