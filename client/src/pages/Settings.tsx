@@ -58,6 +58,7 @@ function playRadioPreview(sound: string) {
   toast.info('Playing 8-second preview…');
 }
 
+export function Settings() {
   const [, navigate] = useLocation();
   const { language, setLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
