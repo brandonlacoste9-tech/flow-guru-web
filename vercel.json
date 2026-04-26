@@ -14,6 +14,7 @@
     { "source": "/api/integrations/google-calendar/callback", "destination": "/api/google-calendar-callback.ts" },
     { "source": "/api/trpc/:path*", "destination": "/api/trpc.ts" },
     { "source": "/api/health", "destination": "/api/health.ts" },
+    { "source": "/api/chat", "destination": "/api/chat.ts" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
