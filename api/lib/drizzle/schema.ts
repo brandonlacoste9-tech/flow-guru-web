@@ -1,4 +1,5 @@
-import { pgTable, serial, text, varchar, timestamp, pgEnum, integer, index, bigint } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, varchar, timestamp, pgEnum, integer, index, bigint, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // Enums with unique names to avoid collisions in shared DB
 export const roleEnum = pgEnum("fg_role", ["user", "admin"]);
@@ -172,11 +173,11 @@ export const localEvents = pgTable(
 
 export type LocalEvent = typeof localEvents.$inferSelect;
 export type InsertLocalEvent = typeof localEvents.$inferInsert;
-q
 
 
-q
-q
+
+
+
 
 
 // === Chat memory (added by feat/chat-memory-neon) ===
