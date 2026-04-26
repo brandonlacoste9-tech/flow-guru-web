@@ -471,7 +471,10 @@ export default function Home() {
           transition={{ duration: 0.5 }}
         >
           <img src="/floguru-logo.png" alt="FLO GURU" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shadow-sm" />
-          <h1 className="text-base sm:text-lg font-bold tracking-tighter uppercase">FLO GURU</h1>
+          <h1 className="text-base sm:text-lg font-bold tracking-tighter uppercase">
+            FLO GURU
+            <span className="sr-only"> - Your Autonomous AI Lifestyle Companion</span>
+          </h1>
         </motion.div>
         
         <motion.div 
