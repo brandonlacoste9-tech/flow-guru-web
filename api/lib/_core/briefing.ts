@@ -1,7 +1,7 @@
-import { textToSpeech, generateSoundAsDataUri } from "./elevenLabs";
-import { listGoogleCalendarEvents } from "./googleCalendar";
-import { getProviderConnection } from "../db";
-import { invokeLLM } from "./llm";
+import { textToSpeech, generateSoundAsDataUri } from "./elevenLabs.js";
+import { listGoogleCalendarEvents } from "./googleCalendar.js";
+import { getProviderConnection } from "../db.js";
+import { invokeLLM } from "./llm.js";
 
 // ─── Weather helpers ────────────────────────────────────────────────────────
 

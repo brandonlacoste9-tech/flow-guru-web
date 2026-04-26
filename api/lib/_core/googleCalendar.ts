@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import { ENV } from "./env";
-import { getProviderConnection, upsertProviderConnection } from "../db";
-import { encryptToken, decryptToken } from "./crypto";
+import { ENV } from "./env.js";
+import { getProviderConnection, upsertProviderConnection } from "../db.js";
+import { encryptToken, decryptToken } from "./crypto.js";
 
 type GoogleOAuthState = {
   provider: "google-calendar";

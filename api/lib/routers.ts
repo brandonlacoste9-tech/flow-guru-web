@@ -41,7 +41,12 @@ import {
   updateList,
   updateListItem,
   setListItemReminder,
+  deleteUserMemoryFact,
+  updateUserPersona,
+  upsertPushSubscription,
 } from "./db.js";
+import { generateBriefing, generateQuickSound } from "./_core/briefing.js";
+import { textToSpeech, getVoices } from "./_core/elevenLabs.js";
 import { listGoogleCalendarEvents } from "./_core/googleCalendar.js";
 
 const sendMessageInput = z.object({
@@ -921,7 +926,6 @@ export const appRouter = router({
       const location = locationFact?.factValue || null;
 
       // Dynamic import to keep the bundle lean
-      const { generateBriefing } = await import("./_core/briefing.js");
       const result = await generateBriefing({
         userId,
         userName,
@@ -938,8 +942,7 @@ export const appRouter = router({
         durationSeconds: z.number().min(5).max(30).optional(),
       }))
       .mutation(async ({ input }) => {
-        const { generateQuickSound } = await import("./_core/briefing.js");
-        return await generateQuickSound(input.type, input.durationSeconds ?? 15);
+      return await generateQuickSound(input.type, input.durationSeconds ?? 15);
       }),
     speak: publicProcedure
       .input(z.object({
@@ -947,7 +950,6 @@ export const appRouter = router({
         voiceId: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        const { textToSpeech } = await import("./_core/elevenLabs.js");
         const buffer = await textToSpeech({
           text: input.text,
           voiceId: input.voiceId,
@@ -1048,7 +1050,6 @@ export const appRouter = router({
         return { success: true };
       }),
     getVoices: publicProcedure.query(async () => {
-      const { getVoices } = await import("./_core/elevenLabs.js");
       return await getVoices();
     }),
     getMemoryFacts: publicProcedure.query(async ({ ctx }) => {
@@ -1059,7 +1060,6 @@ export const appRouter = router({
       .input(z.object({ factId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { deleteUserMemoryFact } = await import('./db');
         await deleteUserMemoryFact(userId, input.factId);
         return { success: true };
       }),
@@ -1087,7 +1087,6 @@ export const appRouter = router({
       .input(z.object({ personaName: z.string(), personaStyle: z.string() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { updateUserPersona } = await import('./db');
         await updateUserPersona(userId, input.personaName, input.personaStyle);
         return { success: true };
       }),
@@ -1162,7 +1161,6 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
-        const { upsertPushSubscription } = await import("./db.js");
         await upsertPushSubscription(userId, input.subscription);
         return { success: true };
       }),

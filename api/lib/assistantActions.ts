@@ -1,13 +1,13 @@
 import fs from "fs";
 import { z } from "zod";
-import { getProviderConnection, createLocalEvent } from "./db";
+import { getProviderConnection, createLocalEvent } from "./db.js";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
-} from "./_core/googleCalendar";
-import { invokeLLM } from "./_core/llm";
-import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map";
-import { searchAndPlaySpotify } from "./_core/spotify";
+} from "./_core/googleCalendar.js";
+import { invokeLLM } from "./_core/llm.js";
+import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map.js";
+import { searchAndPlaySpotify } from "./_core/spotify.js";
 
 const ACTION_NAMES = [
   "none",
