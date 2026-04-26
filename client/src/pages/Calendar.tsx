@@ -1240,15 +1240,15 @@ export default function Calendar() {
   };
 
   const headerTitle = useMemo(() => {
-    if (viewMode === "month") return `${MONTHS[viewDate.getMonth()]} ${viewDate.getFullYear()}`;
+    if (viewMode === "month") return `${t(`month_${viewDate.getMonth()}` as any)} ${viewDate.getFullYear()}`;
     if (viewMode === "week") {
       const start = new Date(viewDate); start.setDate(viewDate.getDate() - viewDate.getDay());
       const end = new Date(start); end.setDate(end.getDate() + 6);
-      if (start.getMonth() === end.getMonth()) return `${MONTHS[start.getMonth()]} ${start.getFullYear()}`;
-      return `${MONTHS_SHORT[start.getMonth()]} – ${MONTHS_SHORT[end.getMonth()]} ${end.getFullYear()}`;
+      if (start.getMonth() === end.getMonth()) return `${t(`month_${start.getMonth()}` as any)} ${start.getFullYear()}`;
+      return `${t(`month_short_${start.getMonth()}` as any)} – ${t(`month_short_${end.getMonth()}` as any)} ${end.getFullYear()}`;
     }
-    return `${WEEKDAYS_FULL[viewDate.getDay()]}, ${MONTHS[viewDate.getMonth()]} ${viewDate.getDate()}`;
-  }, [viewDate, viewMode]);
+    return `${t(`weekday_${viewDate.getDay()}` as any)}, ${t(`month_${viewDate.getMonth()}` as any)} ${viewDate.getDate()}`;
+  }, [viewDate, viewMode, t]);
 
   // Inject theme CSS variables on the calendar root
   const themeStyle = theme.vars as React.CSSProperties;

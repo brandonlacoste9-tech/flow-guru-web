@@ -138,7 +138,10 @@ export const translations = {
     // Date/Time Names
     month_0: "January", month_1: "February", month_2: "March", month_3: "April", month_4: "May", month_5: "June",
     month_6: "July", month_7: "August", month_8: "September", month_9: "October", month_10: "November", month_11: "December",
+    month_short_0: "Jan", month_short_1: "Feb", month_short_2: "Mar", month_short_3: "Apr", month_short_4: "May", month_short_5: "Jun",
+    month_short_6: "Jul", month_short_7: "Aug", month_short_8: "Sep", month_short_9: "Oct", month_short_10: "Nov", month_short_11: "Dec",
     weekday_0: "Sunday", weekday_1: "Monday", weekday_2: "Tuesday", weekday_3: "Wednesday", weekday_4: "Thursday", weekday_5: "Friday", weekday_6: "Saturday",
+    weekday_short_0: "Sun", weekday_short_1: "Mon", weekday_short_2: "Tue", weekday_short_3: "Wed", weekday_short_4: "Thu", weekday_short_5: "Fri", weekday_short_6: "Sat",
   },
   fr: {
     // Header & General
@@ -277,7 +280,10 @@ export const translations = {
     // Date/Time Names
     month_0: "Janvier", month_1: "Février", month_2: "Mars", month_3: "Avril", month_4: "Mai", month_5: "Juin",
     month_6: "Juillet", month_7: "Août", month_8: "Septembre", month_9: "Octobre", month_10: "Novembre", month_11: "Décembre",
+    month_short_0: "Jan", month_short_1: "Fév", month_short_2: "Mar", month_short_3: "Avr", month_short_4: "Mai", month_short_5: "Juin",
+    month_short_6: "Juil", month_short_7: "Août", month_short_8: "Sept", month_short_9: "Oct", month_short_10: "Nov", month_short_11: "Déc",
     weekday_0: "Dimanche", weekday_1: "Lundi", weekday_2: "Mardi", weekday_3: "Mercredi", weekday_4: "Jeudi", weekday_5: "Vendredi", weekday_6: "Samedi",
+    weekday_short_0: "Dim", weekday_short_1: "Lun", weekday_short_2: "Mar", weekday_short_3: "Mer", weekday_short_4: "Jeu", weekday_short_5: "Ven", weekday_short_6: "Sam",
   }
 };
 

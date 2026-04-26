@@ -19,7 +19,6 @@ export const ENV = {
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_SECRET_KEY ?? "",
   theNewsApiKey: clean(process.env.THENEWSAPI_API_KEY),
-  theNewsApiKey: clean(process.env.THENEWSAPI_API_KEY),
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
 };
