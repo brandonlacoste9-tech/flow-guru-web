@@ -173,6 +173,7 @@ export function Settings() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'billing') setActiveTab('billing');
     const billing = params.get('billing');
     if (billing === 'success') toast.success('Subscription started. Welcome to Flow Guru Monthly.');
     if (billing === 'cancelled') toast.info('Checkout cancelled.');
