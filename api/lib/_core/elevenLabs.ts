@@ -18,7 +18,8 @@ export type SpeechToSpeechOptions = {
   modelId?: string;
 };
 
-const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel (ElevenLabs public preset, always available)
+const DEFAULT_VOICE_ID = "CwhRBWXzGAHq8TQ4Fs17"; // Roger - Laid-Back, Casual, Resonant (account voice, free-tier safe)
+
 const DEFAULT_TTS_MODEL = "eleven_turbo_v2_5";
 const DEFAULT_STS_MODEL = "eleven_english_sts_v2";
 
