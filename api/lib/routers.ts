@@ -44,6 +44,8 @@ import {
   deleteUserMemoryFact,
   updateUserPersona,
   upsertPushSubscription,
+  countUserMessagesSince,
+  getSubscriptionStatus,
 } from "./db.js";
 import { generateBriefing, generateQuickSound } from "./_core/briefing.js";
 import { textToSpeech, getVoices } from "./_core/elevenLabs.js";
@@ -55,6 +57,14 @@ const sendMessageInput = z.object({
   threadId: z.number().int().positive().optional(),
   language: z.enum(['en', 'fr']).optional(),
 });
+
+const FREE_DAILY_ASSISTANT_MESSAGES = 10;
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+
+function startOfUtcDay() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
 
 const MEMORY_FACT_CATEGORIES = [
   "wake_up_time",
@@ -731,6 +741,33 @@ export const appRouter = router({
     send: publicProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
+
+      const subscription = await getSubscriptionStatus(userId);
+      const isPro = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status);
+      if (!isPro) {
+        const dailyMessages = await countUserMessagesSince(userId, startOfUtcDay());
+        if (dailyMessages >= FREE_DAILY_ASSISTANT_MESSAGES) {
+          const reply = input.language === 'fr'
+            ? "Tu as atteint la limite gratuite d'aujourd'hui. Passe à Flow Guru Monthly pour continuer sans attendre."
+            : "You've hit today's free limit. Upgrade to Flow Guru Monthly to keep chatting without waiting.";
+          await createConversationMessage({ threadId, userId, role: "assistant", content: reply });
+          await touchConversationThread(threadId);
+          const messages = await listConversationMessages(threadId);
+          return {
+            threadId,
+            reply,
+            messages,
+            memoryUpdate: { profileUpdated: false, factsAdded: 0 },
+            actionResult: null,
+            billing: {
+              plan: "free",
+              limit: FREE_DAILY_ASSISTANT_MESSAGES,
+              used: dailyMessages,
+              limitReached: true,
+            },
+          };
+        }
+      }
 
       await createConversationMessage({
         threadId,

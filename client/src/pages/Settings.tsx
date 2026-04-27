@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Gift, Copy, Share2, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Gift, Copy, Share2, Loader2, CreditCard } from 'lucide-react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'wouter';
 import { useLanguage } from '@/contexts/LanguageContext';
 
-type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'referral' | 'integrations';
+type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'billing' | 'referral' | 'integrations';
 
 const RADIO_URLS: Record<string, string> = {
   'radio-focus': 'https://ice6.somafm.com/groovesalad-128-mp3',
@@ -84,6 +84,9 @@ export function Settings() {
   const [voiceId, setVoiceId] = useState('');
   const [buddyPersonality, setBuddyPersonality] = useState('');
   const [voicePreviewLoading, setVoicePreviewLoading] = useState<string | null>(null);
+  const [billingStatus, setBillingStatus] = useState<any>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
 
@@ -168,6 +171,46 @@ export function Settings() {
   const factsRaw = (factsQuery.data as any)?.facts ?? factsQuery.data ?? [];
   const facts = (Array.isArray(factsRaw) ? factsRaw : []).filter((f: any) => f.factKey !== 'custom_instructions');
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get('billing');
+    if (billing === 'success') toast.success('Subscription started. Welcome to Flow Guru Monthly.');
+    if (billing === 'cancelled') toast.info('Checkout cancelled.');
+  }, []);
+
+  async function fetchBillingStatus() {
+    setBillingLoading(true);
+    try {
+      const response = await fetch('/api/billing/status', { credentials: 'include' });
+      if (!response.ok) throw new Error('Billing status unavailable');
+      setBillingStatus(await response.json());
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not load billing status.');
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'billing') void fetchBillingStatus();
+  }, [activeTab]);
+
+  async function handleUpgrade() {
+    setCheckoutLoading(true);
+    try {
+      const response = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.error || 'Checkout unavailable');
+      window.location.href = data.url;
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not start checkout.');
+      setCheckoutLoading(false);
+    }
+  }
+
   function handleTestSound() {
     if (alarmSound === 'none') {
       toast.info('Silent mode — no sound will play.');
@@ -188,6 +231,7 @@ export function Settings() {
     { id: 'memory' as Tab, label: t('settings_tab_memory'), icon: Brain },
     { id: 'persona' as Tab, label: t('settings_tab_persona'), icon: Wand2 },
     { id: 'instructions' as Tab, label: t('settings_tab_instructions'), icon: MessageSquare },
+    { id: 'billing' as Tab, label: 'Billing', icon: CreditCard },
     { id: 'integrations' as Tab, label: t('settings_tab_integrations'), icon: Share2 },
     { id: 'referral' as Tab, label: t('settings_tab_referral'), icon: Gift },
   ];
@@ -532,6 +576,76 @@ export function Settings() {
               <IntegrationsPanel />
             </motion.div>
           )}
+
+          {activeTab === 'billing' && (
+            <motion.div key="billing" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={14} className="text-primary" />
+                    <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Billing</h2>
+                  </div>
+                  <span className={cn(
+                    'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider',
+                    billingStatus?.isPro ? 'bg-primary/15 text-primary' : 'bg-secondary text-muted-foreground'
+                  )}>
+                    {billingLoading ? 'Loading' : billingStatus?.isPro ? 'Pro' : 'Free'}
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">
+                  Start free, then upgrade when Flow Guru becomes part of your daily routine.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-bold">Free</p>
+                      <p className="text-2xl font-black mt-1">$0</p>
+                    </div>
+                    <ul className="space-y-2 text-[11px] sm:text-xs text-muted-foreground">
+                      <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />10 assistant messages per day</li>
+                      <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />Basic lists, weather, and calendar view</li>
+                      <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />Limited memory for trying the assistant</li>
+                    </ul>
+                  </div>
+
+                  <div className="rounded-2xl border border-primary/40 bg-primary/5 p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-bold">Flow Guru Monthly</p>
+                      <p className="text-2xl font-black mt-1">$4.99<span className="text-xs font-semibold text-muted-foreground">/mo</span></p>
+                    </div>
+                    <ul className="space-y-2 text-[11px] sm:text-xs text-muted-foreground">
+                      <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />More assistant usage for daily planning</li>
+                      <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />Full memory and smart list workflows</li>
+                      <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />Calendar integrations, voice, and upcoming automation tools</li>
+                    </ul>
+                    <button
+                      disabled={checkoutLoading || billingStatus?.isPro}
+                      onClick={handleUpgrade}
+                      className={cn(
+                        'w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
+                        billingStatus?.isPro
+                          ? 'bg-secondary text-muted-foreground cursor-not-allowed'
+                          : 'bg-primary text-primary-foreground hover:opacity-90'
+                      )}
+                    >
+                      {checkoutLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                      {billingStatus?.isPro ? 'Current plan' : 'Upgrade to Monthly'}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={fetchBillingStatus}
+                  disabled={billingLoading}
+                  className="w-full border border-border rounded-2xl py-3 text-xs font-semibold text-muted-foreground hover:bg-accent/10 transition-colors"
+                >
+                  {billingLoading ? 'Refreshing...' : 'Refresh billing status'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'referral' && (
             <motion.div key="referral" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
               <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
