@@ -14,6 +14,13 @@ function getAppOrigin(req: VercelRequest) {
   return `${proto}://${host}`;
 }
 
+function getCookieNames(req: VercelRequest) {
+  return (req.headers.cookie ?? "")
+    .split(";")
+    .map(part => part.trim().split("=")[0])
+    .filter(Boolean);
+}
+
 async function createCheckoutSession(params: {
   userId: number;
   email?: string | null;
@@ -74,6 +81,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     return res.status(200).json({ url, priceId: FLOW_GURU_PRICE_ID });
   } catch (err: any) {
+    if ((err?.message ?? String(err)).includes("Invalid session cookie")) {
+      console.warn("[Billing] Checkout auth failed", {
+        reason: err?.message ?? String(err),
+        cookieNames: getCookieNames(req),
+      });
+      return res.status(401).json({
+        error: "Please sign in again before upgrading.",
+        code: "AUTH_REQUIRED",
+      });
+    }
     return res.status(500).json({ error: err?.message ?? String(err) });
   }
 }

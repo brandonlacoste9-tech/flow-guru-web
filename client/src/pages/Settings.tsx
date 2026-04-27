@@ -203,6 +203,7 @@ export function Settings() {
         credentials: 'include',
       });
       const data = await response.json();
+      if (response.status === 401) throw new Error(data.error || 'Please sign in again before upgrading.');
       if (!response.ok || !data.url) throw new Error(data.error || 'Checkout unavailable');
       window.location.href = data.url;
     } catch (err: any) {
