@@ -28,6 +28,7 @@
     { "source": "/api/integrations/:provider/disconnect", "destination": "/api/integrations-disconnect.ts" },
     { "source": "/api/trpc/:path*", "destination": "/api/trpc.ts" },
     { "source": "/api/health", "destination": "/api/health.ts" },
+    { "source": "/api/health-schema", "destination": "/api/health-schema.ts" },
     { "source": "/api/speak", "destination": "/api/speak.ts" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

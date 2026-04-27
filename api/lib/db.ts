@@ -12,6 +12,19 @@ let schemaReadyPromise: Promise<void> | null = null;
 
 const ANONYMOUS_OPEN_ID = "__flow_guru_anonymous__";
 
+const EXPECTED_TABLES = [
+  "fg_users",
+  "fg_threads",
+  "fg_messages",
+  "fg_profiles",
+  "fg_facts",
+  "fg_connections",
+  "fg_local_events",
+  "fg_lists",
+  "fg_list_items",
+  "fg_push_subscriptions",
+] as const;
+
 /**
  * Minimal Flow Guru DDL for empty / partial Neon databases.
  * IF NOT EXISTS keeps real Drizzle migrations safe; fills missing fg_threads etc.
@@ -162,15 +175,30 @@ async function ensureSchemaOnce(): Promise<void> {
         .map((s: string) => s.trim())
         .filter((s: string) => s.length > 0);
       for (const stmt of statements) {
+        const isCreate = /^CREATE\s+TABLE/i.test(stmt);
         try {
           await _pg!.unsafe(stmt + ';');
         } catch (err: any) {
-          // Log but don't throw on non-critical DDL errors (e.g. column already exists)
-          console.warn('[DB] DDL stmt warning:', err?.message?.slice(0, 120));
+          const msg = err?.message ?? String(err);
+          if (isCreate) {
+            console.error("[DB] CREATE TABLE failed - schema bootstrap aborted:", msg);
+            throw new Error(`Schema bootstrap failed on: ${stmt.slice(0, 80)}... - ${msg}`);
+          }
+          console.warn("[DB] DDL stmt warning (non-fatal):", msg.slice(0, 200));
         }
       }
+
+      for (const table of EXPECTED_TABLES) {
+        try {
+          await _pg!.unsafe(`SELECT 1 FROM ${table} LIMIT 0;`);
+        } catch (err: any) {
+          throw new Error(`Schema assertion failed: table ${table} not present after DDL - ${err?.message ?? String(err)}`);
+        }
+      }
+      console.log("[DB] Schema bootstrap OK - all", EXPECTED_TABLES.length, "fg_ tables verified");
     })().catch(err => {
       schemaReadyPromise = null;
+      console.error("[DB] ensureSchemaOnce failed; will retry on next request:", err?.message);
       throw err;
     });
   }
