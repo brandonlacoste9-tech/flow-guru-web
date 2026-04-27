@@ -170,7 +170,7 @@ NEVER:
             const list = await findListByName(dbUserId, listName);
             if (!list) return { error: `No list named "${listName}".` };
             const items = await getListItems(dbUserId, list.id);
-            const target = items.find(i => i.content.toLowerCase().includes(q.toLowerCase()));
+            const search = q.toLowerCase();         const target = items.find(i => i.completed === 0 && i.content.trim().toLowerCase() === search)           ?? items.find(i => i.completed === 0 && i.content.toLowerCase().includes(search));
             if (!target) return { error: `No item matching "${item}" on "${list.name}".` };
             await toggleListItem(dbUserId, target.id, true);
             return { ok: true };
