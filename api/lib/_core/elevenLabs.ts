@@ -18,7 +18,7 @@ export type SpeechToSpeechOptions = {
   modelId?: string;
 };
 
-const DEFAULT_VOICE_ID = "N2lVS1wzUvBXUvBCW9ng"; // Callum (Buddy-like, Energetic)
+const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel (ElevenLabs public preset, always available)
 const DEFAULT_TTS_MODEL = "eleven_turbo_v2_5";
 const DEFAULT_STS_MODEL = "eleven_english_sts_v2";
 
