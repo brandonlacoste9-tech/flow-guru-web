@@ -107,7 +107,9 @@ NEVER:
           description:
             "Read all items in a named list. Use when the user asks 'what's on my <X> list', " +
             "'show me my groceries', etc.",
-          inputSchema: z.object({ listName: z.string() }),
+          inputSchema: z.object({
+            listName: z.string().trim().min(1, 'listName required'),
+          }),
           execute: async ({ listName }) => {
             if (!dbUserId) return { error: 'Sign in to use lists.' };
             const list = await findListByName(dbUserId, listName);
@@ -131,8 +133,8 @@ NEVER:
             "If the list doesn't exist yet, this tool creates it. " +
             'NEVER use this for time-bound calendar events.',
           inputSchema: z.object({
-            listName: z.string().describe("e.g. 'grocery', 'todo', 'packing'"),
-            item: z.string().describe('the single item or task text'),
+            listName: z.string().trim().min(1, 'listName required').describe("e.g. 'grocery', 'todo', 'packing'"),
+            item: z.string().trim().min(1, 'item required').describe('the single item or task text'),
             reminderAtISO: z.string().optional(),
             locationTrigger: z.string().optional(),
           }),
@@ -157,13 +159,18 @@ NEVER:
         }),
         list_complete_item: tool({
           description: 'Mark an item on a named list as done.',
-          inputSchema: z.object({ listName: z.string(), item: z.string() }),
+          inputSchema: z.object({
+            listName: z.string().trim().min(1, 'listName required'),
+            item: z.string().trim().min(1, 'item required'),
+          }),
           execute: async ({ listName, item }) => {
             if (!dbUserId) return { error: 'Sign in to use lists.' };
+            const q = item.trim();
+            if (!q) return { error: 'Specify which item to complete.' };
             const list = await findListByName(dbUserId, listName);
             if (!list) return { error: `No list named "${listName}".` };
             const items = await getListItems(dbUserId, list.id);
-            const target = items.find(i => i.content.toLowerCase().includes(item.toLowerCase()));
+            const target = items.find(i => i.content.toLowerCase().includes(q.toLowerCase()));
             if (!target) return { error: `No item matching "${item}" on "${list.name}".` };
             await toggleListItem(dbUserId, target.id, true);
             return { ok: true };
