@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
 import { recordStripeEvent, upsertSubscriptionStatus } from "./lib/db.js";
+import { captureServerException, initServerSentry } from "./lib/sentry.js";
+
+initServerSentry();
 
 function getStripe() {
   const secret = process.env.STRIPE_SECRET_KEY;
@@ -106,6 +109,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ received: true });
   } catch (err: any) {
+    captureServerException(err, {
+      tags: { route: "api/stripe-webhook" },
+      extra: {
+        method: req.method,
+        hasStripeSignature: Boolean(req.headers["stripe-signature"]),
+      },
+    });
     console.error("[Stripe] Webhook failed:", err);
     return res.status(400).json({ error: err?.message ?? String(err) });
   }

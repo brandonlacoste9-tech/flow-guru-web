@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Component, ReactNode } from "react";
+import { captureClientException } from "@/lib/sentry";
 
 interface Props {
   children: ReactNode;
@@ -19,6 +20,13 @@ class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    captureClientException(error, {
+      tags: { source: "react-error-boundary" },
+      extra: { componentStack: errorInfo.componentStack },
+    });
   }
 
   render() {

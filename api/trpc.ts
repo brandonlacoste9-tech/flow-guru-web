@@ -2,6 +2,9 @@ import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "./lib/routers.js";
 import { createContext } from "./lib/_core/context.js";
+import { captureServerException, initServerSentry } from "./lib/sentry.js";
+
+initServerSentry();
 
 const app = express();
 app.use(express.json());
@@ -18,6 +21,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     });
     return (trpcHandler as any)(req, res, next);
   } catch (error: any) {
+    captureServerException(error, {
+      tags: { route: "api/trpc", phase: "bootstrap" },
+      extra: { method: req.method, url: req.url },
+    });
     console.error("[CRITICAL BOOT ERROR]", error);
     const vRes = res as unknown as VercelResponse;
     return vRes.status(500).json({ 
