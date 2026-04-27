@@ -23,7 +23,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   } catch (error: any) {
     captureServerException(error, {
       tags: { route: "api/trpc", phase: "bootstrap" },
-      extra: { method: req.method, url: req.url },
     });
     console.error("[CRITICAL BOOT ERROR]", error);
     const vRes = res as unknown as VercelResponse;

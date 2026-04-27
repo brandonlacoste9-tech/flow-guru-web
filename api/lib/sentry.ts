@@ -7,7 +7,14 @@ let initialized = false;
 export function initServerSentry() {
   if (initialized || !dsn) return;
 
-  Sentry.init({
+  const init = Sentry.init as (options: {
+    dsn?: string;
+    environment?: string;
+    release?: string;
+    tracesSampleRate?: number;
+  }) => void;
+
+  init({
     dsn,
     environment: process.env.VERCEL_ENV || process.env.NODE_ENV,
     release: process.env.VERCEL_GIT_COMMIT_SHA,
@@ -27,9 +34,8 @@ export function captureServerException(
   if (!dsn) return;
   initServerSentry();
 
-  Sentry.withScope(scope => {
-    if (context?.tags) scope.setTags(context.tags);
-    if (context?.extra) scope.setExtras(context.extra);
-    Sentry.captureException(error);
-  });
+  Sentry.captureException(error, {
+    tags: context?.tags,
+    extra: context?.extra,
+  } as any);
 }
