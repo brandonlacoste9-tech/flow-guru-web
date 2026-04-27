@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS user_facts CASCADE;
+DROP TABLE IF EXISTS chat_messages CASCADE;
+DROP TABLE IF EXISTS rate_limit_events CASCADE;
