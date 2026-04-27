@@ -12,6 +12,8 @@ const EXPECTED_TABLES = [
   "fg_lists",
   "fg_list_items",
   "fg_push_subscriptions",
+  "fg_subscriptions",
+  "fg_stripe_events",
 ] as const;
 
 function getDatabaseUrlInfo() {

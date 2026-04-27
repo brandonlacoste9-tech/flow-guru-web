@@ -23,6 +23,8 @@ const EXPECTED_TABLES = [
   "fg_lists",
   "fg_list_items",
   "fg_push_subscriptions",
+  "fg_subscriptions",
+  "fg_stripe_events",
 ] as const;
 
 /**
@@ -60,6 +62,24 @@ CREATE TABLE IF NOT EXISTS fg_push_subscriptions (
     endpoint TEXT NOT NULL UNIQUE,
     p256dh TEXT NOT NULL,
     auth TEXT NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_subscriptions (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL UNIQUE,
+    "stripeCustomerId" TEXT,
+    "stripeSubscriptionId" TEXT UNIQUE,
+    "stripePriceId" TEXT,
+    status TEXT DEFAULT 'free' NOT NULL,
+    "currentPeriodEnd" TIMESTAMP,
+    "cancelAtPeriodEnd" INTEGER DEFAULT 0 NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_stripe_events (
+    id SERIAL PRIMARY KEY,
+    "eventId" TEXT NOT NULL UNIQUE,
+    type TEXT,
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
 CREATE TABLE IF NOT EXISTS fg_lists (
@@ -162,6 +182,12 @@ ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "voiceId" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "buddyPersonality" TEXT;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "reminderAt" TIMESTAMP;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "locationTrigger" TEXT;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "stripeCustomerId" TEXT;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "stripeSubscriptionId" TEXT;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "stripePriceId" TEXT;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'free' NOT NULL;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "currentPeriodEnd" TIMESTAMP;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "cancelAtPeriodEnd" INTEGER DEFAULT 0 NOT NULL;
 `;
 
 async function ensureSchemaOnce(): Promise<void> {
@@ -820,4 +846,129 @@ export async function setListItemLocationTrigger(userId: number, itemId: number,
   await ensureTables(db);
   await db.update(schema.listItems).set({ locationTrigger, updatedAt: new Date() })
     .where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
+}
+
+type SubscriptionStatus = {
+  userId: number;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripePriceId: string | null;
+  status: string;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+};
+
+function sqlString(value: string | null | undefined) {
+  return value == null ? "NULL" : `'${value.replace(/'/g, "''")}'`;
+}
+
+function sqlDate(value: Date | null | undefined) {
+  return value ? sqlString(value.toISOString()) : "NULL";
+}
+
+export async function getSubscriptionStatus(userId: number): Promise<SubscriptionStatus> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      userId,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+      status: "free",
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+    };
+  }
+  await ensureTables(db);
+  const rows = await (db as any).execute(
+    `SELECT * FROM fg_subscriptions WHERE "userId" = ${userId} LIMIT 1`,
+  );
+  const row = (rows.rows || rows)[0];
+  if (!row) {
+    return {
+      userId,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+      status: "free",
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+    };
+  }
+
+  return {
+    userId,
+    stripeCustomerId: row.stripeCustomerId ?? null,
+    stripeSubscriptionId: row.stripeSubscriptionId ?? null,
+    stripePriceId: row.stripePriceId ?? null,
+    status: row.status ?? "free",
+    currentPeriodEnd: row.currentPeriodEnd ? new Date(row.currentPeriodEnd) : null,
+    cancelAtPeriodEnd: Boolean(row.cancelAtPeriodEnd),
+  };
+}
+
+export async function countUserMessagesSince(userId: number, since: Date): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  await ensureTables(db);
+  const rows = await (db as any).execute(`
+    SELECT COUNT(*)::int AS count
+    FROM fg_messages
+    WHERE "userId" = ${userId}
+      AND role = 'user'
+      AND "createdAt" >= ${sqlDate(since)}
+  `);
+  const row = (rows.rows || rows)[0];
+  return Number(row?.count ?? 0);
+}
+
+export async function upsertSubscriptionStatus(input: {
+  userId: number;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripePriceId?: string | null;
+  status: string;
+  currentPeriodEnd?: Date | null;
+  cancelAtPeriodEnd?: boolean;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await ensureTables(db);
+  await (db as any).execute(`
+    INSERT INTO fg_subscriptions (
+      "userId", "stripeCustomerId", "stripeSubscriptionId", "stripePriceId",
+      status, "currentPeriodEnd", "cancelAtPeriodEnd", "updatedAt"
+    )
+    VALUES (
+      ${input.userId},
+      ${sqlString(input.stripeCustomerId)},
+      ${sqlString(input.stripeSubscriptionId)},
+      ${sqlString(input.stripePriceId)},
+      ${sqlString(input.status)},
+      ${sqlDate(input.currentPeriodEnd)},
+      ${input.cancelAtPeriodEnd ? 1 : 0},
+      NOW()
+    )
+    ON CONFLICT ("userId") DO UPDATE SET
+      "stripeCustomerId" = EXCLUDED."stripeCustomerId",
+      "stripeSubscriptionId" = EXCLUDED."stripeSubscriptionId",
+      "stripePriceId" = EXCLUDED."stripePriceId",
+      status = EXCLUDED.status,
+      "currentPeriodEnd" = EXCLUDED."currentPeriodEnd",
+      "cancelAtPeriodEnd" = EXCLUDED."cancelAtPeriodEnd",
+      "updatedAt" = NOW()
+  `);
+}
+
+export async function recordStripeEvent(eventId: string, type: string | null): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await ensureTables(db);
+  const rows = await (db as any).execute(`
+    INSERT INTO fg_stripe_events ("eventId", type)
+    VALUES (${sqlString(eventId)}, ${sqlString(type)})
+    ON CONFLICT ("eventId") DO NOTHING
+    RETURNING id
+  `);
+  return Boolean((rows.rows || rows)[0]);
 }
