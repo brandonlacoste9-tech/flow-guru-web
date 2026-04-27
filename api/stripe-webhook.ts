@@ -1,6 +1,14 @@
-import crypto from "node:crypto";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import Stripe from "stripe";
 import { recordStripeEvent, upsertSubscriptionStatus } from "./lib/db.js";
+
+function getStripe() {
+  const secret = process.env.STRIPE_SECRET_KEY;
+  if (!secret) {
+    throw new Error("STRIPE_SECRET_KEY is not configured");
+  }
+  return new Stripe(secret);
+}
 
 async function readRawBody(req: VercelRequest) {
   const chunks: Buffer[] = [];
@@ -10,7 +18,7 @@ async function readRawBody(req: VercelRequest) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function verifyStripeSignature(rawBody: string, signatureHeader: string | undefined) {
+function constructStripeEvent(rawBody: string, signatureHeader: string | undefined) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) {
     throw new Error("STRIPE_WEBHOOK_SECRET is not configured");
@@ -19,28 +27,7 @@ function verifyStripeSignature(rawBody: string, signatureHeader: string | undefi
     throw new Error("Missing Stripe signature");
   }
 
-  const parts = Object.fromEntries(
-    signatureHeader.split(",").map(part => {
-      const [key, value] = part.split("=");
-      return [key, value];
-    }),
-  );
-  const timestamp = parts.t;
-  const signature = parts.v1;
-  if (!timestamp || !signature) {
-    throw new Error("Invalid Stripe signature header");
-  }
-
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(`${timestamp}.${rawBody}`)
-    .digest("hex");
-
-  const expectedBuffer = Buffer.from(expected);
-  const actualBuffer = Buffer.from(signature);
-  if (expectedBuffer.length !== actualBuffer.length || !crypto.timingSafeEqual(expectedBuffer, actualBuffer)) {
-    throw new Error("Stripe signature verification failed");
-  }
+  return getStripe().webhooks.constructEvent(rawBody, signatureHeader, secret);
 }
 
 async function stripeGet(path: string) {
@@ -61,7 +48,8 @@ async function stripeGet(path: string) {
 function subscriptionToStatus(subscription: any) {
   const userId = Number(subscription.metadata?.userId);
   if (!Number.isFinite(userId)) {
-    throw new Error("Stripe subscription is missing metadata.userId");
+    console.warn("[Stripe] Subscription missing metadata.userId; skipping sync", subscription.id);
+    return null;
   }
 
   return {
@@ -79,7 +67,8 @@ function subscriptionToStatus(subscription: any) {
 
 async function syncSubscription(subscriptionId: string) {
   const subscription = await stripeGet(`/subscriptions/${subscriptionId}`);
-  await upsertSubscriptionStatus(subscriptionToStatus(subscription));
+  const status = subscriptionToStatus(subscription);
+  if (status) await upsertSubscriptionStatus(status);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -90,17 +79,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const rawBody = await readRawBody(req);
-    verifyStripeSignature(rawBody, req.headers["stripe-signature"] as string | undefined);
+    const event = constructStripeEvent(rawBody, req.headers["stripe-signature"] as string | undefined);
 
-    const event = JSON.parse(rawBody);
-    const isNewEvent = await recordStripeEvent(event.id, event.type);
-    if (!isNewEvent) {
-      return res.status(200).json({ received: true, duplicate: true });
-    }
-
-    const object = event.data?.object;
+    const object = event.data?.object as any;
     if (event.type === "checkout.session.completed" && object?.subscription) {
-      await syncSubscription(object.subscription);
+      const subscriptionId =
+        typeof object.subscription === "string"
+          ? object.subscription
+          : object.subscription.id;
+      await syncSubscription(subscriptionId);
     }
 
     if (
@@ -108,7 +95,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      await upsertSubscriptionStatus(subscriptionToStatus(object));
+      const status = subscriptionToStatus(object);
+      if (status) await upsertSubscriptionStatus(status);
+    }
+
+    const isNewEvent = await recordStripeEvent(event.id, event.type);
+    if (!isNewEvent) {
+      return res.status(200).json({ received: true, duplicate: true });
     }
 
     return res.status(200).json({ received: true });

@@ -4,7 +4,7 @@ import { sdk } from "./lib/_core/sdk.js";
 const FLOW_GURU_PRICE_ID =
   process.env.FLOW_GURU_MONTHLY_PRICE_ID ||
   process.env.STRIPE_FLOW_GURU_MONTHLY_PRICE_ID ||
-  "price_1TQgbqCzqBvMqSYFLXBSxfld";
+  process.env.STRIPE_PRICE_ID_MONTHLY;
 
 function getAppOrigin(req: VercelRequest) {
   const configured = process.env.INTEGRATION_BROWSER_BASE || process.env.PUBLIC_APP_URL;
@@ -22,6 +22,9 @@ async function createCheckoutSession(params: {
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) {
     throw new Error("STRIPE_SECRET_KEY is not configured");
+  }
+  if (!FLOW_GURU_PRICE_ID) {
+    throw new Error("FLOW_GURU_MONTHLY_PRICE_ID is not configured");
   }
 
   const body = new URLSearchParams({
