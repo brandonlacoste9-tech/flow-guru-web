@@ -613,7 +613,7 @@ export function Settings() {
                   <div className="rounded-2xl border border-primary/40 bg-primary/5 p-4 space-y-3">
                     <div>
                       <p className="text-sm font-bold">Flow Guru Monthly</p>
-                      <p className="text-2xl font-black mt-1">$4.99<span className="text-xs font-semibold text-muted-foreground">/mo</span></p>
+                      <p className="text-2xl font-black mt-1">CA$4.99<span className="text-xs font-semibold text-muted-foreground">/mo</span></p>
                     </div>
                     <ul className="space-y-2 text-[11px] sm:text-xs text-muted-foreground">
                       <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />More assistant usage for daily planning</li>
