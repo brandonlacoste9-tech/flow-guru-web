@@ -10,6 +10,17 @@ const mapMocks = vi.hoisted(() => ({
 
 const dbMocks = vi.hoisted(() => ({
   getProviderConnection: vi.fn(),
+  listUserLists: vi.fn(),
+  getListItems: vi.fn(),
+  addListItem: vi.fn(),
+  deleteListItem: vi.fn(),
+  toggleListItem: vi.fn(),
+  createList: vi.fn(),
+  deleteList: vi.fn(),
+  updateList: vi.fn(),
+  updateListItem: vi.fn(),
+  setListItemReminder: vi.fn(),
+  setListItemLocationTrigger: vi.fn(),
 }));
 
 const googleCalendarMocks = vi.hoisted(() => ({
@@ -31,6 +42,17 @@ vi.mock("./_core/map", () => ({
 
 vi.mock("./db", () => ({
   getProviderConnection: dbMocks.getProviderConnection,
+  listUserLists: dbMocks.listUserLists,
+  getListItems: dbMocks.getListItems,
+  addListItem: dbMocks.addListItem,
+  deleteListItem: dbMocks.deleteListItem,
+  toggleListItem: dbMocks.toggleListItem,
+  createList: dbMocks.createList,
+  deleteList: dbMocks.deleteList,
+  updateList: dbMocks.updateList,
+  updateListItem: dbMocks.updateListItem,
+  setListItemReminder: dbMocks.setListItemReminder,
+  setListItemLocationTrigger: dbMocks.setListItemLocationTrigger,
 }));
 
 vi.mock("./_core/googleCalendar", () => ({
@@ -48,7 +70,7 @@ describe("assistantActions", () => {
   beforeEach(() => {
     llmMocks.invokeLLM.mockReset();
     mapMocks.makeRequest.mockReset();
-    dbMocks.getProviderConnection.mockReset();
+    Object.values(dbMocks).forEach(mock => mock.mockReset());
     googleCalendarMocks.listGoogleCalendarEvents.mockReset();
     googleCalendarMocks.createGoogleCalendarEvent.mockReset();
     elevenLabsMocks.generateSoundAsDataUri.mockReset();
@@ -717,6 +739,113 @@ describe("assistantActions", () => {
       status: "executed",
       title: "Reminder set: Take meds",
       provider: "google-calendar",
+    });
+  });
+
+  describe("list.manage safety", () => {
+    const listPlan = (list: Record<string, unknown>) => ({
+      action: "list.manage" as const,
+      rationale: "The user wants to manage a list.",
+      route: null,
+      weather: null,
+      news: null,
+      calendar: null,
+      music: null,
+      list,
+      ...NULL_EXTENSIONS,
+    });
+
+    const opts = { userId: 1, timeZone: "America/Toronto" };
+
+    it("prefers an exact list-name match over a substring match", async () => {
+      const { executeAssistantAction } = await import("./assistantActions");
+      dbMocks.listUserLists.mockResolvedValue([
+        { id: 10, name: "grocery weekly" },
+        { id: 11, name: "grocery" },
+      ]);
+      dbMocks.getListItems.mockResolvedValue([]);
+
+      const result = await executeAssistantAction(
+        listPlan({ action: "list", listName: "grocery" }),
+        opts,
+      );
+
+      expect(dbMocks.getListItems).toHaveBeenCalledWith(1, 11);
+      expect(result).toMatchObject({
+        action: "list.manage",
+        status: "executed",
+        data: { listName: "grocery" },
+      });
+    });
+
+    it("removing milk does not match almond milk first", async () => {
+      const { executeAssistantAction } = await import("./assistantActions");
+      dbMocks.listUserLists.mockResolvedValue([{ id: 1, name: "grocery" }]);
+      dbMocks.getListItems
+        .mockResolvedValueOnce([
+          { id: 101, content: "almond milk", completed: 0 },
+          { id: 100, content: "milk", completed: 0 },
+        ])
+        .mockResolvedValueOnce([]);
+      dbMocks.deleteListItem.mockResolvedValue(undefined);
+
+      await executeAssistantAction(
+        listPlan({ action: "remove", listName: "grocery", itemContent: "milk" }),
+        opts,
+      );
+
+      expect(dbMocks.deleteListItem).toHaveBeenCalledWith(1, 100);
+    });
+
+    it("blank itemContent does not match the first row", async () => {
+      const { executeAssistantAction } = await import("./assistantActions");
+      dbMocks.listUserLists.mockResolvedValue([{ id: 1, name: "grocery" }]);
+      dbMocks.getListItems.mockResolvedValue([
+        { id: 100, content: "milk", completed: 0 },
+      ]);
+
+      const result = await executeAssistantAction(
+        listPlan({ action: "remove", listName: "grocery", itemContent: "   " }),
+        opts,
+      );
+
+      expect(result?.status).not.toBe("executed");
+      expect(dbMocks.deleteListItem).not.toHaveBeenCalled();
+    });
+
+    it("blank listName returns needs_input", async () => {
+      const { executeAssistantAction } = await import("./assistantActions");
+
+      const result = await executeAssistantAction(
+        listPlan({ action: "add", listName: "  ", itemContent: "milk" }),
+        opts,
+      );
+
+      expect(result).toMatchObject({
+        action: "list.manage",
+        status: "needs_input",
+      });
+      expect(dbMocks.createList).not.toHaveBeenCalled();
+      expect(dbMocks.addListItem).not.toHaveBeenCalled();
+    });
+
+    it("skips already-completed rows when matching", async () => {
+      const { executeAssistantAction } = await import("./assistantActions");
+      dbMocks.listUserLists.mockResolvedValue([{ id: 1, name: "grocery" }]);
+      dbMocks.getListItems
+        .mockResolvedValueOnce([
+          { id: 99, content: "milk", completed: 1 },
+          { id: 100, content: "milk", completed: 0 },
+        ])
+        .mockResolvedValueOnce([]);
+      dbMocks.deleteListItem.mockResolvedValue(undefined);
+
+      await executeAssistantAction(
+        listPlan({ action: "remove", listName: "grocery", itemContent: "milk" }),
+        opts,
+      );
+
+      expect(dbMocks.deleteListItem).toHaveBeenCalledWith(1, 100);
     });
   });
 });

@@ -833,7 +833,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
   const { action, listName, itemContent, newName, time, location: locationTrigger } = plan.list ?? {};
   console.log(`[DEBUG] executeListAction: userId=${options.userId}, action=${action}, listName=${listName}, itemContent=${itemContent}`);
 
-  if (!action || !listName) {
+  if (!action || !listName?.trim()) {
     return {
       action: "list.manage",
       status: "needs_input",
@@ -849,9 +849,10 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
   
   const allLists = await listUserLists(options.userId);
   
-  // Smarter matching: 
+  // Smarter matching:
   // 1. Try exact/substring match
-  const _lowerListName = listName.trim().toLowerCase(); let targetList = allLists.find(l => l.name.trim().toLowerCase() === _lowerListName) ?? allLists.find(l => l.name.toLowerCase().includes(_lowerListName));
+  const normalizedListName = listName.trim().toLowerCase();
+  let targetList = allLists.find(l => l.name.trim().toLowerCase() === normalizedListName) ?? allLists.find(l => l.name.toLowerCase().includes(normalizedListName));
   
   // 2. If listName is very generic (e.g. "list", "my list") and user has lists, pick the most recent one
   const genericNames = ["list", "my list", "smart list", "grocery list", "shopping list"];
