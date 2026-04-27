@@ -14,6 +14,33 @@ const EXPECTED_TABLES = [
   "fg_push_subscriptions",
 ] as const;
 
+function getDatabaseUrlInfo() {
+  const sources = [
+    "FG_DATABASE_URL",
+    "POSTGRES_URL_NO_SSL",
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "POSTGRES_PRISMA_URL",
+  ] as const;
+  const source = sources.find(name => Boolean(process.env[name]));
+  const rawUrl = source ? process.env[source] : null;
+
+  if (!source || !rawUrl) {
+    return { source: null, host: null, database: null };
+  }
+
+  try {
+    const url = new URL(rawUrl);
+    return {
+      source,
+      host: url.hostname,
+      database: url.pathname.replace(/^\//, "") || null,
+    };
+  } catch {
+    return { source, host: "unparseable", database: null };
+  }
+}
+
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {
     const db = await getDb();
@@ -21,6 +48,10 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       return res.status(503).json({ ok: false, error: "DB unavailable" });
     }
 
+    const identityRows = await (db as any).execute(
+      `SELECT current_database() AS current_database, current_user AS current_user`,
+    );
+    const identity = (identityRows.rows || identityRows)[0] ?? {};
     const rows = await (db as any).execute(
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public' AND table_name LIKE 'fg_%'`,
@@ -35,6 +66,11 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       expected: EXPECTED_TABLES,
       actual,
       missing,
+      database: {
+        ...getDatabaseUrlInfo(),
+        currentDatabase: identity.current_database,
+        currentUser: identity.current_user,
+      },
     });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err?.message ?? String(err) });

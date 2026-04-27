@@ -233,6 +233,11 @@ export default function Home() {
     onSuccess: (result) => {
       setMessages(result.messages as Message[]);
       if (result.threadId) setCurrentThreadId(result.threadId);
+      if (result.actionResult?.action === 'list.manage' && result.actionResult.status === 'executed') {
+        void utils.list.all.invalidate();
+        void utils.list.items.invalidate();
+        void utils.assistant.bootstrap.invalidate({ language });
+      }
       if (speechEnabled && result.reply) speakText(result.reply);
     },
     onError: (err) => {
