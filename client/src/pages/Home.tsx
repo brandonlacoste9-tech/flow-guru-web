@@ -17,6 +17,7 @@ import { NewsModal } from "@/components/NewsModal";
 import { useReminders } from "@/hooks/useReminders";
 import { prewarmAudio } from "@/hooks/useAlarmSound";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
+import { trackConversion } from "@/lib/telemetry";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -243,11 +244,27 @@ export default function Home() {
       const limit = (result as any).billing as BillingLimit | undefined;
       if (limit?.limitReached) {
         setBillingLimit(limit);
+        trackConversion("free_limit_reached", {
+          authenticated: Boolean(user),
+          language,
+          limit: limit.limit ?? 10,
+          used: limit.used ?? limit.limit ?? 10,
+        });
+        trackConversion("upgrade_cta_shown", {
+          surface: "chat_limit_toast",
+          authenticated: Boolean(user),
+        });
         toast.info("Free limit reached", {
           description: "Upgrade to Flow Guru Monthly to keep chatting.",
           action: {
             label: "Upgrade",
-            onClick: () => navigate('/settings?tab=billing'),
+            onClick: () => {
+              trackConversion("upgrade_cta_clicked", {
+                surface: "chat_limit_toast",
+                authenticated: Boolean(user),
+              });
+              navigate('/settings?tab=billing');
+            },
           },
         });
       } else {
@@ -951,7 +968,13 @@ export default function Home() {
                       </p>
                     </div>
                     <button
-                      onClick={() => navigate('/settings?tab=billing')}
+                      onClick={() => {
+                        trackConversion("upgrade_cta_clicked", {
+                          surface: "chat_limit_banner",
+                          authenticated: Boolean(user),
+                        });
+                        navigate('/settings?tab=billing');
+                      }}
                       className="shrink-0 rounded-2xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:opacity-90"
                     >
                       Upgrade now

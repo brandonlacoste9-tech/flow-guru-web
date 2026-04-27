@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'wouter';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getLoginUrl } from '@/const';
+import { trackConversion } from '@/lib/telemetry';
 
 type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'billing' | 'referral' | 'integrations';
 
@@ -87,6 +89,7 @@ export function Settings() {
   const [billingStatus, setBillingStatus] = useState<any>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
 
@@ -175,8 +178,14 @@ export function Settings() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('tab') === 'billing') setActiveTab('billing');
     const billing = params.get('billing');
-    if (billing === 'success') toast.success('Subscription started. Welcome to Flow Guru Monthly.');
-    if (billing === 'cancelled') toast.info('Checkout cancelled.');
+    if (billing === 'success') {
+      trackConversion('checkout_success');
+      toast.success('Subscription started. Welcome to Flow Guru Monthly.');
+    }
+    if (billing === 'cancelled') {
+      trackConversion('checkout_cancelled');
+      toast.info('Checkout cancelled.');
+    }
   }, []);
 
   async function fetchBillingStatus() {
@@ -184,7 +193,13 @@ export function Settings() {
     try {
       const response = await fetch('/api/billing/status', { credentials: 'include' });
       if (!response.ok) throw new Error('Billing status unavailable');
-      setBillingStatus(await response.json());
+      const status = await response.json();
+      setBillingStatus(status);
+      trackConversion('billing_status_loaded', {
+        authenticated: Boolean(status.authenticated),
+        isPro: Boolean(status.isPro),
+        plan: status.plan ?? 'unknown',
+      });
     } catch (err: any) {
       toast.error(err?.message || 'Could not load billing status.');
     } finally {
@@ -193,22 +208,78 @@ export function Settings() {
   }
 
   useEffect(() => {
-    if (activeTab === 'billing') void fetchBillingStatus();
+    if (activeTab === 'billing') {
+      trackConversion('billing_tab_opened');
+      void fetchBillingStatus();
+    }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab !== 'billing' || !billingStatus || billingStatus.isPro) return;
+    trackConversion('upgrade_cta_shown', {
+      surface: 'billing_plan_card',
+      authenticated: Boolean(billingStatus.authenticated),
+      plan: billingStatus.plan ?? 'free',
+    });
+  }, [activeTab, billingStatus?.authenticated, billingStatus?.isPro, billingStatus?.plan]);
+
+  function handleSignInForUpgrade(source: string) {
+    trackConversion('checkout_sign_in_clicked', { source });
+    window.location.href = getLoginUrl();
+  }
+
   async function handleUpgrade() {
+    setCheckoutError(null);
+
+    if (billingStatus?.authenticated === false) {
+      const message = 'Sign in first so Flow Guru can attach the subscription to your account.';
+      setCheckoutError(message);
+      trackConversion('checkout_sign_in_required', { source: 'billing_button_preflight' });
+      toast.info('Sign in to upgrade', {
+        description: message,
+        action: {
+          label: 'Sign in',
+          onClick: () => handleSignInForUpgrade('checkout_toast_preflight'),
+        },
+      });
+      return;
+    }
+
     setCheckoutLoading(true);
     try {
+      trackConversion('checkout_started', {
+        plan: 'flow_guru_monthly',
+        price: 'CA$4.99',
+      });
       const response = await fetch('/api/billing/checkout', {
         method: 'POST',
         credentials: 'include',
       });
       const data = await response.json();
-      if (response.status === 401) throw new Error(data.error || 'Please sign in again before upgrading.');
+      if (response.status === 401) {
+        const message = data.error || 'Please sign in again before upgrading.';
+        setCheckoutError(message);
+        trackConversion('checkout_sign_in_required', { source: 'checkout_response' });
+        toast.info('Sign in to upgrade', {
+          description: message,
+          action: {
+            label: 'Sign in',
+            onClick: () => handleSignInForUpgrade('checkout_toast_response'),
+          },
+        });
+        return;
+      }
       if (!response.ok || !data.url) throw new Error(data.error || 'Checkout unavailable');
+      trackConversion('checkout_redirecting', {
+        plan: 'flow_guru_monthly',
+      });
       window.location.href = data.url;
     } catch (err: any) {
+      trackConversion('checkout_failed', {
+        reason: err?.message || 'unknown',
+      });
       toast.error(err?.message || 'Could not start checkout.');
+    } finally {
       setCheckoutLoading(false);
     }
   }
@@ -246,6 +317,8 @@ export function Settings() {
     { value: 'witty and humorous with clever jokes', label: '😂 Witty', desc: 'Funny & clever' },
     { value: 'calm, zen, and mindful', label: '🧘 Zen', desc: 'Calm & mindful' },
   ];
+
+  const isBillingUnauthenticated = billingStatus?.authenticated === false;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -598,6 +671,27 @@ export function Settings() {
                   Start free, then upgrade when Flow Guru becomes part of your daily routine.
                 </p>
 
+                {(isBillingUnauthenticated || checkoutError) && (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle size={15} className="mt-0.5 shrink-0 text-primary" />
+                      <div>
+                        <p className="text-xs font-bold text-foreground">Sign in to upgrade</p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                          {checkoutError ?? 'Create or sign into your account first so your Flow Guru Monthly plan is linked to you.'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSignInForUpgrade('billing_inline_prompt')}
+                      className="shrink-0 rounded-2xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:opacity-90"
+                    >
+                      Sign in
+                    </button>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
                     <div>
@@ -623,7 +717,7 @@ export function Settings() {
                     </ul>
                     <button
                       disabled={checkoutLoading || billingStatus?.isPro}
-                      onClick={handleUpgrade}
+                      onClick={isBillingUnauthenticated ? () => handleSignInForUpgrade('billing_plan_button') : handleUpgrade}
                       className={cn(
                         'w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
                         billingStatus?.isPro
@@ -632,7 +726,7 @@ export function Settings() {
                       )}
                     >
                       {checkoutLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                      {billingStatus?.isPro ? 'Current plan' : 'Upgrade to Monthly'}
+                      {billingStatus?.isPro ? 'Current plan' : isBillingUnauthenticated ? 'Sign in to upgrade' : 'Upgrade to Monthly'}
                     </button>
                   </div>
                 </div>
