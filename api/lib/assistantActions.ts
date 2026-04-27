@@ -824,7 +824,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
   const { action, listName, itemContent, newName, time, location: locationTrigger } = plan.list ?? {};
   console.log(`[DEBUG] executeListAction: userId=${options.userId}, action=${action}, listName=${listName}, itemContent=${itemContent}`);
 
-  if (!action || !listName) {
+  if (!action || !listName?.trim()) {
     return {
       action: "list.manage",
       status: "needs_input",
@@ -840,9 +840,10 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
   
   const allLists = await listUserLists(options.userId);
   
-  // Smarter matching: 
+  // Smarter matching:
   // 1. Try exact/substring match
-  let targetList = allLists.find(l => l.name.toLowerCase().includes(listName.toLowerCase()));
+  const normalizedListName = listName.trim().toLowerCase();
+  let targetList = allLists.find(l => l.name.trim().toLowerCase() === normalizedListName) ?? allLists.find(l => l.name.toLowerCase().includes(normalizedListName));
   
   // 2. If listName is very generic (e.g. "list", "my list") and user has lists, pick the most recent one
   const genericNames = ["list", "my list", "smart list", "grocery list", "shopping list"];
@@ -899,7 +900,14 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           return { action: "list.manage", status: "failed", title: "Cannot remove", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
         }
         const items = await getListItems(options.userId, targetList.id);
-        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        const itemSearch = (itemContent ?? "").trim().toLowerCase();
+        const item = itemSearch
+          ? (
+              items.find(i => !i.completed && i.content.trim().toLowerCase() === itemSearch) ??
+              items.find(i => !i.completed && i.content.toLowerCase().includes(itemSearch)) ??
+              items.find(i => i.content.trim().toLowerCase() === itemSearch)
+            )
+          : undefined;
         if (!item) {
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in the ${listName} list.` };
         }
@@ -944,7 +952,14 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           return { action: "list.manage", status: "failed", title: "Cannot update", summary: `I need to know which item to change and what to change it to.` };
         }
         const items = await getListItems(options.userId, targetList.id);
-        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        const itemSearch = (itemContent ?? "").trim().toLowerCase();
+        const item = itemSearch
+          ? (
+              items.find(i => !i.completed && i.content.trim().toLowerCase() === itemSearch) ??
+              items.find(i => !i.completed && i.content.toLowerCase().includes(itemSearch)) ??
+              items.find(i => i.content.trim().toLowerCase() === itemSearch)
+            )
+          : undefined;
         if (!item) {
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in your ${listName} list.` };
         }
@@ -981,7 +996,14 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
         }
         
         const items = await getListItems(options.userId, targetList.id);
-        const item = items.find(i => i.content.toLowerCase().includes(itemContent.toLowerCase()));
+        const itemSearch = (itemContent ?? "").trim().toLowerCase();
+        const item = itemSearch
+          ? (
+              items.find(i => !i.completed && i.content.trim().toLowerCase() === itemSearch) ??
+              items.find(i => !i.completed && i.content.toLowerCase().includes(itemSearch)) ??
+              items.find(i => i.content.trim().toLowerCase() === itemSearch)
+            )
+          : undefined;
         if (!item) {
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
         }
