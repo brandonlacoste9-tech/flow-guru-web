@@ -21,6 +21,7 @@ const dbMocks = vi.hoisted(() => ({
   updateListItem: vi.fn(),
   setListItemReminder: vi.fn(),
   setListItemLocationTrigger: vi.fn(),
+  createLocalEvent: vi.fn(),
 }));
 
 const googleCalendarMocks = vi.hoisted(() => ({
@@ -53,6 +54,7 @@ vi.mock("./db", () => ({
   updateListItem: dbMocks.updateListItem,
   setListItemReminder: dbMocks.setListItemReminder,
   setListItemLocationTrigger: dbMocks.setListItemLocationTrigger,
+  createLocalEvent: dbMocks.createLocalEvent,
 }));
 
 vi.mock("./_core/googleCalendar", () => ({
@@ -416,8 +418,9 @@ describe("assistantActions", () => {
     expect(result?.summary).toContain("Tuesday, April 21, 2026 at 9:30 AM");
   });
 
-  it("returns connection-required for calendar without user context", async () => {
+  it("saves a local calendar event when Google Calendar is not connected", async () => {
     const { executeAssistantAction } = await import("./assistantActions");
+    dbMocks.createLocalEvent.mockResolvedValueOnce(77);
 
     const result = await executeAssistantAction(
       {
@@ -443,7 +446,77 @@ describe("assistantActions", () => {
 
     expect(result).toMatchObject({
       action: "calendar.create_event",
-      status: "needs_connection",
+      status: "executed",
+      title: "Booked: Lunch with Steve",
+      data: { id: 77, title: "Lunch with Steve" },
+    });
+  });
+
+  it("plans a simple calendar add without calling the LLM planner", async () => {
+    const { planAssistantAction } = await import("./assistantActions");
+
+    const plan = await planAssistantAction({
+      userName: "Brandon",
+      memoryContext: "",
+      message: "add dentist appointment to my calendar tomorrow at 9am",
+    });
+
+    expect(llmMocks.invokeLLM).not.toHaveBeenCalled();
+    expect(plan).toMatchObject({
+      action: "calendar.create_event",
+      calendar: {
+        title: "dentist appointment",
+        startDescription: expect.stringContaining("tomorrow"),
+      },
+    });
+  });
+
+  it("falls back to deterministic calendar resolution when the LLM fails", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+    dbMocks.getProviderConnection.mockResolvedValue({ provider: "google-calendar", status: "connected" });
+    llmMocks.invokeLLM.mockResolvedValueOnce(undefined);
+    googleCalendarMocks.createGoogleCalendarEvent.mockImplementationOnce(async input => ({
+      id: "evt_det",
+      summary: input.title,
+      start: { dateTime: input.startIso, timeZone: input.timeZone },
+      end: { dateTime: input.endIso, timeZone: input.timeZone },
+      htmlLink: "https://calendar.google.com/event?eid=evt_det",
+      status: "confirmed",
+    }));
+
+    const result = await executeAssistantAction(
+      {
+        action: "calendar.create_event",
+        rationale: "The user wants to create an event.",
+        route: null,
+        weather: null,
+        news: null,
+        calendar: {
+          title: "Dentist appointment",
+          startDescription: "tomorrow at 9am",
+          endDescription: null,
+        },
+        music: null,
+        ...NULL_EXTENSIONS,
+      },
+      {
+        userId: 42,
+        userName: "Brandon",
+        message: "add dentist appointment to my calendar tomorrow at 9am",
+        timeZone: "America/New_York",
+      },
+    );
+
+    expect(googleCalendarMocks.createGoogleCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 42,
+        title: "Dentist appointment",
+        timeZone: "America/New_York",
+      }),
+    );
+    expect(result).toMatchObject({
+      action: "calendar.create_event",
+      status: "executed",
       provider: "google-calendar",
     });
   });

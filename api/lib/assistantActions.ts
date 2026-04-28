@@ -1,4 +1,5 @@
 import fs from "fs";
+import * as chrono from "chrono-node";
 import { z } from "zod";
 import { getProviderConnection, createLocalEvent } from "./db.js";
 import {
@@ -104,6 +105,7 @@ const calendarResolutionSchema = z.object({
 });
 
 export type AssistantActionPlan = z.infer<typeof plannerSchema>;
+type CalendarResolution = z.infer<typeof calendarResolutionSchema>;
 
 export type AssistantActionResult = {
   action: (typeof ACTION_NAMES)[number];
@@ -162,6 +164,30 @@ function buildListPlan(params: {
   };
 }
 
+function buildCalendarCreatePlan(params: {
+  title: string;
+  startDescription: string;
+  endDescription?: string | null;
+  rationale: string;
+}): AssistantActionPlan {
+  return {
+    action: "calendar.create_event",
+    rationale: params.rationale,
+    route: null,
+    weather: null,
+    news: null,
+    calendar: {
+      title: params.title,
+      startDescription: params.startDescription,
+      endDescription: params.endDescription ?? null,
+    },
+    music: null,
+    browser: null,
+    subagent: null,
+    list: null,
+  };
+}
+
 function parseSimpleListIntent(message: string): AssistantActionPlan | null {
   const text = message.trim().replace(/\s+/g, " ");
   if (!text) return null;
@@ -216,6 +242,62 @@ function parseSimpleListIntent(message: string): AssistantActionPlan | null {
   }
 
   return null;
+}
+
+function cleanCalendarTitle(value: string) {
+  return normalizeText(
+    value
+      .replace(/^(please\s+)?(?:add|put|create|schedule|book|set\s+up|make)\s+/i, "")
+      .replace(/\b(?:to|on|in|onto)\s+(?:my\s+|the\s+)?calendar\b/i, "")
+      .replace(/\b(?:on|for|at)\s*$/i, "")
+      .replace(/^(an?|the)\s+/i, "")
+      .replace(/[.!?]+$/g, ""),
+  );
+}
+
+function parseSimpleCalendarCreateIntent(message: string): AssistantActionPlan | null {
+  const text = message.trim().replace(/\s+/g, " ");
+  if (!text) return null;
+
+  const lower = text.toLowerCase();
+  if (/\b(grocery|groceries|shopping|todo|to-do|to do|task|tasks|chore|chores)\b/.test(lower)) {
+    return null;
+  }
+
+  const calendarLike = /\b(calendar|schedule|scheduled|appointment|meeting|event)\b/.test(lower);
+  const createVerb = /^(?:please\s+)?(?:add|put|create|schedule|book|set\s+up|make)\b/i.test(text);
+  if (!calendarLike || !createVerb) return null;
+
+  const parsed = chrono.parse(text, new Date(), { forwardDate: true })[0];
+  if (!parsed?.start) return null;
+
+  const title = cleanCalendarTitle(text.replace(parsed.text, " ")) ?? "Calendar event";
+  return buildCalendarCreatePlan({
+    title,
+    startDescription: parsed.text,
+    endDescription: null,
+    rationale: "The user wants to create a calendar event.",
+  });
+}
+
+function resolveCalendarDetailsFallback(params: {
+  plan: AssistantActionPlan;
+  message: string;
+}): CalendarResolution {
+  const source = [params.plan.calendar?.startDescription, params.message].filter(Boolean).join(" ");
+  const parsed = chrono.parse(source, new Date(), { forwardDate: true })[0];
+  const startIso = parsed?.start?.date().toISOString() ?? null;
+  const endIso = parsed?.end?.date().toISOString()
+    ?? (startIso ? new Date(new Date(startIso).getTime() + 1000 * 60 * 60).toISOString() : null);
+
+  return {
+    title: normalizeText(params.plan.calendar?.title),
+    startIso,
+    endIso,
+    timeMinIso: null,
+    timeMaxIso: null,
+    searchQuery: null,
+  };
 }
 
 function extractTextContent(content: string | Array<{ type: string; text?: string }>) {
@@ -337,6 +419,9 @@ export async function planAssistantAction(params: {
 }) {
   const deterministicListPlan = parseSimpleListIntent(params.message);
   if (deterministicListPlan) return deterministicListPlan;
+
+  const deterministicCalendarPlan = parseSimpleCalendarCreateIntent(params.message);
+  if (deterministicCalendarPlan) return deterministicCalendarPlan;
 
   const response = await invokeLLM({
     messages: [
@@ -488,63 +573,67 @@ async function resolveCalendarDetails(params: {
   userName?: string | null;
   memoryContext?: string | null;
   timeZone?: string | null;
-}) {
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content: [
-          "You convert a calendar intent into concrete scheduling values.",
-          "Use ISO 8601 datetimes with timezone offsets.",
-          `Current time is ${new Date().toISOString()}.`,
-          `Prefer timezone ${params.timeZone || "UTC"}.`,
-          "For calendar.create_event, keep the provided title when possible, resolve startIso and endIso, and default the duration to 60 minutes when an end is not clearly stated.",
-          "For calendar.list_events, resolve timeMinIso and timeMaxIso. If the user asked a general schedule question without a time window, default to now through the next 7 days.",
-          "If the timing is too unclear to act safely, leave the unresolved fields null.",
-        ].join(" "),
-      },
-      {
-        role: "user",
-        content: [
-          `Action: ${params.plan.action}`,
-          `User name: ${params.userName ?? "Unknown"}`,
-          `Saved memory: ${params.memoryContext ?? "None"}`,
-          `Original message: ${params.message}`,
-          `Calendar title: ${params.plan.calendar?.title ?? ""}`,
-          `Calendar start description: ${params.plan.calendar?.startDescription ?? ""}`,
-          `Calendar end description: ${params.plan.calendar?.endDescription ?? ""}`,
-        ].join("\n"),
-      },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "calendar_resolution",
-        strict: false,
-        schema: {
-          type: "object",
-          properties: {
-            title: { type: ["string", "null"] },
-            startIso: { type: ["string", "null"] },
-            endIso: { type: ["string", "null"] },
-            timeMinIso: { type: ["string", "null"] },
-            timeMaxIso: { type: ["string", "null"] },
-            searchQuery: { type: ["string", "null"] },
+}): Promise<CalendarResolution> {
+  try {
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You convert a calendar intent into concrete scheduling values.",
+            "Use ISO 8601 datetimes with timezone offsets.",
+            `Current time is ${new Date().toISOString()}.`,
+            `Prefer timezone ${params.timeZone || "UTC"}.`,
+            "For calendar.create_event, keep the provided title when possible, resolve startIso and endIso, and default the duration to 60 minutes when an end is not clearly stated.",
+            "For calendar.list_events, resolve timeMinIso and timeMaxIso. If the user asked a general schedule question without a time window, default to now through the next 7 days.",
+            "If the timing is too unclear to act safely, leave the unresolved fields null.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: [
+            `Action: ${params.plan.action}`,
+            `User name: ${params.userName ?? "Unknown"}`,
+            `Saved memory: ${params.memoryContext ?? "None"}`,
+            `Original message: ${params.message}`,
+            `Calendar title: ${params.plan.calendar?.title ?? ""}`,
+            `Calendar start description: ${params.plan.calendar?.startDescription ?? ""}`,
+            `Calendar end description: ${params.plan.calendar?.endDescription ?? ""}`,
+          ].join("\n"),
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "calendar_resolution",
+          strict: false,
+          schema: {
+            type: "object",
+            properties: {
+              title: { type: ["string", "null"] },
+              startIso: { type: ["string", "null"] },
+              endIso: { type: ["string", "null"] },
+              timeMinIso: { type: ["string", "null"] },
+              timeMaxIso: { type: ["string", "null"] },
+              searchQuery: { type: ["string", "null"] },
+            },
+            required: ["title", "startIso", "endIso", "timeMinIso", "timeMaxIso", "searchQuery"],
+            additionalProperties: false,
           },
-          required: ["title", "startIso", "endIso", "timeMinIso", "timeMaxIso", "searchQuery"],
-          additionalProperties: false,
         },
       },
-    },
-  });
+    });
 
-  const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
-  if (!parsed.success) {
-    throw new Error(`Calendar resolution did not match schema: ${parsed.error.message}`);
+    const raw = extractTextContent(response.choices[0]?.message.content ?? "");
+    const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
+    if (parsed.success) {
+      return parsed.data;
+    }
+  } catch (error) {
+    console.warn("[Flow Guru] Calendar resolution LLM failed; using deterministic fallback.", error);
   }
 
-  return parsed.data;
+  return resolveCalendarDetailsFallback(params);
 }
 
 async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {

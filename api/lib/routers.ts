@@ -874,8 +874,13 @@ export const appRouter = router({
 
       let assistantReply = buildActionFallbackReply(actionResult);
 
-      try {
-        const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
+      if (actionResult && actionResult.action !== "none") {
+        // Tool confirmations should be deterministic; the LLM can otherwise
+        // apologize for a tool that actually ran successfully.
+        assistantReply = buildActionFallbackReply(actionResult);
+      } else {
+        try {
+          const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
 
         if (actionResult && actionResult.action !== "none") {
           const resultJson = formatActionResultContext(actionResult);
@@ -940,8 +945,9 @@ export const appRouter = router({
         });
 
         assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
-      } catch (error) {
-        console.error("[Flow Guru] Chat generation failed.", error);
+        } catch (error) {
+          console.error("[Flow Guru] Chat generation failed.", error);
+        }
       }
 
       await createConversationMessage({
