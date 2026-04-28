@@ -28,6 +28,35 @@ const scheduledPushes = new Set<string>();
 const MAX_ALARM_MS = 10 * 60 * 1000;
 // Snooze duration: 9 minutes
 const SNOOZE_MS = 9 * 60 * 1000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+function parseAlarmDays(alarmDays: string | null | undefined): Set<number> {
+  if (!alarmDays) return new Set([0, 1, 2, 3, 4, 5, 6]);
+  const parsed = alarmDays
+    .split(',')
+    .map((d) => Number(d))
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return parsed.length ? new Set(parsed) : new Set([0, 1, 2, 3, 4, 5, 6]);
+}
+
+function getNextWakeDate(now: Date, wakeUpTime: string, alarmDays: string | null | undefined): Date | null {
+  const [hRaw, mRaw] = wakeUpTime.split(':');
+  const hh = Number(hRaw);
+  const mm = Number(mRaw);
+  if (!Number.isInteger(hh) || !Number.isInteger(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+
+  const allowedDays = parseAlarmDays(alarmDays);
+  for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
+    const candidate = new Date(now);
+    candidate.setDate(now.getDate() + dayOffset);
+    candidate.setHours(hh, mm, 0, 0);
+    if (!allowedDays.has(candidate.getDay())) continue;
+    if (candidate.getTime() <= now.getTime()) continue;
+    return candidate;
+  }
+  return null;
+}
 
 export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender, alarmSound = 'chime', alarmDays, onWakeUp }: UseRemindersOptions) {
   // Use refs so the interval callback always reads the latest values (no stale closures)
@@ -52,6 +81,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   const [alarmState, setAlarmState] = useState<AlarmState>({ firing: false, label: '' });
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Start the alarm: play sound, show overlay, set 10-min auto-stop */
   const fireAlarm = useCallback((label: string, sound: AlarmSoundType, spokenMsg: string) => {
@@ -108,6 +138,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     return () => {
       if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
       if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current);
       stopAlarmSound();
     };
   }, []);
@@ -296,6 +327,52 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
       if (interval) clearInterval(interval);
     };
   }, [enabled, checkReminders]);
+
+  // Dedicated wake-up scheduler: more reliable than minute polling.
+  useEffect(() => {
+    if (!enabled) return;
+
+    const scheduleNextWake = () => {
+      if (wakeTimerRef.current) {
+        clearTimeout(wakeTimerRef.current);
+        wakeTimerRef.current = null;
+      }
+
+      const now = new Date();
+      const wt = wakeUpTimeRef.current;
+      if (!wt) return;
+
+      const nextWake = getNextWakeDate(now, wt, alarmDaysRef.current);
+      if (!nextWake) return;
+
+      const delay = nextWake.getTime() - now.getTime();
+      if (delay <= 0) return;
+
+      wakeTimerRef.current = setTimeout(() => {
+        const todayKey = new Date().toDateString();
+        const key = `wakeup-${todayKey}`;
+        if (!firedReminders.has(key)) {
+          firedReminders.add(key);
+          const currentUserName = userNameRef.current;
+          const currentAlarmSound = alarmSoundRef.current;
+          const timeLabel = nextWake.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+          const label = `Wake-up alarm — ${timeLabel}`;
+          const msg = `Good morning, ${currentUserName}! It's ${wt} — time to rise and shine. Let's make today incredible!`;
+          toast.success('Good morning! ☀️', { description: label });
+          fireAlarm(label, currentAlarmSound, msg);
+        }
+        scheduleNextWake();
+      }, Math.min(delay, MAX_TIMEOUT_MS));
+    };
+
+    scheduleNextWake();
+    return () => {
+      if (wakeTimerRef.current) {
+        clearTimeout(wakeTimerRef.current);
+        wakeTimerRef.current = null;
+      }
+    };
+  }, [enabled, wakeUpTime, alarmDays, fireAlarm]);
 
   // Pre-schedule push notifications for today's events (runs once when permission granted)
   useEffect(() => {
