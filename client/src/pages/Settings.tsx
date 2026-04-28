@@ -89,6 +89,7 @@ export function Settings() {
   const [billingStatus, setBillingStatus] = useState<any>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
@@ -281,6 +282,35 @@ export function Settings() {
       toast.error(err?.message || 'Could not start checkout.');
     } finally {
       setCheckoutLoading(false);
+    }
+  }
+
+  async function handleManageSubscription() {
+    setPortalLoading(true);
+    try {
+      trackConversion('billing_portal_started', {
+        plan: billingStatus?.plan ?? 'pro',
+        status: billingStatus?.status ?? 'unknown',
+      });
+      const response = await fetch('/api/billing/portal', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (response.status === 401) throw new Error(data.error || 'Please sign in again to manage billing.');
+      if (response.status === 404) throw new Error(data.error || 'No active subscription found.');
+      if (!response.ok || !data.url) throw new Error(data.error || 'Billing portal unavailable.');
+      trackConversion('billing_portal_redirecting', {
+        status: billingStatus?.status ?? 'unknown',
+      });
+      window.location.href = data.url;
+    } catch (err: any) {
+      trackConversion('billing_portal_failed', {
+        reason: err?.message || 'unknown',
+      });
+      toast.error(err?.message || 'Could not open billing portal.');
+    } finally {
+      setPortalLoading(false);
     }
   }
 
@@ -716,17 +746,23 @@ export function Settings() {
                       <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />Calendar integrations, voice, and upcoming automation tools</li>
                     </ul>
                     <button
-                      disabled={checkoutLoading || billingStatus?.isPro}
-                      onClick={isBillingUnauthenticated ? () => handleSignInForUpgrade('billing_plan_button') : handleUpgrade}
+                      disabled={checkoutLoading || portalLoading}
+                      onClick={
+                        billingStatus?.isPro
+                          ? handleManageSubscription
+                          : isBillingUnauthenticated
+                            ? () => handleSignInForUpgrade('billing_plan_button')
+                            : handleUpgrade
+                      }
                       className={cn(
                         'w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
                         billingStatus?.isPro
-                          ? 'bg-secondary text-muted-foreground cursor-not-allowed'
+                          ? 'bg-background border border-primary/40 text-primary hover:bg-primary/10'
                           : 'bg-primary text-primary-foreground hover:opacity-90'
                       )}
                     >
-                      {checkoutLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                      {billingStatus?.isPro ? 'Current plan' : isBillingUnauthenticated ? 'Sign in to upgrade' : 'Upgrade to Monthly'}
+                      {checkoutLoading || portalLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                      {billingStatus?.isPro ? 'Manage subscription' : isBillingUnauthenticated ? 'Sign in to upgrade' : 'Upgrade to Monthly'}
                     </button>
                   </div>
                 </div>
