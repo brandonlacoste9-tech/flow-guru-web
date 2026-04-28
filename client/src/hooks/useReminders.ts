@@ -28,7 +28,12 @@ const scheduledPushes = new Set<string>();
 const MAX_ALARM_MS = 10 * 60 * 1000;
 // Snooze duration: 9 minutes
 const SNOOZE_MS = 9 * 60 * 1000;
+// Non-wake reminders ring for 1 minute before pausing.
+const EVENT_ALARM_RING_MS = 60 * 1000;
+// Non-wake reminders repeat every 5 minutes until dismissed.
+const EVENT_ALARM_REPEAT_MS = 5 * 60 * 1000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
+type AlarmKind = 'wake' | 'event';
 
 function parseAlarmDays(alarmDays: string | null | undefined): Set<number> {
   if (!alarmDays) return new Set([0, 1, 2, 3, 4, 5, 6]);
@@ -82,28 +87,37 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const repeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeAlarmRef = useRef<{ label: string; sound: AlarmSoundType; spokenMsg: string; kind: AlarmKind } | null>(null);
 
   /** Start the alarm: play sound, show overlay, set 10-min auto-stop */
-  const fireAlarm = useCallback((label: string, sound: AlarmSoundType, spokenMsg: string) => {
+  const fireAlarm = useCallback((label: string, sound: AlarmSoundType, spokenMsg: string, kind: AlarmKind = 'event') => {
     // Clear any pending snooze
     if (snoozeTimerRef.current) { clearTimeout(snoozeTimerRef.current); snoozeTimerRef.current = null; }
+    if (repeatTimerRef.current) { clearTimeout(repeatTimerRef.current); repeatTimerRef.current = null; }
     // Clear any previous auto-stop
     if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
 
-    // Play sound continuously (we loop by re-calling every 30s until stopped)
-    const startLooping = (s: AlarmSoundType) => {
-      playAlarmSound(s, MAX_ALARM_MS); // pass full 10 min — stopAlarmSound will cut it
-    };
-    startLooping(sound);
+    activeAlarmRef.current = { label, sound, spokenMsg, kind };
+    const ringDuration = kind === 'wake' ? MAX_ALARM_MS : EVENT_ALARM_RING_MS;
+    playAlarmSound(sound, ringDuration);
 
     setAlarmState({ firing: true, label });
     setTimeout(() => speakRef.current(spokenMsg), sound === 'chime' ? 3500 : 1000);
 
-    // Auto-stop after 10 minutes
+    // Wake alarms keep ringing up to MAX_ALARM_MS. Event alarms ring for 1 minute,
+    // then re-trigger every 5 minutes until the user turns them off.
     autoStopTimerRef.current = setTimeout(() => {
       stopAlarmSound();
       setAlarmState({ firing: false, label: '' });
-    }, MAX_ALARM_MS);
+      if (kind === 'event') {
+        repeatTimerRef.current = setTimeout(() => {
+          const current = activeAlarmRef.current;
+          if (!current) return;
+          fireAlarm(current.label, current.sound, current.spokenMsg, current.kind);
+        }, EVENT_ALARM_REPEAT_MS);
+      }
+    }, ringDuration);
   }, []);
 
   /** Dismiss the alarm entirely */
@@ -111,25 +125,30 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     stopAlarmSound();
     if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
     if (snoozeTimerRef.current) { clearTimeout(snoozeTimerRef.current); snoozeTimerRef.current = null; }
+    if (repeatTimerRef.current) { clearTimeout(repeatTimerRef.current); repeatTimerRef.current = null; }
     
     // If it was a wake-up alarm, trigger briefing
-    if (alarmState.label.toLowerCase().includes('wake-up')) {
+    if (activeAlarmRef.current?.kind === 'wake') {
       onWakeUpRef.current?.();
     }
     
+    activeAlarmRef.current = null;
     setAlarmState({ firing: false, label: '' });
-  }, [alarmState.label]);
+  }, []);
 
   /** Snooze the alarm for 9 minutes */
   const snoozeAlarm = useCallback(() => {
     stopAlarmSound();
     if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
-    const currentLabel = alarmState.label;
-    const currentSound = alarmSoundRef.current;
+    if (repeatTimerRef.current) { clearTimeout(repeatTimerRef.current); repeatTimerRef.current = null; }
+    const current = activeAlarmRef.current;
+    const currentLabel = current?.label || alarmState.label;
+    const currentSound = current?.sound || alarmSoundRef.current;
+    const currentKind = current?.kind || (currentLabel.toLowerCase().includes('wake-up') ? 'wake' : 'event');
     const currentUser = userNameRef.current;
     setAlarmState({ firing: false, label: '' });
     snoozeTimerRef.current = setTimeout(() => {
-      fireAlarm(currentLabel, currentSound, `Hey ${currentUser}, your snoozed alarm is going off now!`);
+      fireAlarm(currentLabel, currentSound, `Hey ${currentUser}, your snoozed alarm is going off now!`, currentKind);
     }, SNOOZE_MS);
   }, [alarmState.label, fireAlarm]);
 
@@ -139,6 +158,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
       if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
       if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
       if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current);
+      if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
       stopAlarmSound();
     };
   }, []);
@@ -159,10 +179,16 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     if (!enabled) return;
     const handleSwMessage = (event: MessageEvent) => {
       if (event.data?.type === 'PLAY_ALARM') {
+        try {
+          localStorage.setItem('fg_last_alarm_signal_at', new Date().toISOString());
+        } catch {
+          // ignore storage errors
+        }
         const sound = (event.data.alarmSound as AlarmSoundType) || alarmSoundRef.current;
         const label = event.data.label || 'Alarm';
         const msg = event.data.spokenMsg || `Hey ${userNameRef.current}, your alarm is going off!`;
-        fireAlarm(label, sound, msg);
+        const inferredKind: AlarmKind = label.toLowerCase().includes('wake-up') ? 'wake' : 'event';
+        fireAlarm(label, sound, msg, inferredKind);
       }
     };
     navigator.serviceWorker?.addEventListener('message', handleSwMessage);
@@ -205,7 +231,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             const label = `Wake-up alarm — ${timeLabel}`;
             const msg = `Good morning, ${currentUserName}! It's ${currentWakeUpTime} — time to rise and shine. Let's make today incredible!`;
             toast.success('Good morning! ☀️', { description: label });
-            fireAlarm(label, currentAlarmSound, msg);
+            fireAlarm(label, currentAlarmSound, msg, 'wake');
           }
         }
       }
@@ -261,7 +287,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
                 msg = `${currentUserName}, ${event.title} is starting in just ${mins} minutes. You're on!`;
                 toast.warning(`🔔 ${event.title}`, { description: `Starting in ${mins} minutes!` });
               }
-              fireAlarm(label, currentAlarmSound, msg);
+              fireAlarm(label, currentAlarmSound, msg, 'event');
             }
           }
         }
@@ -273,7 +299,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             firedReminders.add(key);
             const msg = `${currentUserName}, it's time — ${event.title} is starting right now. Go get it!`;
             toast.error(`🚀 ${event.title}`, { description: `Starting now!` });
-            fireAlarm(`${event.title} — starting now!`, currentAlarmSound, msg);
+            fireAlarm(`${event.title} — starting now!`, currentAlarmSound, msg, 'event');
           }
         }
       }
@@ -298,7 +324,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
               const label = `List: ${list.name}`;
               const msg = `Heads up! You wanted to be reminded about '${item.content}' on your ${list.name} list.`;
               toast.info(`📝 ${item.content}`, { description: `Reminder from ${list.name}` });
-              fireAlarm(label, currentAlarmSound, msg);
+              fireAlarm(label, currentAlarmSound, msg, 'event');
             }
           }
         }
@@ -359,7 +385,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
           const label = `Wake-up alarm — ${timeLabel}`;
           const msg = `Good morning, ${currentUserName}! It's ${wt} — time to rise and shine. Let's make today incredible!`;
           toast.success('Good morning! ☀️', { description: label });
-          fireAlarm(label, currentAlarmSound, msg);
+          fireAlarm(label, currentAlarmSound, msg, 'wake');
         }
         scheduleNextWake();
       }, Math.min(delay, MAX_TIMEOUT_MS));

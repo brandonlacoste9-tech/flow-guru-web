@@ -8,6 +8,7 @@ import { useLocation } from 'wouter';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getLoginUrl } from '@/const';
 import { trackConversion } from '@/lib/telemetry';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'billing' | 'referral' | 'integrations';
 
@@ -65,9 +66,9 @@ export function Settings() {
   const { language, setLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
 
-  const [wakeUpTime, setWakeUpTime] = useState('');
+  const [wakeUpTime, setWakeUpTime] = useState(() => localStorage.getItem('wakeUpTime') ?? '');
   const [alarmSound, setAlarmSound] = useState<string>('chime');
-  const [alarmDays, setAlarmDays] = useState<string>('0,1,2,3,4,5,6');
+  const [alarmDays, setAlarmDays] = useState(() => localStorage.getItem('alarmDays') ?? '0,1,2,3,4,5,6');
   const [dailyRoutine, setDailyRoutine] = useState('');
   const [preferencesSummary, setPreferencesSummary] = useState('');
   const [profileDirty, setProfileDirty] = useState(false);
@@ -90,8 +91,42 @@ export function Settings() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [pushSubscribed, setPushSubscribed] = useState<boolean | null>(null);
+  const [lastAlarmSignalAt, setLastAlarmSignalAt] = useState<string | null>(null);
+  const { permission, swReady, requestPermission } = usePushNotifications();
 
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
+
+  useEffect(() => {
+    const loadPushStatus = async () => {
+      if (!('serviceWorker' in navigator)) {
+        setPushSubscribed(false);
+        return;
+      }
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        setPushSubscribed(Boolean(sub));
+      } catch {
+        setPushSubscribed(false);
+      }
+    };
+
+    void loadPushStatus();
+  }, [swReady, permission]);
+
+  useEffect(() => {
+    const readLastAlarmSignal = () => {
+      try {
+        setLastAlarmSignalAt(localStorage.getItem('fg_last_alarm_signal_at'));
+      } catch {
+        setLastAlarmSignalAt(null);
+      }
+    };
+    readLastAlarmSignal();
+    const id = window.setInterval(readLastAlarmSignal, 10000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const data = profileQuery.data as any;
@@ -99,6 +134,9 @@ export function Settings() {
     setWakeUpTime(data.wakeUpTime ?? '');
     setAlarmSound(data.alarmSound ?? 'chime');
     setAlarmDays(data.alarmDays ?? '0,1,2,3,4,5,6');
+    localStorage.setItem('wakeUpTime', data.wakeUpTime ?? '');
+    localStorage.setItem('alarmSound', data.alarmSound ?? 'chime');
+    localStorage.setItem('alarmDays', data.alarmDays ?? '0,1,2,3,4,5,6');
     setDailyRoutine(data.dailyRoutine ?? '');
     setPreferencesSummary(data.preferencesSummary ?? '');
     setInstructions(data.customInstructions ?? '');
@@ -143,7 +181,14 @@ export function Settings() {
   }
 
   const saveProfileMutation = trpc.settings.saveProfile.useMutation({
-    onSuccess: () => { toast.success('Profile saved!'); setProfileDirty(false); profileQuery.refetch(); },
+    onSuccess: () => {
+      localStorage.setItem('wakeUpTime', wakeUpTime ?? '');
+      localStorage.setItem('alarmSound', alarmSound ?? 'chime');
+      localStorage.setItem('alarmDays', alarmDays ?? '0,1,2,3,4,5,6');
+      toast.success('Profile saved!');
+      setProfileDirty(false);
+      profileQuery.refetch();
+    },
     onError: () => toast.error('Failed to save profile.'),
   });
 
@@ -437,6 +482,26 @@ export function Settings() {
                    })}
                   </div>
                   <p className="text-[9px] sm:text-[10px] text-muted-foreground">{language === 'en' ? 'Select which days the wake-up alarm fires.' : 'Sélectionnez les jours où l\'alarme de réveil sonne.'}</p>
+                </div>
+                <div className="space-y-2 rounded-2xl border border-border bg-background px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Alarm diagnostics
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { void requestPermission(); }}
+                      className="rounded-lg border border-border px-2.5 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-accent/10 transition-colors"
+                    >
+                      Allow notifications
+                    </button>
+                  </div>
+                  <div className="space-y-1 text-[11px] sm:text-xs">
+                    <p><span className="text-muted-foreground">Notification permission:</span> {permission}</p>
+                    <p><span className="text-muted-foreground">Service worker:</span> {swReady ? 'ready' : 'not ready'}</p>
+                    <p><span className="text-muted-foreground">Push subscription:</span> {pushSubscribed === null ? 'checking…' : (pushSubscribed ? 'registered' : 'not registered')}</p>
+                    <p><span className="text-muted-foreground">Last alarm signal:</span> {lastAlarmSignalAt ? new Date(lastAlarmSignalAt).toLocaleString() : 'none yet'}</p>
+                  </div>
                 </div>
                 <button disabled={!profileDirty || saveProfileMutation.isPending}
                   onClick={() => saveProfileMutation.mutate({ 
