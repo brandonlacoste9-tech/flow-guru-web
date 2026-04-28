@@ -1,5 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sdk } from "./lib/_core/sdk.js";
+import { captureServerException, initServerSentry } from "./lib/sentry.js";
+
+initServerSentry();
 
 const FLOW_GURU_PRICE_ID =
   process.env.FLOW_GURU_MONTHLY_PRICE_ID ||
@@ -82,6 +85,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ url, priceId: FLOW_GURU_PRICE_ID });
   } catch (err: any) {
     if ((err?.message ?? String(err)).includes("Invalid session cookie")) {
+      captureServerException(err, {
+        tags: { route: "api/stripe-checkout", kind: "auth" },
+        extra: { cookieNames: getCookieNames(req) },
+      });
       console.warn("[Billing] Checkout auth failed", {
         reason: err?.message ?? String(err),
         cookieNames: getCookieNames(req),
@@ -91,6 +98,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         code: "AUTH_REQUIRED",
       });
     }
+    captureServerException(err, {
+      tags: { route: "api/stripe-checkout" },
+      extra: { method: req.method },
+    });
     return res.status(500).json({ error: err?.message ?? String(err) });
   }
 }

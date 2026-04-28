@@ -17,6 +17,7 @@ import { NewsModal } from "@/components/NewsModal";
 import { useReminders } from "@/hooks/useReminders";
 import { prewarmAudio } from "@/hooks/useAlarmSound";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
+import { trackConversion } from "@/lib/telemetry";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -32,6 +33,12 @@ interface Message {
   content: string;
   actionResult?: any;
 }
+
+type BillingLimit = {
+  limitReached?: boolean;
+  limit?: number;
+  used?: number;
+};
 
 const SUGGESTIONS: TranslationKeys[] = [
   "suggest_calendar",
@@ -69,6 +76,7 @@ export default function Home() {
     return parseInt(localStorage.getItem('guest_msg_count') || '0', 10);
   });
   const [showSignInBanner, setShowSignInBanner] = useState(false);
+  const [billingLimit, setBillingLimit] = useState<BillingLimit | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     return !localStorage.getItem('floguru_onboarded');
   });
@@ -233,6 +241,35 @@ export default function Home() {
     onSuccess: (result) => {
       setMessages(result.messages as Message[]);
       if (result.threadId) setCurrentThreadId(result.threadId);
+      const limit = (result as any).billing as BillingLimit | undefined;
+      if (limit?.limitReached) {
+        setBillingLimit(limit);
+        trackConversion("free_limit_reached", {
+          authenticated: Boolean(user),
+          language,
+          limit: limit.limit ?? 10,
+          used: limit.used ?? limit.limit ?? 10,
+        });
+        trackConversion("upgrade_cta_shown", {
+          surface: "chat_limit_toast",
+          authenticated: Boolean(user),
+        });
+        toast.info("Free limit reached", {
+          description: "Upgrade to Flow Guru Monthly to keep chatting.",
+          action: {
+            label: "Upgrade",
+            onClick: () => {
+              trackConversion("upgrade_cta_clicked", {
+                surface: "chat_limit_toast",
+                authenticated: Boolean(user),
+              });
+              navigate('/settings?tab=billing');
+            },
+          },
+        });
+      } else {
+        setBillingLimit(null);
+      }
       if (result.actionResult?.action === 'list.manage' && result.actionResult.status === 'executed') {
         void utils.list.all.invalidate();
         void utils.list.items.invalidate();
@@ -917,6 +954,34 @@ export default function Home() {
                   </motion.div>
                 ))}
               </AnimatePresence>
+              {billingLimit?.limitReached && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full max-w-[95%] sm:max-w-[90%] rounded-3xl border border-primary/30 bg-primary/10 p-4 shadow-xl"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-foreground">Keep Flow Guru going</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        You used {billingLimit.used ?? billingLimit.limit} of {billingLimit.limit ?? 10} free messages today. Upgrade for CA$4.99/mo to continue.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        trackConversion("upgrade_cta_clicked", {
+                          surface: "chat_limit_banner",
+                          authenticated: Boolean(user),
+                        });
+                        navigate('/settings?tab=billing');
+                      }}
+                      className="shrink-0 rounded-2xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:opacity-90"
+                    >
+                      Upgrade now
+                    </button>
+                  </div>
+                </motion.div>
+              )}
               <div ref={messagesEndRef} className="h-32" />
             </div>
           )}
