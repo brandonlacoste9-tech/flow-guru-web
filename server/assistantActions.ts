@@ -1033,30 +1033,30 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
     };
   }
 
-  const { 
-    listUserLists, createList, addListItem, deleteListItem, 
-    deleteList, getListItems, updateList, updateListItem 
-  } = await import("./db");
-  
-  const allLists = await listUserLists(options.userId);
-  
-  // Smarter matching:
-  // 1. Try exact/substring match
-  const normalizedListName = listName.trim().toLowerCase();
-  let targetList = allLists.find(l => l.name.trim().toLowerCase() === normalizedListName) ?? allLists.find(l => l.name.toLowerCase().includes(normalizedListName));
-  
-  // 2. If listName is very generic (e.g. "list", "my list") and user has lists, pick the most recent one
-  const genericNames = ["list", "my list", "smart list", "grocery list", "shopping list"];
-  if (!targetList && genericNames.includes(listName.toLowerCase()) && allLists.length > 0) {
-    // If they said "grocery list" and have a list named "Groceries", use it.
-    targetList = allLists.find(l => 
-      l.name.toLowerCase().includes("grocer") || 
-      l.name.toLowerCase().includes("shop") || 
-      l.name.toLowerCase().includes("todo")
-    ) || allLists[0]; 
-  }
-
   try {
+    const {
+      listUserLists, createList, addListItem, deleteListItem,
+      deleteList, getListItems, updateList, updateListItem
+    } = await import("./db");
+
+    const allLists = await listUserLists(options.userId);
+
+    // Smarter matching:
+    // 1. Try exact/substring match
+    const normalizedListName = listName.trim().toLowerCase();
+    let targetList = allLists.find(l => l.name.trim().toLowerCase() === normalizedListName) ?? allLists.find(l => l.name.toLowerCase().includes(normalizedListName));
+
+    // 2. If listName is very generic (e.g. "list", "my list") and user has lists, pick the most recent one
+    const genericNames = ["list", "my list", "smart list", "grocery list", "shopping list"];
+    if (!targetList && genericNames.includes(listName.toLowerCase()) && allLists.length > 0) {
+      // If they said "grocery list" and have a list named "Groceries", use it.
+      targetList = allLists.find(l =>
+        l.name.toLowerCase().includes("grocer") ||
+        l.name.toLowerCase().includes("shop") ||
+        l.name.toLowerCase().includes("todo")
+      ) || allLists[0];
+    }
+
     switch (action) {
       case "create": {
         if (targetList) {
@@ -1342,11 +1342,14 @@ export async function executeAssistantAction(
     }
   } catch (error) {
     console.warn("[Flow Guru] External action execution failed.", error);
+    const message = error instanceof Error ? error.message : String(error);
     return {
       action: plan.action,
       status: "failed",
-      title: "Action unavailable",
-      summary: "I understood the live request, but that data source did not return a usable result just now.",
+      title: plan.action === "list.manage" ? "List action unavailable" : "Action unavailable",
+      summary: plan.action === "list.manage"
+        ? `I understood the list request, but the list action failed before it could write: ${message}`
+        : `I understood the live request, but that data source did not return a usable result just now: ${message}`,
       provider: plan.action.startsWith("route")
         ? "google-maps"
         : plan.action.startsWith("weather")
