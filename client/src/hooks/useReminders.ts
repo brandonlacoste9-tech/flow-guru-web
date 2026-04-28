@@ -224,7 +224,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
         wakeDate.setHours(wh, wm, 0, 0);
         const diffMins = Math.round((wakeDate.getTime() - now.getTime()) / 60000);
         if (diffMins >= -1 && diffMins <= 1) {
-          const key = `wakeup-${todayKey}`;
+            const key = `wakeup-${currentWakeUpTime}-${todayKey}`;
           if (!firedReminders.has(key)) {
             firedReminders.add(key);
             const timeLabel = wakeDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -376,7 +376,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
 
       wakeTimerRef.current = setTimeout(() => {
         const todayKey = new Date().toDateString();
-        const key = `wakeup-${todayKey}`;
+        const key = `wakeup-${wt}-${todayKey}`;
         if (!firedReminders.has(key)) {
           firedReminders.add(key);
           const currentUserName = userNameRef.current;
@@ -451,7 +451,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             const wakeDate = new Date(now);
             wakeDate.setHours(wh, wm, 0, 0);
             if (wakeDate <= now) wakeDate.setDate(wakeDate.getDate() + 1);
-            const wakeKey = `push-wakeup-${wakeDate.toDateString()}`;
+            const wakeKey = `push-wakeup-${wt}-${wakeDate.toDateString()}`;
             if (!scheduledPushes.has(wakeKey)) {
               scheduledPushes.add(wakeKey);
               scheduleReminder({ title: '☀️ Good Morning!', body: `It's ${wt} — time to rise and shine!`, fireAt: wakeDate, tag: wakeKey, alarmSound: alarmSoundRef.current });
