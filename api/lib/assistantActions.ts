@@ -1237,8 +1237,22 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
       default:
         throw new Error("Invalid list action");
     }
-  } catch (e) {
-    throw e;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Flow Guru] List action failed.", {
+      action,
+      listName,
+      itemContent,
+      userId: options.userId,
+      error: message,
+    });
+    return {
+      action: "list.manage",
+      status: "failed",
+      title: "List update failed",
+      summary: `I understood the list request, but the list write failed: ${message}`,
+      data: { action, listName, itemContent, error: message },
+    };
   }
 }
 
