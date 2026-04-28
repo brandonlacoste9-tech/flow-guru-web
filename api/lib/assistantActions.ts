@@ -1,4 +1,5 @@
 import fs from "fs";
+import * as chrono from "chrono-node";
 import { z } from "zod";
 import { getProviderConnection, createLocalEvent } from "./db.js";
 import {
@@ -104,6 +105,7 @@ const calendarResolutionSchema = z.object({
 });
 
 export type AssistantActionPlan = z.infer<typeof plannerSchema>;
+type CalendarResolution = z.infer<typeof calendarResolutionSchema>;
 
 export type AssistantActionResult = {
   action: (typeof ACTION_NAMES)[number];
@@ -117,6 +119,185 @@ export type AssistantActionResult = {
 function normalizeText(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function canonicalListName(rawListName: string) {
+  const normalized = rawListName.toLowerCase().replace(/[-_]/g, " ");
+  if (/\b(grocery|groceries|shopping)\b/.test(normalized)) return "Grocery";
+  if (/\b(todo|to do|task|tasks|chore|chores)\b/.test(normalized)) return "Todo";
+  return rawListName.trim();
+}
+
+function cleanListItemContent(value: string | null | undefined) {
+  return normalizeText(
+    value
+      ?.replace(/^(please\s+)?(add|put|write(?:\s+down)?|jot(?:\s+down)?|note|save|remember)\s+/i, "")
+      .replace(/^(an?|the)\s+/i, "")
+      .replace(/[.!?]+$/g, ""),
+  );
+}
+
+function buildListPlan(params: {
+  action: "add" | "remove" | "list";
+  listName: string;
+  itemContent?: string | null;
+  rationale: string;
+}): AssistantActionPlan {
+  return {
+    action: "list.manage",
+    rationale: params.rationale,
+    route: null,
+    weather: null,
+    news: null,
+    calendar: null,
+    music: null,
+    browser: null,
+    subagent: null,
+    list: {
+      action: params.action,
+      listName: canonicalListName(params.listName),
+      itemContent: params.itemContent ?? null,
+      newName: null,
+      time: null,
+      location: null,
+    },
+  };
+}
+
+function buildCalendarCreatePlan(params: {
+  title: string;
+  startDescription: string;
+  endDescription?: string | null;
+  rationale: string;
+}): AssistantActionPlan {
+  return {
+    action: "calendar.create_event",
+    rationale: params.rationale,
+    route: null,
+    weather: null,
+    news: null,
+    calendar: {
+      title: params.title,
+      startDescription: params.startDescription,
+      endDescription: params.endDescription ?? null,
+    },
+    music: null,
+    browser: null,
+    subagent: null,
+    list: null,
+  };
+}
+
+function parseSimpleListIntent(message: string): AssistantActionPlan | null {
+  const text = message.trim().replace(/\s+/g, " ");
+  if (!text) return null;
+
+  const listNamePattern = "(grocery|groceries|shopping|todo|to-do|to do|task|tasks|chore|chores)(?:\\s+list)?";
+  const listOnly = text.match(new RegExp(`^(?:what'?s|what is|show|list|read|check)\\s+(?:on|in)?\\s*(?:my|the)?\\s*${listNamePattern}\\??$`, "i"));
+  if (listOnly) {
+    return buildListPlan({
+      action: "list",
+      listName: listOnly[1],
+      rationale: "The user wants to read a list.",
+    });
+  }
+
+  const remove = text.match(new RegExp(`^(?:please\\s+)?(?:remove|delete|cross\\s+off|take\\s+off)\\s+(.+?)\\s+(?:from|off)\\s+(?:my|the)?\\s*${listNamePattern}$`, "i"));
+  if (remove) {
+    const itemContent = cleanListItemContent(remove[1]);
+    if (itemContent) {
+      return buildListPlan({
+        action: "remove",
+        listName: remove[2],
+        itemContent,
+        rationale: "The user wants to remove an item from a list.",
+      });
+    }
+  }
+
+  const addToList = text.match(new RegExp(`^(?:please\\s+)?(?:add|put|write(?:\\s+down)?|jot(?:\\s+down)?|note|save|remember)?\\s*(.+?)\\s+(?:to|in|on|into)\\s+(?:my|the)?\\s*${listNamePattern}$`, "i"));
+  if (addToList) {
+    const itemContent = cleanListItemContent(addToList[1]);
+    if (itemContent) {
+      return buildListPlan({
+        action: "add",
+        listName: addToList[2],
+        itemContent,
+        rationale: "The user wants to add an item to a list.",
+      });
+    }
+  }
+
+  const listThenItem = text.match(new RegExp(`^(?:please\\s+)?(?:add|put|write(?:\\s+down)?|jot(?:\\s+down)?|note|save|remember)?\\s*(?:to|in|on)?\\s*(?:my|the)?\\s*${listNamePattern}[:,]?\\s+(.+)$`, "i"));
+  if (listThenItem) {
+    const itemContent = cleanListItemContent(listThenItem[2]);
+    if (itemContent) {
+      return buildListPlan({
+        action: "add",
+        listName: listThenItem[1],
+        itemContent,
+        rationale: "The user wants to add an item to a list.",
+      });
+    }
+  }
+
+  return null;
+}
+
+function cleanCalendarTitle(value: string) {
+  return normalizeText(
+    value
+      .replace(/^(please\s+)?(?:add|put|create|schedule|book|set\s+up|make)\s+/i, "")
+      .replace(/\b(?:to|on|in|onto)\s+(?:my\s+|the\s+)?calendar\b/i, "")
+      .replace(/\b(?:on|for|at)\s*$/i, "")
+      .replace(/^(an?|the)\s+/i, "")
+      .replace(/[.!?]+$/g, ""),
+  );
+}
+
+function parseSimpleCalendarCreateIntent(message: string): AssistantActionPlan | null {
+  const text = message.trim().replace(/\s+/g, " ");
+  if (!text) return null;
+
+  const lower = text.toLowerCase();
+  if (/\b(grocery|groceries|shopping|todo|to-do|to do|task|tasks|chore|chores)\b/.test(lower)) {
+    return null;
+  }
+
+  const calendarLike = /\b(calendar|schedule|scheduled|appointment|meeting|event)\b/.test(lower);
+  const createVerb = /^(?:please\s+)?(?:add|put|create|schedule|book|set\s+up|make)\b/i.test(text);
+  if (!calendarLike || !createVerb) return null;
+
+  const parsed = chrono.parse(text, new Date(), { forwardDate: true })[0];
+  if (!parsed?.start) return null;
+
+  const title = cleanCalendarTitle(text.replace(parsed.text, " ")) ?? "Calendar event";
+  return buildCalendarCreatePlan({
+    title,
+    startDescription: parsed.text,
+    endDescription: null,
+    rationale: "The user wants to create a calendar event.",
+  });
+}
+
+function resolveCalendarDetailsFallback(params: {
+  plan: AssistantActionPlan;
+  message: string;
+}): CalendarResolution {
+  const source = [params.plan.calendar?.startDescription, params.message].filter(Boolean).join(" ");
+  const parsed = chrono.parse(source, new Date(), { forwardDate: true })[0];
+  const startIso = parsed?.start?.date().toISOString() ?? null;
+  const endIso = parsed?.end?.date().toISOString()
+    ?? (startIso ? new Date(new Date(startIso).getTime() + 1000 * 60 * 60).toISOString() : null);
+
+  return {
+    title: normalizeText(params.plan.calendar?.title),
+    startIso,
+    endIso,
+    timeMinIso: null,
+    timeMaxIso: null,
+    searchQuery: null,
+  };
 }
 
 function extractTextContent(content: string | Array<{ type: string; text?: string }>) {
@@ -236,6 +417,12 @@ export async function planAssistantAction(params: {
   message: string;
   language: 'en' | 'fr';
 }) {
+  const deterministicListPlan = parseSimpleListIntent(params.message);
+  if (deterministicListPlan) return deterministicListPlan;
+
+  const deterministicCalendarPlan = parseSimpleCalendarCreateIntent(params.message);
+  if (deterministicCalendarPlan) return deterministicCalendarPlan;
+
   const response = await invokeLLM({
     messages: [
       {
@@ -386,63 +573,67 @@ async function resolveCalendarDetails(params: {
   userName?: string | null;
   memoryContext?: string | null;
   timeZone?: string | null;
-}) {
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content: [
-          "You convert a calendar intent into concrete scheduling values.",
-          "Use ISO 8601 datetimes with timezone offsets.",
-          `Current time is ${new Date().toISOString()}.`,
-          `Prefer timezone ${params.timeZone || "UTC"}.`,
-          "For calendar.create_event, keep the provided title when possible, resolve startIso and endIso, and default the duration to 60 minutes when an end is not clearly stated.",
-          "For calendar.list_events, resolve timeMinIso and timeMaxIso. If the user asked a general schedule question without a time window, default to now through the next 7 days.",
-          "If the timing is too unclear to act safely, leave the unresolved fields null.",
-        ].join(" "),
-      },
-      {
-        role: "user",
-        content: [
-          `Action: ${params.plan.action}`,
-          `User name: ${params.userName ?? "Unknown"}`,
-          `Saved memory: ${params.memoryContext ?? "None"}`,
-          `Original message: ${params.message}`,
-          `Calendar title: ${params.plan.calendar?.title ?? ""}`,
-          `Calendar start description: ${params.plan.calendar?.startDescription ?? ""}`,
-          `Calendar end description: ${params.plan.calendar?.endDescription ?? ""}`,
-        ].join("\n"),
-      },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "calendar_resolution",
-        strict: false,
-        schema: {
-          type: "object",
-          properties: {
-            title: { type: ["string", "null"] },
-            startIso: { type: ["string", "null"] },
-            endIso: { type: ["string", "null"] },
-            timeMinIso: { type: ["string", "null"] },
-            timeMaxIso: { type: ["string", "null"] },
-            searchQuery: { type: ["string", "null"] },
+}): Promise<CalendarResolution> {
+  try {
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You convert a calendar intent into concrete scheduling values.",
+            "Use ISO 8601 datetimes with timezone offsets.",
+            `Current time is ${new Date().toISOString()}.`,
+            `Prefer timezone ${params.timeZone || "UTC"}.`,
+            "For calendar.create_event, keep the provided title when possible, resolve startIso and endIso, and default the duration to 60 minutes when an end is not clearly stated.",
+            "For calendar.list_events, resolve timeMinIso and timeMaxIso. If the user asked a general schedule question without a time window, default to now through the next 7 days.",
+            "If the timing is too unclear to act safely, leave the unresolved fields null.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: [
+            `Action: ${params.plan.action}`,
+            `User name: ${params.userName ?? "Unknown"}`,
+            `Saved memory: ${params.memoryContext ?? "None"}`,
+            `Original message: ${params.message}`,
+            `Calendar title: ${params.plan.calendar?.title ?? ""}`,
+            `Calendar start description: ${params.plan.calendar?.startDescription ?? ""}`,
+            `Calendar end description: ${params.plan.calendar?.endDescription ?? ""}`,
+          ].join("\n"),
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "calendar_resolution",
+          strict: false,
+          schema: {
+            type: "object",
+            properties: {
+              title: { type: ["string", "null"] },
+              startIso: { type: ["string", "null"] },
+              endIso: { type: ["string", "null"] },
+              timeMinIso: { type: ["string", "null"] },
+              timeMaxIso: { type: ["string", "null"] },
+              searchQuery: { type: ["string", "null"] },
+            },
+            required: ["title", "startIso", "endIso", "timeMinIso", "timeMaxIso", "searchQuery"],
+            additionalProperties: false,
           },
-          required: ["title", "startIso", "endIso", "timeMinIso", "timeMaxIso", "searchQuery"],
-          additionalProperties: false,
         },
       },
-    },
-  });
+    });
 
-  const raw = extractTextContent(response.choices[0]?.message.content ?? "");
-  const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
-  if (!parsed.success) {
-    throw new Error(`Calendar resolution did not match schema: ${parsed.error.message}`);
+    const raw = extractTextContent(response.choices[0]?.message.content ?? "");
+    const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
+    if (parsed.success) {
+      return parsed.data;
+    }
+  } catch (error) {
+    console.warn("[Flow Guru] Calendar resolution LLM failed; using deterministic fallback.", error);
   }
 
-  return parsed.data;
+  return resolveCalendarDetailsFallback(params);
 }
 
 async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
@@ -833,30 +1024,30 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
     };
   }
 
-  const { 
-    listUserLists, createList, addListItem, deleteListItem, 
-    deleteList, getListItems, updateList, updateListItem 
-  } = await import("./db");
-  
-  const allLists = await listUserLists(options.userId);
-  
-  // Smarter matching:
-  // 1. Try exact/substring match
-  const normalizedListName = listName.trim().toLowerCase();
-  let targetList = allLists.find(l => l.name.trim().toLowerCase() === normalizedListName) ?? allLists.find(l => l.name.toLowerCase().includes(normalizedListName));
-  
-  // 2. If listName is very generic (e.g. "list", "my list") and user has lists, pick the most recent one
-  const genericNames = ["list", "my list", "smart list", "grocery list", "shopping list"];
-  if (!targetList && genericNames.includes(listName.toLowerCase()) && allLists.length > 0) {
-    // If they said "grocery list" and have a list named "Groceries", use it.
-    targetList = allLists.find(l => 
-      l.name.toLowerCase().includes("grocer") || 
-      l.name.toLowerCase().includes("shop") || 
-      l.name.toLowerCase().includes("todo")
-    ) || allLists[0]; 
-  }
-
   try {
+    const {
+      listUserLists, createList, addListItem, deleteListItem,
+      deleteList, getListItems, updateList, updateListItem
+    } = await import("./db.js");
+
+    const allLists = await listUserLists(options.userId);
+
+    // Smarter matching:
+    // 1. Try exact/substring match
+    const normalizedListName = listName.trim().toLowerCase();
+    let targetList = allLists.find(l => l.name.trim().toLowerCase() === normalizedListName) ?? allLists.find(l => l.name.toLowerCase().includes(normalizedListName));
+
+    // 2. If listName is very generic (e.g. "list", "my list") and user has lists, pick the most recent one
+    const genericNames = ["list", "my list", "smart list", "grocery list", "shopping list"];
+    if (!targetList && genericNames.includes(listName.toLowerCase()) && allLists.length > 0) {
+      // If they said "grocery list" and have a list named "Groceries", use it.
+      targetList = allLists.find(l =>
+        l.name.toLowerCase().includes("grocer") ||
+        l.name.toLowerCase().includes("shop") ||
+        l.name.toLowerCase().includes("todo")
+      ) || allLists[0];
+    }
+
     switch (action) {
       case "create": {
         if (targetList) {
@@ -1008,7 +1199,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
         }
 
-        const { setListItemReminder, setListItemLocationTrigger } = await import("./db");
+        const { setListItemReminder, setListItemLocationTrigger } = await import("./db.js");
 
         if (locationTrigger) {
           await setListItemLocationTrigger(options.userId, item.id, locationTrigger);
@@ -1022,7 +1213,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
         }
 
         if (time) {
-          const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar");
+          const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar.js");
           const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
           
           if (!resolvedTime) {
@@ -1046,8 +1237,22 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
       default:
         throw new Error("Invalid list action");
     }
-  } catch (e) {
-    throw e;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Flow Guru] List action failed.", {
+      action,
+      listName,
+      itemContent,
+      userId: options.userId,
+      error: message,
+    });
+    return {
+      action: "list.manage",
+      status: "failed",
+      title: "List update failed",
+      summary: `I understood the list request, but the list write failed: ${message}`,
+      data: { action, listName, itemContent, error: message },
+    };
   }
 }
 
@@ -1140,11 +1345,14 @@ export async function executeAssistantAction(
     }
   } catch (error) {
     console.warn("[Flow Guru] External action execution failed.", error);
+    const message = error instanceof Error ? error.message : String(error);
     return {
       action: plan.action,
       status: "failed" as const,
-      title: "Action unavailable",
-      summary: "I understood the live request, but that data source did not return a usable result just now.",
+      title: plan.action === "list.manage" ? "List action unavailable" : "Action unavailable",
+      summary: plan.action === "list.manage"
+        ? `I understood the list request, but the list action failed before it could write: ${message}`
+        : `I understood the live request, but that data source did not return a usable result just now: ${message}`,
       provider: plan.action.startsWith("route")
         ? "google-maps"
         : plan.action.startsWith("weather")
@@ -1185,5 +1393,5 @@ export function buildActionFallbackReply(result: AssistantActionResult | null) {
     return result.summary;
   }
 
-  return "I hit a snag while checking that, but I can try again or help another way.";
+  return `${result.title}\n\n${result.summary}`;
 }

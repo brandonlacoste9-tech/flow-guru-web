@@ -180,6 +180,7 @@ ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "personaStyle" VARCHAR(64);
 ALTER TABLE fg_threads ADD COLUMN IF NOT EXISTS "shareToken" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "voiceId" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "buddyPersonality" TEXT;
+ALTER TABLE fg_lists ADD COLUMN IF NOT EXISTS "icon" VARCHAR(64);
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "reminderAt" TIMESTAMP;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "locationTrigger" TEXT;
 ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "stripeCustomerId" TEXT;
@@ -742,7 +743,8 @@ export async function listUserLists(userId: number): Promise<schema.List[]> {
     if (!db) return [];
     await ensureTables(db);
     return await db.select().from(schema.lists).where(eq(schema.lists.userId, userId)).orderBy(desc(schema.lists.createdAt));
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[DB] listUserLists failed:", err?.message ?? err);
     return [];
   }
 }
@@ -755,7 +757,8 @@ export async function getListItems(userId: number, listId: number): Promise<sche
     return await db.select().from(schema.listItems)
       .where(and(eq(schema.listItems.userId, userId), eq(schema.listItems.listId, listId)))
       .orderBy(schema.listItems.createdAt);
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[DB] getListItems failed:", err?.message ?? err);
     return [];
   }
 }

@@ -15,6 +15,15 @@ const deepseek = createOpenAICompatible({
 });
 
 const ANONYMOUS_OPEN_ID = '__flow_guru_anonymous__';
+const recallMemoryInputSchema = z.object({ query: z.string() });
+const saveMemoryInputSchema = z.object({
+  fact: z.string(),
+  category: z.enum(['wake_up_time', 'daily_routine', 'preference', 'recurring_event', 'general']),
+  factKey: z.string().optional(),
+});
+
+type RecallMemoryInput = z.infer<typeof recallMemoryInputSchema>;
+type SaveMemoryInput = z.infer<typeof saveMemoryInputSchema>;
 
 type ChatRequestBody = {
   messages: UIMessage[];
@@ -58,8 +67,8 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
       tools: {
         recallMemory: tool({
           description: 'Recall stored facts about the user',
-          inputSchema: z.object({ query: z.string() }),
-          execute: async ({ query }) => {
+          inputSchema: recallMemoryInputSchema,
+          execute: async ({ query }: RecallMemoryInput) => {
             const rows = await db
               .select({
                 fact: userMemoryFacts.factValue,
@@ -78,12 +87,8 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
         }),
         saveMemory: tool({
           description: 'Persist a fact about the user',
-          inputSchema: z.object({
-            fact: z.string(),
-            category: z.enum(['wake_up_time', 'daily_routine', 'preference', 'recurring_event', 'general']),
-            factKey: z.string().optional(),
-          }),
-          execute: async ({ fact, category, factKey }) => {
+          inputSchema: saveMemoryInputSchema,
+          execute: async ({ fact, category, factKey }: SaveMemoryInput) => {
             try {
               await db.insert(userMemoryFacts).values({
                 userId: userIdInt,
