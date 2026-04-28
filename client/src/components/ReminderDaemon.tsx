@@ -26,6 +26,8 @@ export default function ReminderDaemon() {
     voiceGender: "male",
     alarmSound: (profile?.alarmSound as AlarmSoundType) ?? "chime",
     alarmDays: profile?.alarmDays ?? "0,1,2,3,4,5,6",
+    waterBreakEnabled: localStorage.getItem('fg_water_break_enabled') === '1',
+    waterBreakIntervalMinutes: Number(localStorage.getItem('fg_water_break_interval_minutes') || '60'),
   });
 
   return (

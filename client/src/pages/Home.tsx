@@ -80,8 +80,8 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     return !localStorage.getItem('floguru_onboarded');
   });
-  const [wakeUpTime, setWakeUpTime] = useState<string | null>(null);
-  const [alarmDays, setAlarmDays] = useState<string>('0,1,2,3,4,5,6');
+  const [wakeUpTime, setWakeUpTime] = useState<string | null>(() => localStorage.getItem('wakeUpTime'));
+  const [alarmDays, setAlarmDays] = useState<string>(() => localStorage.getItem('alarmDays') || '0,1,2,3,4,5,6');
   const [alarmSound, setAlarmSound] = useState<import('@/hooks/useAlarmSound').AlarmSoundType>(() => {
     return (localStorage.getItem('alarmSound') as import('@/hooks/useAlarmSound').AlarmSoundType) || 'chime';
   });
@@ -109,12 +109,18 @@ export default function Home() {
   useEffect(() => {
     const data = profileQuery.data as any;
     if (!data) return;
-    if (data.wakeUpTime) setWakeUpTime(data.wakeUpTime);
+    if (data.wakeUpTime !== undefined) {
+      setWakeUpTime(data.wakeUpTime || null);
+      localStorage.setItem('wakeUpTime', data.wakeUpTime || '');
+    }
     if (data.alarmSound) {
       setAlarmSound(data.alarmSound as import('@/hooks/useAlarmSound').AlarmSoundType);
       localStorage.setItem('alarmSound', data.alarmSound);
     }
-    if (data.alarmDays) setAlarmDays(data.alarmDays);
+    if (data.alarmDays) {
+      setAlarmDays(data.alarmDays);
+      localStorage.setItem('alarmDays', data.alarmDays);
+    }
   }, [profileQuery.data]);
 
   const bootstrap = trpc.assistant.bootstrap.useQuery({ language }, { enabled: true });
@@ -482,6 +488,8 @@ export default function Home() {
     voiceGender,
     alarmSound,
     alarmDays,
+    waterBreakEnabled: localStorage.getItem('fg_water_break_enabled') === '1',
+    waterBreakIntervalMinutes: Number(localStorage.getItem('fg_water_break_interval_minutes') || '60'),
     onWakeUp: handleBriefing,
   });
 

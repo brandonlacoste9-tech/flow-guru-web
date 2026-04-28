@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Gift, Copy, Share2, Loader2, CreditCard } from 'lucide-react';
+import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Gift, Copy, Share2, Loader2, CreditCard, Bell, Droplets, CalendarClock } from 'lucide-react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -10,7 +10,7 @@ import { getLoginUrl } from '@/const';
 import { trackConversion } from '@/lib/telemetry';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 
-type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'billing' | 'referral' | 'integrations';
+type Tab = 'profile' | 'alarms' | 'memory' | 'persona' | 'instructions' | 'billing' | 'referral' | 'integrations';
 
 const RADIO_URLS: Record<string, string> = {
   'radio-focus': 'https://ice6.somafm.com/groovesalad-128-mp3',
@@ -93,6 +93,11 @@ export function Settings() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [pushSubscribed, setPushSubscribed] = useState<boolean | null>(null);
   const [lastAlarmSignalAt, setLastAlarmSignalAt] = useState<string | null>(null);
+  const [waterBreakEnabled, setWaterBreakEnabled] = useState<boolean>(() => localStorage.getItem('fg_water_break_enabled') === '1');
+  const [waterBreakIntervalMinutes, setWaterBreakIntervalMinutes] = useState<number>(() => {
+    const raw = Number(localStorage.getItem('fg_water_break_interval_minutes') || '60');
+    return Number.isFinite(raw) && raw >= 15 ? raw : 60;
+  });
   const { permission, swReady, requestPermission } = usePushNotifications();
 
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
@@ -129,6 +134,11 @@ export function Settings() {
   }, []);
 
   useEffect(() => {
+    localStorage.setItem('fg_water_break_enabled', waterBreakEnabled ? '1' : '0');
+    localStorage.setItem('fg_water_break_interval_minutes', String(waterBreakIntervalMinutes));
+  }, [waterBreakEnabled, waterBreakIntervalMinutes]);
+
+  useEffect(() => {
     const data = profileQuery.data as any;
     if (!data) return;
     setWakeUpTime(data.wakeUpTime ?? '');
@@ -159,6 +169,14 @@ export function Settings() {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
+  const now = new Date();
+  const upcomingEventsQuery = trpc.calendar.list.useQuery(
+    {
+      startAt: now.toISOString(),
+      endAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    { refetchInterval: 60000 }
+  );
 
   const speakMutation = trpc.assistant.speak.useMutation({
     onSuccess: (data) => {
@@ -185,6 +203,8 @@ export function Settings() {
       localStorage.setItem('wakeUpTime', wakeUpTime ?? '');
       localStorage.setItem('alarmSound', alarmSound ?? 'chime');
       localStorage.setItem('alarmDays', alarmDays ?? '0,1,2,3,4,5,6');
+      localStorage.setItem('fg_water_break_enabled', waterBreakEnabled ? '1' : '0');
+      localStorage.setItem('fg_water_break_interval_minutes', String(waterBreakIntervalMinutes));
       toast.success('Profile saved!');
       setProfileDirty(false);
       profileQuery.refetch();
@@ -344,8 +364,46 @@ export function Settings() {
     }
   }
 
+  const weekdaySet = new Set((alarmDays || '').split(',').map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6));
+  const nextWakeLabel = (() => {
+    if (!wakeUpTime) return 'Not set';
+    const [hRaw, mRaw] = wakeUpTime.split(':');
+    const hh = Number(hRaw);
+    const mm = Number(mRaw);
+    if (!Number.isInteger(hh) || !Number.isInteger(mm)) return 'Not set';
+    const nowLocal = new Date();
+    for (let offset = 0; offset <= 7; offset++) {
+      const candidate = new Date(nowLocal);
+      candidate.setDate(nowLocal.getDate() + offset);
+      candidate.setHours(hh, mm, 0, 0);
+      if (weekdaySet.size && !weekdaySet.has(candidate.getDay())) continue;
+      if (candidate <= nowLocal) continue;
+      return candidate.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    }
+    return 'Not scheduled';
+  })();
+  const snoozedUntilLabel = (() => {
+    const value = localStorage.getItem('fg_alarm_snoozed_until');
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime()) || date <= new Date()) return null;
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  })();
+  const activeAlarmLabel = localStorage.getItem('fg_alarm_active_label');
+  const nextCalendarEventLabel = (() => {
+    const events = (upcomingEventsQuery.data as any[]) || [];
+    const next = events
+      .filter((e: any) => e?.startAt)
+      .map((e: any) => ({ title: e.title, startAt: new Date(e.startAt) }))
+      .filter((e: any) => e.startAt.getTime() > Date.now())
+      .sort((a: any, b: any) => a.startAt.getTime() - b.startAt.getTime())[0];
+    if (!next) return 'No upcoming events';
+    return `${next.title} at ${next.startAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  })();
+
   const TABS = [
     { id: 'profile' as Tab, label: t('settings_tab_profile'), icon: User },
+    { id: 'alarms' as Tab, label: 'Alarms', icon: Bell },
     { id: 'memory' as Tab, label: t('settings_tab_memory'), icon: Brain },
     { id: 'persona' as Tab, label: t('settings_tab_persona'), icon: Wand2 },
     { id: 'instructions' as Tab, label: t('settings_tab_instructions'), icon: MessageSquare },
@@ -587,6 +645,142 @@ export function Settings() {
                   ))}
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'alarms' && (
+            <motion.div key="alarms" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
+                <div className="flex items-center gap-2">
+                  <Bell size={14} className="text-primary" />
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Wake Alarm</h2>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_wakeup')}</label>
+                  <input type="time" value={wakeUpTime} onChange={e => { setWakeUpTime(e.target.value); setProfileDirty(true); }}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_alarm_days')}</label>
+                  <div className="grid grid-cols-4 xs:grid-cols-7 gap-1 sm:gap-1.5">
+                    {((language === 'en' ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] : ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam']) as const).map((day, idx) => {
+                      const active = alarmDays.split(',').map(Number).includes(idx);
+                      return (
+                        <button key={day} type="button"
+                          onClick={() => {
+                            const current = alarmDays ? alarmDays.split(',').map(Number) : [];
+                            const next = active ? current.filter(d => d !== idx) : [...current, idx].sort((a,b) => a-b);
+                            setAlarmDays(next.join(','));
+                            setProfileDirty(true);
+                          }}
+                          className={cn('py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all border',
+                            active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_alarm')}</label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <select value={alarmSound} onChange={e => { setAlarmSound(e.target.value); setProfileDirty(true); }}
+                      className="flex-1 bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors">
+                      <option value="chime">🔔 Chime (default)</option>
+                      <option value="none">🔇 Silent (voice only)</option>
+                      <option value="radio-focus">🎵 Radio — Focus (SomaFM)</option>
+                      <option value="radio-chill">🎵 Radio — Chill (SomaFM)</option>
+                      <option value="radio-energy">🎵 Radio — Energy (SomaFM)</option>
+                      <option value="radio-sleep">🎵 Radio — Sleep (SomaFM)</option>
+                      <option value="radio-space">🎵 Radio — Space (SomaFM)</option>
+                    </select>
+                    <button onClick={handleTestSound}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-semibold text-primary hover:bg-primary/10 transition-colors shrink-0">
+                      <Volume2 size={14} /> Test
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-border bg-background px-4 py-3 text-[11px] sm:text-xs space-y-1">
+                  <p><span className="text-muted-foreground">Next wake:</span> {nextWakeLabel}</p>
+                  <p><span className="text-muted-foreground">Snoozed until:</span> {snoozedUntilLabel ?? 'Not snoozed'}</p>
+                  <p><span className="text-muted-foreground">Currently ringing:</span> {activeAlarmLabel ?? 'No active alarm'}</p>
+                </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
+                <div className="flex items-center gap-2">
+                  <Droplets size={14} className="text-primary" />
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Water Break</h2>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl border border-border bg-background px-4 py-3">
+                  <p className="text-sm font-medium text-foreground">Enable water break reminders</p>
+                  <button
+                    type="button"
+                    onClick={() => { setWaterBreakEnabled((v) => !v); setProfileDirty(true); }}
+                    className={cn('rounded-xl px-3 py-1.5 text-xs font-bold transition-all border',
+                      waterBreakEnabled ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border')}
+                  >
+                    {waterBreakEnabled ? 'On' : 'Off'}
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Interval</label>
+                  <select
+                    value={waterBreakIntervalMinutes}
+                    onChange={(e) => { setWaterBreakIntervalMinutes(Number(e.target.value)); setProfileDirty(true); }}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                  >
+                    <option value={15}>Every 15 minutes</option>
+                    <option value={30}>Every 30 minutes</option>
+                    <option value={45}>Every 45 minutes</option>
+                    <option value={60}>Every 60 minutes</option>
+                    <option value={90}>Every 90 minutes</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
+                <div className="flex items-center gap-2">
+                  <CalendarClock size={14} className="text-primary" />
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Calendar Event Alerts</h2>
+                </div>
+                <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
+                  Calendar alerts ring at your event reminder offsets and then repeat every 5 minutes until dismissed.
+                </p>
+                <div className="rounded-2xl border border-border bg-background px-4 py-3 text-[11px] sm:text-xs space-y-1">
+                  <p><span className="text-muted-foreground">Next calendar alert:</span> {nextCalendarEventLabel}</p>
+                  <p><span className="text-muted-foreground">Alert behavior:</span> 1 minute ring, repeat every 5 minutes until turned off</p>
+                </div>
+                <div className="space-y-2 rounded-2xl border border-border bg-background px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Alarm diagnostics
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { void requestPermission(); }}
+                      className="rounded-lg border border-border px-2.5 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-accent/10 transition-colors"
+                    >
+                      Allow notifications
+                    </button>
+                  </div>
+                  <div className="space-y-1 text-[11px] sm:text-xs">
+                    <p><span className="text-muted-foreground">Notification permission:</span> {permission}</p>
+                    <p><span className="text-muted-foreground">Service worker:</span> {swReady ? 'ready' : 'not ready'}</p>
+                    <p><span className="text-muted-foreground">Push subscription:</span> {pushSubscribed === null ? 'checking…' : (pushSubscribed ? 'registered' : 'not registered')}</p>
+                    <p><span className="text-muted-foreground">Last alarm signal:</span> {lastAlarmSignalAt ? new Date(lastAlarmSignalAt).toLocaleString() : 'none yet'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <button disabled={!profileDirty || saveProfileMutation.isPending}
+                onClick={() => saveProfileMutation.mutate({
+                  wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays, voiceId, buddyPersonality
+                } as any)}
+                className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
+                  profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
+                <Save size={14} />{saveProfileMutation.isPending ? 'Saving...' : 'Save Alarm Settings'}
+              </button>
             </motion.div>
           )}
 
