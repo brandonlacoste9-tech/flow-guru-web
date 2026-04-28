@@ -162,15 +162,20 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
       const parts = currentWakeUpTime.split(':');
       const wh = parseInt(parts[0], 10);
       const wm = parseInt(parts[1], 10);
-      if (!isNaN(wh) && !isNaN(wm) && hh === wh && mm === wm) {
-        const key = `wakeup-${todayKey}`;
-        if (!firedReminders.has(key)) {
-          firedReminders.add(key);
-          const timeLabel = new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-          const label = `Wake-up alarm — ${timeLabel}`;
-          const msg = `Good morning, ${currentUserName}! It's ${currentWakeUpTime} — time to rise and shine. Let's make today incredible!`;
-          toast.success('Good morning! ☀️', { description: label });
-          fireAlarm(label, currentAlarmSound, msg);
+      if (!isNaN(wh) && !isNaN(wm)) {
+        const wakeDate = new Date(now);
+        wakeDate.setHours(wh, wm, 0, 0);
+        const diffMins = Math.round((wakeDate.getTime() - now.getTime()) / 60000);
+        if (diffMins >= -1 && diffMins <= 1) {
+          const key = `wakeup-${todayKey}`;
+          if (!firedReminders.has(key)) {
+            firedReminders.add(key);
+            const timeLabel = wakeDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            const label = `Wake-up alarm — ${timeLabel}`;
+            const msg = `Good morning, ${currentUserName}! It's ${currentWakeUpTime} — time to rise and shine. Let's make today incredible!`;
+            toast.success('Good morning! ☀️', { description: label });
+            fireAlarm(label, currentAlarmSound, msg);
+          }
         }
       }
     }
