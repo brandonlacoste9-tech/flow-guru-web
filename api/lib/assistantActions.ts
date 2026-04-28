@@ -1028,7 +1028,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
     const {
       listUserLists, createList, addListItem, deleteListItem,
       deleteList, getListItems, updateList, updateListItem
-    } = await import("./db");
+    } = await import("./db.js");
 
     const allLists = await listUserLists(options.userId);
 
@@ -1199,7 +1199,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
         }
 
-        const { setListItemReminder, setListItemLocationTrigger } = await import("./db");
+        const { setListItemReminder, setListItemLocationTrigger } = await import("./db.js");
 
         if (locationTrigger) {
           await setListItemLocationTrigger(options.userId, item.id, locationTrigger);
@@ -1213,7 +1213,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
         }
 
         if (time) {
-          const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar");
+          const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar.js");
           const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
           
           if (!resolvedTime) {
