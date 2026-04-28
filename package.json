@@ -11,6 +11,7 @@
     "build": "tsx scripts/generate-sitemap.ts && vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",
+    "typecheck:chat-cleanup": "tsc -p tsconfig.chat-cleanup.json --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
     "smoke:billing": "tsx scripts/smoke/billing.ts",

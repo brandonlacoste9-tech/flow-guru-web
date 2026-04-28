@@ -1,3 +1,4 @@
+// TODO(ZYE-18): restore @ai-sdk/openai-compatible + ai; excluded from focused TS check.
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { streamText, tool, convertToModelMessages, stepCountIs, type UIMessage } from 'ai';
 import { z } from 'zod';
@@ -15,17 +16,23 @@ const deepseek = createOpenAICompatible({
 
 const ANONYMOUS_OPEN_ID = '__flow_guru_anonymous__';
 
+type ChatRequestBody = {
+  messages: UIMessage[];
+  openId?: string;
+  userId?: string;
+};
+
+function getErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
   }
 
   try {
-    const body = (await req.json()) as {
-      messages: UIMessage[];
-      openId?: string;
-      userId?: string;
-    };
+    const body = (await req.json()) as ChatRequestBody;
     const openId = body.openId ?? body.userId ?? ANONYMOUS_OPEN_ID;
 
     const user =
@@ -85,9 +92,9 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
                 factKey: factKey ?? null,
               });
               return { saved: true };
-            } catch (err) {
+            } catch (err: unknown) {
               console.error('saveMemory failed', err);
-              return { saved: false, error: String(err) };
+              return { saved: false, error: getErrorMessage(err) };
             }
           },
         }),
@@ -95,9 +102,9 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
     });
 
     return result.toUIMessageStreamResponse();
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('chat handler error', err);
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ error: getErrorMessage(err) }), {
       status: 500,
       headers: { 'content-type': 'application/json' },
     });
