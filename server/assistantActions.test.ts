@@ -757,6 +757,52 @@ describe("assistantActions", () => {
 
     const opts = { userId: 1, timeZone: "America/Toronto" };
 
+    it("adds a one-word grocery item from plain chat text without calling the LLM planner", async () => {
+      const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
+      dbMocks.listUserLists.mockResolvedValue([{ id: 1, name: "Grocery" }]);
+      dbMocks.addListItem.mockResolvedValue(200);
+      dbMocks.getListItems.mockResolvedValue([{ id: 200, content: "milk", completed: 0 }]);
+
+      const plan = await planAssistantAction({
+        userName: "Brandon",
+        memoryContext: "",
+        message: "add milk to grocery list",
+      });
+      const result = await executeAssistantAction(plan, opts);
+
+      expect(llmMocks.invokeLLM).not.toHaveBeenCalled();
+      expect(dbMocks.addListItem).toHaveBeenCalledWith(1, 1, "milk");
+      expect(result).toMatchObject({
+        action: "list.manage",
+        status: "executed",
+        data: { content: "milk", listName: "Grocery" },
+      });
+    });
+
+    it("adds a one-word todo item from shorthand phrasing", async () => {
+      const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
+      dbMocks.listUserLists.mockResolvedValue([]);
+      dbMocks.createList.mockResolvedValue(12);
+      dbMocks.addListItem.mockResolvedValue(201);
+      dbMocks.getListItems.mockResolvedValue([{ id: 201, content: "laundry", completed: 0 }]);
+
+      const plan = await planAssistantAction({
+        userName: "Brandon",
+        memoryContext: "",
+        message: "todo laundry",
+      });
+      const result = await executeAssistantAction(plan, opts);
+
+      expect(llmMocks.invokeLLM).not.toHaveBeenCalled();
+      expect(dbMocks.createList).toHaveBeenCalledWith(1, "Todo");
+      expect(dbMocks.addListItem).toHaveBeenCalledWith(1, 12, "laundry");
+      expect(result).toMatchObject({
+        action: "list.manage",
+        status: "executed",
+        data: { content: "laundry", listName: "Todo" },
+      });
+    });
+
     it("prefers an exact list-name match over a substring match", async () => {
       const { executeAssistantAction } = await import("./assistantActions");
       dbMocks.listUserLists.mockResolvedValue([

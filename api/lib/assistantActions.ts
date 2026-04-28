@@ -119,6 +119,105 @@ function normalizeText(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
+function canonicalListName(rawListName: string) {
+  const normalized = rawListName.toLowerCase().replace(/[-_]/g, " ");
+  if (/\b(grocery|groceries|shopping)\b/.test(normalized)) return "Grocery";
+  if (/\b(todo|to do|task|tasks|chore|chores)\b/.test(normalized)) return "Todo";
+  return rawListName.trim();
+}
+
+function cleanListItemContent(value: string | null | undefined) {
+  return normalizeText(
+    value
+      ?.replace(/^(please\s+)?(add|put|write(?:\s+down)?|jot(?:\s+down)?|note|save|remember)\s+/i, "")
+      .replace(/^(an?|the)\s+/i, "")
+      .replace(/[.!?]+$/g, ""),
+  );
+}
+
+function buildListPlan(params: {
+  action: "add" | "remove" | "list";
+  listName: string;
+  itemContent?: string | null;
+  rationale: string;
+}): AssistantActionPlan {
+  return {
+    action: "list.manage",
+    rationale: params.rationale,
+    route: null,
+    weather: null,
+    news: null,
+    calendar: null,
+    music: null,
+    browser: null,
+    subagent: null,
+    list: {
+      action: params.action,
+      listName: canonicalListName(params.listName),
+      itemContent: params.itemContent ?? null,
+      newName: null,
+      time: null,
+      location: null,
+    },
+  };
+}
+
+function parseSimpleListIntent(message: string): AssistantActionPlan | null {
+  const text = message.trim().replace(/\s+/g, " ");
+  if (!text) return null;
+
+  const listNamePattern = "(grocery|groceries|shopping|todo|to-do|to do|task|tasks|chore|chores)(?:\\s+list)?";
+  const listOnly = text.match(new RegExp(`^(?:what'?s|what is|show|list|read|check)\\s+(?:on|in)?\\s*(?:my|the)?\\s*${listNamePattern}\\??$`, "i"));
+  if (listOnly) {
+    return buildListPlan({
+      action: "list",
+      listName: listOnly[1],
+      rationale: "The user wants to read a list.",
+    });
+  }
+
+  const remove = text.match(new RegExp(`^(?:please\\s+)?(?:remove|delete|cross\\s+off|take\\s+off)\\s+(.+?)\\s+(?:from|off)\\s+(?:my|the)?\\s*${listNamePattern}$`, "i"));
+  if (remove) {
+    const itemContent = cleanListItemContent(remove[1]);
+    if (itemContent) {
+      return buildListPlan({
+        action: "remove",
+        listName: remove[2],
+        itemContent,
+        rationale: "The user wants to remove an item from a list.",
+      });
+    }
+  }
+
+  const addToList = text.match(new RegExp(`^(?:please\\s+)?(?:add|put|write(?:\\s+down)?|jot(?:\\s+down)?|note|save|remember)?\\s*(.+?)\\s+(?:to|in|on|into)\\s+(?:my|the)?\\s*${listNamePattern}$`, "i"));
+  if (addToList) {
+    const itemContent = cleanListItemContent(addToList[1]);
+    if (itemContent) {
+      return buildListPlan({
+        action: "add",
+        listName: addToList[2],
+        itemContent,
+        rationale: "The user wants to add an item to a list.",
+      });
+    }
+  }
+
+  const listThenItem = text.match(new RegExp(`^(?:please\\s+)?(?:add|put|write(?:\\s+down)?|jot(?:\\s+down)?|note|save|remember)?\\s*(?:to|in|on)?\\s*(?:my|the)?\\s*${listNamePattern}[:,]?\\s+(.+)$`, "i"));
+  if (listThenItem) {
+    const itemContent = cleanListItemContent(listThenItem[2]);
+    if (itemContent) {
+      return buildListPlan({
+        action: "add",
+        listName: listThenItem[1],
+        itemContent,
+        rationale: "The user wants to add an item to a list.",
+      });
+    }
+  }
+
+  return null;
+}
+
 function extractTextContent(content: string | Array<{ type: string; text?: string }>) {
   if (typeof content === "string") {
     return content.trim();
@@ -236,6 +335,9 @@ export async function planAssistantAction(params: {
   message: string;
   language: 'en' | 'fr';
 }) {
+  const deterministicListPlan = parseSimpleListIntent(params.message);
+  if (deterministicListPlan) return deterministicListPlan;
+
   const response = await invokeLLM({
     messages: [
       {
