@@ -99,19 +99,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (action === "register") {
       const { email, password, name, promoCode } = req.body || {};
-      if (!email || !password) {
+      const normalizedEmail = typeof email === "string" ? email.toLowerCase().trim() : "";
+      const normalizedPassword = typeof password === "string" ? password : "";
+      if (!normalizedEmail || !normalizedPassword) {
         return json(res, 400, { error: "Email and password are required." });
       }
-      if (password.length < 8) {
+      if (normalizedPassword.length < 8) {
         return json(res, 400, { error: "Password must be at least 8 characters." });
       }
-      const existing = await db.getUserByEmail(email);
+      const existing = await db.getUserByEmail(normalizedEmail);
       if (existing) {
         return json(res, 409, { error: "An account with this email already exists." });
       }
-      const passwordHash = await hashPassword(password);
+      const passwordHash = await hashPassword(normalizedPassword);
       const openId = `email_${randomBytes(12).toString("hex")}`;
-      const normalizedEmail = email.toLowerCase().trim();
       const inferredName = (typeof name === "string" && name.trim())
         ? name.trim()
         : normalizedEmail.split("@")[0];
@@ -139,14 +140,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (action === "login") {
       const { email, password, promoCode } = req.body || {};
-      if (!email || !password) {
+      const normalizedEmail = typeof email === "string" ? email.toLowerCase().trim() : "";
+      const normalizedPassword = typeof password === "string" ? password : "";
+      if (!normalizedEmail || !normalizedPassword) {
         return json(res, 400, { error: "Email and password are required." });
       }
-      const user = await db.getUserByEmail(email);
-      if (!user || !user.passwordHash) {
+      const user = await db.getUserByEmail(normalizedEmail);
+      if (!user) {
         return json(res, 401, { error: "Invalid email or password." });
       }
-      const valid = await verifyPassword(password, user.passwordHash);
+      if (!user.passwordHash) {
+        return json(res, 401, {
+          error: "This account does not have an email password yet. Use sign up with this email to set one.",
+        });
+      }
+      const valid = await verifyPassword(normalizedPassword, user.passwordHash);
       if (!valid) {
         return json(res, 401, { error: "Invalid email or password." });
       }
