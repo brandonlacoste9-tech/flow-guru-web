@@ -11,6 +11,34 @@ import { captureClientException, initClientSentry } from "./lib/sentry";
 
 initClientSentry();
 
+const DYNAMIC_IMPORT_RELOAD_KEY = "fg_dynamic_import_reloaded_once";
+
+function isDynamicImportLoadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return (
+    message.includes("Failed to fetch dynamically imported module")
+    || message.includes("Importing a module script failed")
+    || message.includes("ChunkLoadError")
+  );
+}
+
+function installDynamicImportRecovery() {
+  if (typeof window === "undefined") return;
+
+  const recover = (error: unknown) => {
+    if (!isDynamicImportLoadError(error)) return;
+    const alreadyReloaded = sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY) === "1";
+    if (alreadyReloaded) return;
+    sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, "1");
+    window.location.reload();
+  };
+
+  window.addEventListener("error", event => recover(event.error ?? event.message));
+  window.addEventListener("unhandledrejection", event => recover(event.reason));
+}
+
+installDynamicImportRecovery();
+
 const queryClient = new QueryClient();
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
