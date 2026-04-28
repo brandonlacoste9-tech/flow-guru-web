@@ -37,6 +37,11 @@ export default function ReminderDaemon() {
             <div className="text-center">
               <p className="text-xl font-semibold text-foreground">Alarm</p>
               <p className="mt-1 text-sm text-muted-foreground">{alarmState.label}</p>
+              {alarmState.isRepeating && (
+                <p className="mt-2 text-xs font-medium text-primary">
+                  Repeats every 5 minutes until turned off
+                </p>
+              )}
             </div>
             <div className="flex w-full gap-3">
               <button

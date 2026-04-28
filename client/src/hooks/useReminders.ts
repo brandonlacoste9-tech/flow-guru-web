@@ -18,6 +18,7 @@ interface UseRemindersOptions {
 export interface AlarmState {
   firing: boolean;
   label: string; // e.g. "Wake-up alarm — 7:00 AM"
+  isRepeating: boolean;
 }
 
 // Track which reminders have already fired today to avoid repeats
@@ -83,7 +84,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   onWakeUpRef.current = onWakeUp;
 
   // ── Alarm overlay state ──────────────────────────────────────────────────────
-  const [alarmState, setAlarmState] = useState<AlarmState>({ firing: false, label: '' });
+  const [alarmState, setAlarmState] = useState<AlarmState>({ firing: false, label: '', isRepeating: false });
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,21 +103,24 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     const ringDuration = kind === 'wake' ? MAX_ALARM_MS : EVENT_ALARM_RING_MS;
     playAlarmSound(sound, ringDuration);
 
-    setAlarmState({ firing: true, label });
+    setAlarmState({ firing: true, label, isRepeating: kind === 'event' });
     setTimeout(() => speakRef.current(spokenMsg), sound === 'chime' ? 3500 : 1000);
 
     // Wake alarms keep ringing up to MAX_ALARM_MS. Event alarms ring for 1 minute,
     // then re-trigger every 5 minutes until the user turns them off.
     autoStopTimerRef.current = setTimeout(() => {
       stopAlarmSound();
-      setAlarmState({ firing: false, label: '' });
       if (kind === 'event') {
+        // Keep controls visible between event repeats so the user can always stop/snooze.
+        setAlarmState((prev) => ({ ...prev, firing: true, isRepeating: true }));
         repeatTimerRef.current = setTimeout(() => {
           const current = activeAlarmRef.current;
           if (!current) return;
           fireAlarm(current.label, current.sound, current.spokenMsg, current.kind);
         }, EVENT_ALARM_REPEAT_MS);
+        return;
       }
+      setAlarmState({ firing: false, label: '', isRepeating: false });
     }, ringDuration);
   }, []);
 
@@ -133,7 +137,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     }
     
     activeAlarmRef.current = null;
-    setAlarmState({ firing: false, label: '' });
+    setAlarmState({ firing: false, label: '', isRepeating: false });
   }, []);
 
   /** Snooze the alarm for 9 minutes */
@@ -146,7 +150,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     const currentSound = current?.sound || alarmSoundRef.current;
     const currentKind = current?.kind || (currentLabel.toLowerCase().includes('wake-up') ? 'wake' : 'event');
     const currentUser = userNameRef.current;
-    setAlarmState({ firing: false, label: '' });
+    setAlarmState({ firing: false, label: '', isRepeating: false });
     snoozeTimerRef.current = setTimeout(() => {
       fireAlarm(currentLabel, currentSound, `Hey ${currentUser}, your snoozed alarm is going off now!`, currentKind);
     }, SNOOZE_MS);
