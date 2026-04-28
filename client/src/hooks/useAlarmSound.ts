@@ -118,6 +118,8 @@ async function playChime(): Promise<void> {
 // ─── Radio ───────────────────────────────────────────────────────────────────
 let radioAudio: HTMLAudioElement | null = null;
 let radioTimeout: ReturnType<typeof setTimeout> | null = null;
+let chimeInterval: ReturnType<typeof setInterval> | null = null;
+let chimeStopTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function stopRadio(): void {
   if (radioTimeout) { clearTimeout(radioTimeout); radioTimeout = null; }
@@ -126,6 +128,29 @@ function stopRadio(): void {
     radioAudio.src = '';
     radioAudio = null;
   }
+}
+
+function stopChimeLoop(): void {
+  if (chimeInterval) {
+    clearInterval(chimeInterval);
+    chimeInterval = null;
+  }
+  if (chimeStopTimeout) {
+    clearTimeout(chimeStopTimeout);
+    chimeStopTimeout = null;
+  }
+}
+
+function playChimeLoop(durationMs: number): void {
+  stopChimeLoop();
+  // Play immediately, then repeat at a steady cadence until stopped.
+  void playChime();
+  chimeInterval = setInterval(() => {
+    void playChime();
+  }, 8000);
+  chimeStopTimeout = setTimeout(() => {
+    stopChimeLoop();
+  }, Math.max(1000, durationMs));
 }
 
 function playRadio(type: AlarmSoundType, durationMs: number): void {
@@ -155,12 +180,13 @@ function playRadio(type: AlarmSoundType, durationMs: number): void {
 export function playAlarmSound(type: AlarmSoundType, durationMs = 30000): void {
   if (type === 'none') return;
   if (type === 'chime') {
-    playChime();
+    playChimeLoop(durationMs);
     return;
   }
   playRadio(type, durationMs);
 }
 
 export function stopAlarmSound(): void {
+  stopChimeLoop();
   stopRadio();
 }

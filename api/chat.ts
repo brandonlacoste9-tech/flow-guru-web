@@ -1,4 +1,3 @@
-// TODO(ZYE-18): restore @ai-sdk/openai-compatible + ai; excluded from focused TS check.
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { streamText, tool, convertToModelMessages, stepCountIs, type UIMessage } from 'ai';
 import { z } from 'zod';
@@ -27,23 +26,17 @@ type RecallMemoryInput = z.infer<typeof recallMemoryInputSchema>;
 type SaveMemoryInput = z.infer<typeof saveMemoryInputSchema>;
 type MemoryFactRow = { id: number; factValue: string; factKey: string | null };
 
-type ChatRequestBody = {
-  messages: UIMessage[];
-  openId?: string;
-  userId?: string;
-};
-
-function getErrorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
-
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
   }
 
   try {
-    const body = (await req.json()) as ChatRequestBody;
+    const body = (await req.json()) as {
+      messages: UIMessage[];
+      openId?: string;
+      userId?: string;
+    };
     const openId = body.openId ?? body.userId ?? ANONYMOUS_OPEN_ID;
 
     const user =
@@ -136,10 +129,10 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
                 category,
                 factKey: cleanFactKey,
               });
-              return { saved: true };
-            } catch (err: unknown) {
+              return { saved: true, inserted: true };
+            } catch (err) {
               console.error('saveMemory failed', err);
-              return { saved: false, error: getErrorMessage(err) };
+              return { saved: false, error: String(err) };
             }
           },
         }),
@@ -147,9 +140,9 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
     });
 
     return result.toUIMessageStreamResponse();
-  } catch (err: unknown) {
+  } catch (err) {
     console.error('chat handler error', err);
-    return new Response(JSON.stringify({ error: getErrorMessage(err) }), {
+    return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { 'content-type': 'application/json' },
     });

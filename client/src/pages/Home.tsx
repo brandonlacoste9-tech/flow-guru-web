@@ -86,8 +86,8 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     return !localStorage.getItem('floguru_onboarded');
   });
-  const [wakeUpTime, setWakeUpTime] = useState<string | null>(null);
-  const [alarmDays, setAlarmDays] = useState<string>('0,1,2,3,4,5,6');
+  const [wakeUpTime, setWakeUpTime] = useState<string | null>(() => localStorage.getItem('wakeUpTime'));
+  const [alarmDays, setAlarmDays] = useState<string>(() => localStorage.getItem('alarmDays') || '0,1,2,3,4,5,6');
   const [alarmSound, setAlarmSound] = useState<import('@/hooks/useAlarmSound').AlarmSoundType>(() => {
     return (localStorage.getItem('alarmSound') as import('@/hooks/useAlarmSound').AlarmSoundType) || 'chime';
   });
@@ -115,15 +115,35 @@ export default function Home() {
   useEffect(() => {
     const data = profileQuery.data as any;
     if (!data) return;
-    if (data.wakeUpTime) setWakeUpTime(data.wakeUpTime);
+    if (data.wakeUpTime !== undefined) {
+      setWakeUpTime(data.wakeUpTime || null);
+      localStorage.setItem('wakeUpTime', data.wakeUpTime || '');
+    }
     if (data.alarmSound) {
       setAlarmSound(data.alarmSound as import('@/hooks/useAlarmSound').AlarmSoundType);
       localStorage.setItem('alarmSound', data.alarmSound);
     }
-    if (data.alarmDays) setAlarmDays(data.alarmDays);
+    if (data.alarmDays) {
+      setAlarmDays(data.alarmDays);
+      localStorage.setItem('alarmDays', data.alarmDays);
+    }
   }, [profileQuery.data]);
 
   const bootstrap = trpc.assistant.bootstrap.useQuery({ language }, { enabled: true });
+  const activeAlarmLabel = typeof window !== 'undefined' ? localStorage.getItem('fg_alarm_active_label') : null;
+  const snoozedUntilIso = typeof window !== 'undefined' ? localStorage.getItem('fg_alarm_snoozed_until') : null;
+  const snoozedUntilDate = snoozedUntilIso ? new Date(snoozedUntilIso) : null;
+  const snoozedActive = Boolean(snoozedUntilDate && !Number.isNaN(snoozedUntilDate.getTime()) && snoozedUntilDate.getTime() > Date.now());
+  const nextWakeHint = wakeUpTime
+    ? (language === 'en' ? `Wake alarm at ${wakeUpTime}` : `Alarme de reveil a ${wakeUpTime}`)
+    : (language === 'en' ? 'Wake alarm not set' : 'Alarme de reveil non definie');
+  const alarmStatusHint = activeAlarmLabel
+    ? activeAlarmLabel
+    : snoozedActive && snoozedUntilDate
+      ? (language === 'en'
+        ? `Alarm snoozed until ${snoozedUntilDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+        : `Alarme reportee jusqu'a ${snoozedUntilDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`)
+      : nextWakeHint;
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -489,6 +509,8 @@ export default function Home() {
     voiceGender,
     alarmSound,
     alarmDays,
+    waterBreakEnabled: localStorage.getItem('fg_water_break_enabled') === '1',
+    waterBreakIntervalMinutes: Number(localStorage.getItem('fg_water_break_interval_minutes') || '60'),
     onWakeUp: handleBriefing,
   });
 
@@ -774,17 +796,28 @@ export default function Home() {
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('card_calendar_today')}</span>
                       </div>
-                      <button
-                        className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[9px] sm:text-[10px] uppercase font-bold tracking-wider hover:bg-primary/20 transition-colors"
-                        onClick={(e) => {
-                          if (isGoogleConnected) {
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[9px] sm:text-[10px] uppercase font-bold tracking-wider hover:bg-primary/20 transition-colors"
+                          onClick={(e) => {
                             e.stopPropagation();
-                            window.open('https://calendar.google.com/calendar/u/0/r', '_blank');
-                          }
-                        }}
-                      >
-                        {isGoogleConnected ? t('card_calendar_open_google') : t('card_calendar_open')}
-                      </button>
+                            navigate('/settings?tab=alarms');
+                          }}
+                        >
+                          {language === 'en' ? 'Alarms' : 'Alarmes'}
+                        </button>
+                        <button
+                          className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[9px] sm:text-[10px] uppercase font-bold tracking-wider hover:bg-primary/20 transition-colors"
+                          onClick={(e) => {
+                            if (isGoogleConnected) {
+                              e.stopPropagation();
+                              window.open('https://calendar.google.com/calendar/u/0/r', '_blank');
+                            }
+                          }}
+                        >
+                          {isGoogleConnected ? t('card_calendar_open_google') : t('card_calendar_open')}
+                        </button>
+                      </div>
                     </div>
                     
                     {allTodayEvents.length > 0 ? (
@@ -808,6 +841,9 @@ export default function Home() {
                         <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{t('card_calendar_no_events')}</p>
                       </div>
                     )}
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3 truncate">
+                      {alarmStatusHint}
+                    </p>
                   </motion.div>
 
                   {/* News Card */}
