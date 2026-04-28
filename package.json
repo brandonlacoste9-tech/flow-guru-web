@@ -13,6 +13,7 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
+    "smoke:billing": "tsx scripts/smoke/billing.ts",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
   "dependencies": {
@@ -89,6 +90,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@browserbasehq/sdk": "^2.10.0",
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.2.4",
     "@types/express": "5.0.6",
@@ -102,6 +104,7 @@
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.4",
     "esbuild": "^0.28.0",
+    "playwright-core": "^1.59.1",
     "pnpm": "^10.33.2",
     "postcss": "^8.5.12",
     "prettier": "^3.6.2",

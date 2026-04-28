@@ -1,0 +1,40 @@
+name: Billing smoke
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Deployment URL to smoke test"
+        required: false
+        type: string
+
+jobs:
+  billing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run billing smoke
+        env:
+          BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+          BROWSERBASE_PROJECT_ID: ${{ secrets.BROWSERBASE_PROJECT_ID }}
+          SMOKE_TARGET_URL: ${{ inputs.target_url || secrets.SMOKE_TARGET_URL || 'https://floguru.com' }}
+          SMOKE_AUTH_COOKIE: ${{ secrets.SMOKE_AUTH_COOKIE }}
+        run: pnpm smoke:billing
