@@ -152,6 +152,33 @@ function vitePluginManusDebugCollector(): Plugin {
 
 const plugins = [react(), tailwindcss(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
 
+function manualChunks(id: string) {
+  if (!id.includes("node_modules")) return undefined;
+
+  if (id.includes("framer-motion")) return "vendor-framer";
+  if (id.includes("lucide-react")) return "vendor-icons";
+  if (id.includes("recharts")) return "vendor-charts";
+  if (id.includes("date-fns")) return "vendor-date";
+
+  if (
+    id.includes("@tanstack/react-query")
+    || id.includes("@trpc/client")
+    || id.includes("@trpc/react-query")
+  ) {
+    return "vendor-query";
+  }
+
+  if (
+    id.includes("@radix-ui/")
+    || id.includes("sonner")
+    || id.includes("vaul")
+  ) {
+    return "vendor-ui";
+  }
+
+  return "vendor";
+}
+
 export default defineConfig({
   plugins,
   resolve: {
@@ -169,25 +196,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-framer": ["framer-motion"],
-          "vendor-icons": ["lucide-react"],
-          "vendor-charts": ["recharts"],
-          "vendor-date": ["date-fns"],
-          "vendor-query": ["@tanstack/react-query", "@trpc/client", "@trpc/react-query"],
-          "vendor-ui": [
-            "@radix-ui/react-accordion",
-            "@radix-ui/react-alert-dialog",
-            "@radix-ui/react-avatar",
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-dropdown-menu",
-            "@radix-ui/react-popover",
-            "@radix-ui/react-select",
-            "@radix-ui/react-tooltip",
-            "sonner",
-            "vaul"
-          ],
-        },
+        manualChunks,
       },
     },
   },
