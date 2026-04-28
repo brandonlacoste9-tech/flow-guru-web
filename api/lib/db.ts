@@ -11,6 +11,7 @@ let _pg: ReturnType<typeof postgres> | null = null;
 let schemaReadyPromise: Promise<void> | null = null;
 
 const ANONYMOUS_OPEN_ID = "__flow_guru_anonymous__";
+const normalizeMemoryText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
 
 const EXPECTED_TABLES = [
   "fg_users",
@@ -514,8 +515,54 @@ export async function createUserMemoryFacts(userId: number, facts: any[]): Promi
       const db = await getDb();
       if (!db) return;
       await ensureTables(db);
-      const values = facts.map(f => ({ ...f, userId }));
-      await db.insert(schema.userMemoryFacts).values(values);
+      for (const fact of facts) {
+        const cleanFactValue = typeof fact.factValue === "string" ? fact.factValue.trim() : "";
+        const cleanFactKey = typeof fact.factKey === "string" && fact.factKey.trim() ? fact.factKey.trim() : null;
+        const category = fact.category ?? "general";
+
+        if (!cleanFactValue) continue;
+
+        const existingRows = await db
+          .select({
+            id: schema.userMemoryFacts.id,
+            factValue: schema.userMemoryFacts.factValue,
+            factKey: schema.userMemoryFacts.factKey,
+          })
+          .from(schema.userMemoryFacts)
+          .where(
+            and(
+              eq(schema.userMemoryFacts.userId, userId),
+              eq(schema.userMemoryFacts.category, category)
+            )
+          )
+          .orderBy(desc(schema.userMemoryFacts.updatedAt))
+          .limit(100);
+
+        const normalizedIncoming = normalizeMemoryText(cleanFactValue);
+        const keyedMatch = cleanFactKey
+          ? existingRows.find((row: any) => (row.factKey ?? "").trim() === cleanFactKey)
+          : null;
+
+        if (keyedMatch) {
+          if (normalizeMemoryText(keyedMatch.factValue) === normalizedIncoming) continue;
+          await db
+            .update(schema.userMemoryFacts)
+            .set({ factValue: cleanFactValue, updatedAt: new Date() })
+            .where(eq(schema.userMemoryFacts.id, keyedMatch.id));
+          continue;
+        }
+
+        const duplicate = existingRows.find((row: any) => normalizeMemoryText(row.factValue) === normalizedIncoming);
+        if (duplicate) continue;
+
+        await db.insert(schema.userMemoryFacts).values({
+          ...fact,
+          userId,
+          category,
+          factValue: cleanFactValue,
+          factKey: cleanFactKey,
+        });
+      }
     } catch (err) {
       console.error("[DB] createUserMemoryFacts failed:", err);
     }
