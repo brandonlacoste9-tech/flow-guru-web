@@ -1,3 +1,4 @@
+// TODO(ZYE-18): restore @ai-sdk/openai-compatible + ai; excluded from focused TS check.
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { streamText, tool, convertToModelMessages, stepCountIs, type UIMessage } from 'ai';
 import { z } from 'zod';
