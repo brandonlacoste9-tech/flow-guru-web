@@ -28,8 +28,9 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
 function buildSetCookieHeader(name: string, value: string, maxAgeMs: number, secure: boolean): string {
   const maxAgeSec = Math.floor(maxAgeMs / 1000);
   const expires = new Date(Date.now() + maxAgeMs).toUTCString();
-  let cookie = `${name}=${value}; Max-Age=${maxAgeSec}; Expires=${expires}; Path=/; HttpOnly; SameSite=None`;
-  if (secure) cookie += "; Secure";
+  // Same-site app auth is more reliable with Lax than None; None can be rejected if Secure handling is inconsistent.
+  let cookie = `${name}=${value}; Max-Age=${maxAgeSec}; Expires=${expires}; Path=/; HttpOnly; SameSite=Lax`;
+  if (secure || ENV.isProduction) cookie += "; Secure";
   return cookie;
 }
 
