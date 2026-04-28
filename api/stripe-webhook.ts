@@ -2,15 +2,12 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
 import { recordStripeEvent, upsertSubscriptionStatus } from "./lib/db.js";
 import { captureServerException, initServerSentry } from "./lib/sentry.js";
+import { resolveStripeSecretKey, resolveStripeWebhookSecret } from "./lib/stripe.js";
 
 initServerSentry();
 
 function getStripe() {
-  const secret = process.env.STRIPE_SECRET_KEY;
-  if (!secret) {
-    throw new Error("STRIPE_SECRET_KEY is not configured");
-  }
-  return new Stripe(secret);
+  return new Stripe(resolveStripeSecretKey());
 }
 
 async function readRawBody(req: VercelRequest) {
@@ -22,10 +19,7 @@ async function readRawBody(req: VercelRequest) {
 }
 
 function constructStripeEvent(rawBody: string, signatureHeader: string | undefined) {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) {
-    throw new Error("STRIPE_WEBHOOK_SECRET is not configured");
-  }
+  const secret = resolveStripeWebhookSecret();
   if (!signatureHeader) {
     throw new Error("Missing Stripe signature");
   }
@@ -34,10 +28,7 @@ function constructStripeEvent(rawBody: string, signatureHeader: string | undefin
 }
 
 async function stripeGet(path: string) {
-  const secret = process.env.STRIPE_SECRET_KEY;
-  if (!secret) {
-    throw new Error("STRIPE_SECRET_KEY is not configured");
-  }
+  const secret = resolveStripeSecretKey();
   const response = await fetch(`https://api.stripe.com/v1${path}`, {
     headers: { Authorization: `Bearer ${secret}` },
   });
