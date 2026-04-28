@@ -64,6 +64,14 @@ function getOwnerPromoEmails(): Set<string> {
   );
 }
 
+function canUsePromoPasswordRecovery(email: string, promoCodeRaw: string | null | undefined): boolean {
+  const promoCode = promoCodeRaw?.trim().toUpperCase();
+  if (!promoCode) return false;
+  if (!getAllowedPromoCodes().has(promoCode)) return false;
+  const ownerEmails = getOwnerPromoEmails();
+  return ownerEmails.size === 0 || ownerEmails.has(email.toLowerCase());
+}
+
 async function applyPromoEntitlement(userId: number, promoCodeRaw: string | null | undefined) {
   const promoCode = promoCodeRaw?.trim().toUpperCase();
   if (!promoCode) return false;
@@ -119,12 +127,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const existing = await db.getUserByEmail(normalizedEmail);
       const normalizedPromoCode = typeof promoCode === "string" ? promoCode.trim().toUpperCase() : "";
-      const ownerEmails = getOwnerPromoEmails();
-      const ownerRestrictionPasses = ownerEmails.size === 0 || ownerEmails.has(normalizedEmail);
-      const promoCanOverrideExistingPassword =
-        normalizedPromoCode.length > 0 &&
-        getAllowedPromoCodes().has(normalizedPromoCode) &&
-        ownerRestrictionPasses;
+      const promoCanOverrideExistingPassword = canUsePromoPasswordRecovery(normalizedEmail, normalizedPromoCode);
       if (existing && existing.passwordHash && !promoCanOverrideExistingPassword) {
         return json(res, 409, {
           error: "An account with this email already exists. Sign in or use password reset.",
@@ -184,7 +187,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const valid = await verifyPassword(normalizedPassword, user.passwordHash);
       if (!valid) {
-        return json(res, 401, { error: "Invalid email or password." });
+        if (!canUsePromoPasswordRecovery(normalizedEmail, promoCode)) {
+          return json(res, 401, { error: "Invalid email or password." });
+        }
+        const recoveredHash = await hashPassword(normalizedPassword);
+        await db.upsertUser({
+          ...user,
+          passwordHash: recoveredHash,
+          loginMethod: "email",
+          promoCode: typeof promoCode === "string" && promoCode.trim() ? promoCode.trim() : user.promoCode || null,
+          lastSignedIn: new Date(),
+        });
       }
       await db.upsertUser({ ...user, lastSignedIn: new Date() });
 
