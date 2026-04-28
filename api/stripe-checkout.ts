@@ -24,6 +24,7 @@ async function createCheckoutSession(params: {
   userId: number;
   email?: string | null;
   origin: string;
+  promoCode?: string | null;
 }) {
   const secret = resolveStripeSecretKey();
   const priceId = resolveStripeMonthlyPriceId();
@@ -32,6 +33,7 @@ async function createCheckoutSession(params: {
     mode: "subscription",
     "line_items[0][price]": priceId,
     "line_items[0][quantity]": "1",
+    allow_promotion_codes: "true",
     client_reference_id: String(params.userId),
     success_url: `${params.origin}/settings?billing=success`,
     cancel_url: `${params.origin}/settings?billing=cancelled`,
@@ -41,6 +43,25 @@ async function createCheckoutSession(params: {
 
   if (params.email) {
     body.set("customer_email", params.email);
+  }
+
+  const normalizedPromo = params.promoCode?.trim().toUpperCase() ?? "";
+  if (normalizedPromo) {
+    const promoLookup = await fetch(
+      `https://api.stripe.com/v1/promotion_codes?code=${encodeURIComponent(normalizedPromo)}&active=true&limit=1`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${secret}`,
+        },
+      }
+    );
+    const promoPayload = await promoLookup.json() as { data?: Array<{ id: string }> };
+    const promoId = promoPayload.data?.[0]?.id;
+    if (!promoLookup.ok || !promoId) {
+      throw new Error(`Promo code "${normalizedPromo}" is invalid or inactive.`);
+    }
+    body.set("discounts[0][promotion_code]", promoId);
   }
 
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
@@ -67,11 +88,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const body = (typeof req.body === "object" && req.body) ? req.body : {};
+    const promoCode = typeof body.promoCode === "string" ? body.promoCode : null;
     const user = await sdk.authenticateRequest(req);
     const session = await createCheckoutSession({
       userId: user.id,
       email: user.email,
       origin: getAppOrigin(req),
+      promoCode,
     });
     return res.status(200).json(session);
   } catch (err: any) {

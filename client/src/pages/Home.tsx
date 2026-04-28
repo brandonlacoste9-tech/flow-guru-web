@@ -130,6 +130,17 @@ export default function Home() {
   }, [profileQuery.data]);
 
   const bootstrap = trpc.assistant.bootstrap.useQuery({ language }, { enabled: true });
+  const uniqueMemoryCount = (() => {
+    const facts = ((bootstrap.data as any)?.memoryFacts ?? []) as Array<any>;
+    const seen = new Set<string>();
+    for (const fact of facts) {
+      const normalizedValue = String(fact?.factValue ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizedKey = String(fact?.factKey ?? '').trim().toLowerCase();
+      const normalizedCategory = String(fact?.category ?? '').trim().toLowerCase();
+      seen.add(`${normalizedCategory}::${normalizedKey}::${normalizedValue}`);
+    }
+    return seen.size;
+  })();
   const activeAlarmLabel = typeof window !== 'undefined' ? localStorage.getItem('fg_alarm_active_label') : null;
   const snoozedUntilIso = typeof window !== 'undefined' ? localStorage.getItem('fg_alarm_snoozed_until') : null;
   const snoozedUntilDate = snoozedUntilIso ? new Date(snoozedUntilIso) : null;
@@ -913,8 +924,8 @@ export default function Home() {
                     <p className="text-sm font-semibold text-foreground">{language === 'en' ? 'AI Knowledge' : 'Connaissance IA'}</p>
                     <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                       {language === 'en' 
-                        ? <>Flow Guru has learned <span className="text-primary font-bold">{bootstrap.data?.memoryFacts?.length || 0}</span> facts about you.</>
-                        : <>Flow Guru a appris <span className="text-primary font-bold">{bootstrap.data?.memoryFacts?.length || 0}</span> faits sur vous.</>}
+                        ? <>Flow Guru has learned <span className="text-primary font-bold">{uniqueMemoryCount}</span> facts about you.</>
+                        : <>Flow Guru a appris <span className="text-primary font-bold">{uniqueMemoryCount}</span> faits sur vous.</>}
                     </p>
                     <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">{language === 'en' ? 'Manage Memories' : 'Gérer les mémoires'} →</p>
                   </motion.div>
