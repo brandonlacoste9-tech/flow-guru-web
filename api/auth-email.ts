@@ -75,6 +75,15 @@ async function applyPromoEntitlement(userId: number, promoCodeRaw: string | null
   return true;
 }
 
+async function tryApplyPromoEntitlement(userId: number, promoCodeRaw: string | null | undefined): Promise<boolean> {
+  try {
+    return await applyPromoEntitlement(userId, promoCodeRaw);
+  } catch (err: any) {
+    console.warn("[EmailAuth] Promo entitlement skipped:", err?.message ?? String(err));
+    return false;
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Allow CORS for same-origin fetch
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
@@ -119,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       const cookieHeader = buildSetCookieHeader(COOKIE_NAME, sessionToken, ONE_YEAR_MS, isSecure(req));
       res.setHeader("Set-Cookie", cookieHeader);
-      const promoApplied = await applyPromoEntitlement(user.id, promoCode);
+      const promoApplied = await tryApplyPromoEntitlement(user.id, promoCode);
       return json(res, 200, { ok: true, name: user.name, promoApplied });
     }
 
@@ -144,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       const cookieHeader = buildSetCookieHeader(COOKIE_NAME, sessionToken, ONE_YEAR_MS, isSecure(req));
       res.setHeader("Set-Cookie", cookieHeader);
-      const promoApplied = await applyPromoEntitlement(user.id, promoCode);
+      const promoApplied = await tryApplyPromoEntitlement(user.id, promoCode);
       return json(res, 200, { ok: true, name: user.name, promoApplied });
     }
 
