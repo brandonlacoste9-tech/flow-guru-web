@@ -108,8 +108,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return json(res, 400, { error: "Password must be at least 8 characters." });
       }
       const existing = await db.getUserByEmail(normalizedEmail);
-      if (existing && existing.passwordHash) {
-        return json(res, 409, { error: "An account with this email already exists." });
+      const normalizedPromoCode = typeof promoCode === "string" ? promoCode.trim().toUpperCase() : "";
+      const promoCanOverrideExistingPassword = normalizedPromoCode.length > 0 && getAllowedPromoCodes().has(normalizedPromoCode);
+      if (existing && existing.passwordHash && !promoCanOverrideExistingPassword) {
+        return json(res, 409, {
+          error: "An account with this email already exists. If you own this account, use promo code GURU1976 while signing up to reset its email password.",
+        });
       }
       const passwordHash = await hashPassword(normalizedPassword);
       const inferredName = (typeof name === "string" && name.trim())
