@@ -18,6 +18,16 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output;
 }
 
+function arrayBufferToBase64(value: ArrayBuffer | null): string {
+  if (!value) return '';
+  const bytes = new Uint8Array(value);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 export function usePushNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [swReady, setSwReady] = useState(false);
@@ -49,13 +59,21 @@ export function usePushNotifications() {
         const vapidKey =
           import.meta.env.VITE_VAPID_PUBLIC_KEY ||
           'BHjQ-4anMIWuj2qfTO3hHmoyemSuchf_gqxKAyCqEkE56fC7iRAWrQwQ8Ts_wifuxW4NA2InsvSTYzg-7M_Eaxk';
-        const sub = await swRef.current!.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey),
-        });
+        let sub = await swRef.current!.pushManager.getSubscription();
 
-        const p256dh = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('p256dh')!) as any));
-        const auth = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('auth')!) as any));
+        if (!sub) {
+          sub = await swRef.current!.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+          });
+        }
+
+        const p256dh = arrayBufferToBase64(sub.getKey('p256dh'));
+        const auth = arrayBufferToBase64(sub.getKey('auth'));
+
+        if (!p256dh || !auth) {
+          throw new Error('Missing push encryption keys from subscription.');
+        }
 
         await registerMutation.mutateAsync({
           subscription: {
@@ -65,7 +83,30 @@ export function usePushNotifications() {
         });
         console.log('[Push] Registered with backend');
       } catch (err) {
-        console.warn('[Push] Subscription failed:', err);
+        // Recover from stale/broken subscription state, then retry once.
+        try {
+          const existing = await swRef.current!.pushManager.getSubscription();
+          if (existing) await existing.unsubscribe();
+          const vapidKey =
+            import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+            'BHjQ-4anMIWuj2qfTO3hHmoyemSuchf_gqxKAyCqEkE56fC7iRAWrQwQ8Ts_wifuxW4NA2InsvSTYzg-7M_Eaxk';
+          const sub = await swRef.current!.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+          });
+          const p256dh = arrayBufferToBase64(sub.getKey('p256dh'));
+          const auth = arrayBufferToBase64(sub.getKey('auth'));
+          if (!p256dh || !auth) throw new Error('Missing push encryption keys after resubscribe.');
+          await registerMutation.mutateAsync({
+            subscription: {
+              endpoint: sub.endpoint,
+              keys: { p256dh, auth },
+            },
+          });
+          console.log('[Push] Recovered subscription and re-registered with backend');
+        } catch (retryErr) {
+          console.warn('[Push] Subscription failed:', retryErr ?? err);
+        }
       }
     };
 
