@@ -748,8 +748,8 @@ export const appRouter = router({
         const dailyMessages = await countUserMessagesSince(userId, startOfUtcDay());
         if (dailyMessages >= FREE_DAILY_ASSISTANT_MESSAGES) {
           const reply = input.language === 'fr'
-            ? "Tu as atteint la limite gratuite d'aujourd'hui. Passe à Flow Guru Monthly pour continuer sans attendre."
-            : "You've hit today's free limit. Upgrade to Flow Guru Monthly to keep chatting without waiting.";
+            ? "Ton palier gratuit est termine pour aujourd'hui. Passe a Flow Guru Monthly pour continuer sans attendre."
+            : "Your free tier is over for today. Upgrade to Flow Guru Monthly to keep chatting without waiting.";
           await createConversationMessage({ threadId, userId, role: "assistant", content: reply });
           await touchConversationThread(threadId);
           const messages = await listConversationMessages(threadId);

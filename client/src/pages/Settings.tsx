@@ -10,6 +10,11 @@ import { getLoginUrl } from '@/const';
 import { trackConversion } from '@/lib/telemetry';
 
 type Tab = 'profile' | 'memory' | 'persona' | 'instructions' | 'billing' | 'referral' | 'integrations';
+const FREE_TIER_OVER_DAY_KEY = "fg_free_tier_over_utc_day";
+
+function currentUtcDayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 const RADIO_URLS: Record<string, string> = {
   'radio-focus': 'https://ice6.somafm.com/groovesalad-128-mp3',
@@ -91,6 +96,7 @@ export function Settings() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [freeTierOverToday, setFreeTierOverToday] = useState(false);
 
   const profileQuery = trpc.settings.getProfile.useQuery(undefined);
 
@@ -187,6 +193,11 @@ export function Settings() {
       trackConversion('checkout_cancelled');
       toast.info('Checkout cancelled.');
     }
+  }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(FREE_TIER_OVER_DAY_KEY);
+    setFreeTierOverToday(stored === currentUtcDayKey());
   }, []);
 
   async function fetchBillingStatus() {
@@ -746,23 +757,39 @@ export function Settings() {
                       <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />Calendar integrations, voice, and upcoming automation tools</li>
                     </ul>
                     <button
-                      disabled={checkoutLoading || portalLoading}
+                      disabled={
+                        checkoutLoading
+                        || portalLoading
+                        || (!billingStatus?.isPro && !isBillingUnauthenticated && !freeTierOverToday)
+                      }
                       onClick={
                         billingStatus?.isPro
                           ? handleManageSubscription
                           : isBillingUnauthenticated
                             ? () => handleSignInForUpgrade('billing_plan_button')
-                            : handleUpgrade
+                            : freeTierOverToday
+                              ? handleUpgrade
+                              : undefined
                       }
                       className={cn(
                         'w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all',
                         billingStatus?.isPro
                           ? 'bg-background border border-primary/40 text-primary hover:bg-primary/10'
-                          : 'bg-primary text-primary-foreground hover:opacity-90'
+                          : (!isBillingUnauthenticated && !freeTierOverToday)
+                            ? 'bg-secondary text-muted-foreground cursor-not-allowed'
+                            : 'bg-primary text-primary-foreground hover:opacity-90'
                       )}
                     >
                       {checkoutLoading || portalLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                      {billingStatus?.isPro ? 'Manage subscription' : isBillingUnauthenticated ? 'Sign in to upgrade' : 'Upgrade to Monthly'}
+                      {
+                        billingStatus?.isPro
+                          ? 'Manage subscription'
+                          : isBillingUnauthenticated
+                            ? 'Sign in to start free tier'
+                            : freeTierOverToday
+                              ? 'Upgrade to Monthly'
+                              : 'Free tier active'
+                      }
                     </button>
                   </div>
                 </div>

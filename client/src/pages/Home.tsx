@@ -40,6 +40,12 @@ type BillingLimit = {
   used?: number;
 };
 
+const FREE_TIER_OVER_DAY_KEY = "fg_free_tier_over_utc_day";
+
+function currentUtcDayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 const SUGGESTIONS: TranslationKeys[] = [
   "suggest_calendar",
   "suggest_weather",
@@ -244,6 +250,7 @@ export default function Home() {
       const limit = (result as any).billing as BillingLimit | undefined;
       if (limit?.limitReached) {
         setBillingLimit(limit);
+        localStorage.setItem(FREE_TIER_OVER_DAY_KEY, currentUtcDayKey());
         trackConversion("free_limit_reached", {
           authenticated: Boolean(user),
           language,
@@ -254,8 +261,8 @@ export default function Home() {
           surface: "chat_limit_toast",
           authenticated: Boolean(user),
         });
-        toast.info("Free limit reached", {
-          description: "Upgrade to Flow Guru Monthly to keep chatting.",
+        toast.info("Free tier over", {
+          description: "Your free tier is over for today. Upgrade to Flow Guru Monthly to keep chatting.",
           action: {
             label: "Upgrade",
             onClick: () => {
@@ -964,7 +971,7 @@ export default function Home() {
                     <div>
                       <p className="text-sm font-bold text-foreground">Keep Flow Guru going</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        You used {billingLimit.used ?? billingLimit.limit} of {billingLimit.limit ?? 10} free messages today. Upgrade for CA$4.99/mo to continue.
+                        Your free tier is over for today ({billingLimit.used ?? billingLimit.limit} of {billingLimit.limit ?? 10} messages used). Upgrade for CA$4.99/mo to continue.
                       </p>
                     </div>
                     <button
