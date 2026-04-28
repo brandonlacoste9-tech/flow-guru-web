@@ -54,6 +54,16 @@ function getAllowedPromoCodes(): Set<string> {
   );
 }
 
+function getOwnerPromoEmails(): Set<string> {
+  const configured = process.env.FG_OWNER_PROMO_EMAILS || "";
+  return new Set(
+    configured
+      .split(",")
+      .map((v) => v.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
 async function applyPromoEntitlement(userId: number, promoCodeRaw: string | null | undefined) {
   const promoCode = promoCodeRaw?.trim().toUpperCase();
   if (!promoCode) return false;
@@ -109,10 +119,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const existing = await db.getUserByEmail(normalizedEmail);
       const normalizedPromoCode = typeof promoCode === "string" ? promoCode.trim().toUpperCase() : "";
-      const promoCanOverrideExistingPassword = normalizedPromoCode.length > 0 && getAllowedPromoCodes().has(normalizedPromoCode);
+      const ownerEmails = getOwnerPromoEmails();
+      const ownerRestrictionPasses = ownerEmails.size === 0 || ownerEmails.has(normalizedEmail);
+      const promoCanOverrideExistingPassword =
+        normalizedPromoCode.length > 0 &&
+        getAllowedPromoCodes().has(normalizedPromoCode) &&
+        ownerRestrictionPasses;
       if (existing && existing.passwordHash && !promoCanOverrideExistingPassword) {
         return json(res, 409, {
-          error: "An account with this email already exists. If you own this account, use promo code GURU1976 while signing up to reset its email password.",
+          error: "An account with this email already exists. Sign in or use password reset.",
         });
       }
       const passwordHash = await hashPassword(normalizedPassword);
