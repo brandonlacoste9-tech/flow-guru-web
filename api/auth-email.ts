@@ -43,6 +43,38 @@ function json(res: VercelResponse, status: number, data: object) {
   res.status(status).json(data);
 }
 
+function getAllowedPromoCodes(): Set<string> {
+  const configured = process.env.FG_LOGIN_PROMO_CODES || process.env.PROMO_CODES || "GURU1976";
+  return new Set(
+    configured
+      .split(",")
+      .map((v) => v.trim().toUpperCase())
+      .filter(Boolean)
+  );
+}
+
+async function applyPromoEntitlement(userId: number, promoCodeRaw: string | null | undefined) {
+  const promoCode = promoCodeRaw?.trim().toUpperCase();
+  if (!promoCode) return false;
+  if (!getAllowedPromoCodes().has(promoCode)) return false;
+
+  const existing = await db.getSubscriptionStatus(userId);
+  if (existing.status === "active") {
+    // Paid users keep their active billing state.
+    return true;
+  }
+
+  const oneYear = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  await db.upsertSubscriptionStatus({
+    userId,
+    status: "trialing",
+    currentPeriodEnd: oneYear,
+    cancelAtPeriodEnd: false,
+    stripePriceId: `promo:${promoCode}`,
+  });
+  return true;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Allow CORS for same-origin fetch
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
@@ -87,11 +119,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       const cookieHeader = buildSetCookieHeader(COOKIE_NAME, sessionToken, ONE_YEAR_MS, isSecure(req));
       res.setHeader("Set-Cookie", cookieHeader);
-      return json(res, 200, { ok: true, name: user.name });
+      const promoApplied = await applyPromoEntitlement(user.id, promoCode);
+      return json(res, 200, { ok: true, name: user.name, promoApplied });
     }
 
     if (action === "login") {
-      const { email, password } = req.body || {};
+      const { email, password, promoCode } = req.body || {};
       if (!email || !password) {
         return json(res, 400, { error: "Email and password are required." });
       }
@@ -111,7 +144,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       const cookieHeader = buildSetCookieHeader(COOKIE_NAME, sessionToken, ONE_YEAR_MS, isSecure(req));
       res.setHeader("Set-Cookie", cookieHeader);
-      return json(res, 200, { ok: true, name: user.name });
+      const promoApplied = await applyPromoEntitlement(user.id, promoCode);
+      return json(res, 200, { ok: true, name: user.name, promoApplied });
     }
 
     if (action === "forgot-password") {

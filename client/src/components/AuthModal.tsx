@@ -56,7 +56,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault(); setError(""); setLoading(true);
-    try { const data = await callAuth("login", { email, password }); onSuccess(data.name || email.split("@")[0]); }
+    try { const data = await callAuth("login", { email, password, promoCode }); onSuccess(data.name || email.split("@")[0]); }
     catch (err: any) { setError(err.message); } finally { setLoading(false); }
   }
 
@@ -175,6 +175,18 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
+            </div>
+            <div>
+              <label className={leatherLabel}>
+                Promo code <span className="text-[#5a3c18] normal-case tracking-normal font-normal">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                className={leatherInput}
+                placeholder="GURU1976"
+              />
             </div>
             {error && <p className="text-red-400 text-xs bg-red-950/30 border border-red-900/40 rounded-lg px-3 py-2">{error}</p>}
             <button type="submit" disabled={loading} className={leatherBtn}>

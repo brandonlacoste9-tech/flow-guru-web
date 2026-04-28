@@ -91,6 +91,7 @@ export function Settings() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState<string>('GURU1976');
   const [pushSubscribed, setPushSubscribed] = useState<boolean | null>(null);
   const [lastAlarmSignalAt, setLastAlarmSignalAt] = useState<string | null>(null);
   const [waterBreakEnabled, setWaterBreakEnabled] = useState<boolean>(() => localStorage.getItem('fg_water_break_enabled') === '1');
@@ -336,7 +337,9 @@ export function Settings() {
       });
       const response = await fetch('/api/billing/checkout', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({ promoCode: promoCode.trim() || undefined }),
       });
       const data = await response.json();
       if (response.status === 401) {
@@ -1002,6 +1005,21 @@ export function Settings() {
                       <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />Full memory and smart list workflows</li>
                       <li className="flex gap-2"><CheckCircle2 size={13} className="text-primary shrink-0 mt-0.5" />Calendar integrations, voice, and upcoming automation tools</li>
                     </ul>
+                    <div className="space-y-1">
+                      <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Promo code
+                      </label>
+                      <input
+                        type="text"
+                        value={promoCode}
+                        onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                        placeholder="Enter promo code"
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold tracking-wide focus:outline-none focus:border-primary/50"
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Share code: <span className="font-semibold text-primary">GURU1976</span>
+                      </p>
+                    </div>
                     <button
                       disabled={checkoutLoading || billingStatus?.isPro}
                       onClick={isBillingUnauthenticated ? () => handleSignInForUpgrade('billing_plan_button') : handleUpgrade}
