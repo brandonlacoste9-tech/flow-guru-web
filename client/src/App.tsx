@@ -7,6 +7,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import LoadingScreen from "./components/LoadingScreen";
 import { LanguageProvider } from "./contexts/LanguageContext";
+import ReminderDaemon from "./components/ReminderDaemon";
 
 // Lazy load page components to reduce initial bundle size
 const Home = lazy(() => import("./pages/Home"));
@@ -43,6 +44,7 @@ function App() {
         >
           <TooltipProvider>
             <Toaster />
+            <ReminderDaemon />
             <Router />
           </TooltipProvider>
         </ThemeProvider>

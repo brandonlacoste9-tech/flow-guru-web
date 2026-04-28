@@ -9,6 +9,9 @@
     { "src": "api/*.ts", "use": "@vercel/node", "config": { "maxDuration": 60 } },
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist/public" } }
   ],
+  "crons": [
+    { "path": "/api/reminders-cron", "schedule": "* * * * *" }
+  ],
   "redirects": [
     {
       "source": "/:path*",
