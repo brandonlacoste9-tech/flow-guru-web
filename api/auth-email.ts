@@ -108,24 +108,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return json(res, 400, { error: "Password must be at least 8 characters." });
       }
       const existing = await db.getUserByEmail(normalizedEmail);
-      if (existing) {
+      if (existing && existing.passwordHash) {
         return json(res, 409, { error: "An account with this email already exists." });
       }
       const passwordHash = await hashPassword(normalizedPassword);
-      const openId = `email_${randomBytes(12).toString("hex")}`;
       const inferredName = (typeof name === "string" && name.trim())
         ? name.trim()
         : normalizedEmail.split("@")[0];
-      await db.upsertUser({
-        openId,
-        name: inferredName,
-        email: normalizedEmail,
-        loginMethod: "email",
-        passwordHash,
-        promoCode: promoCode?.trim() || null,
-        lastSignedIn: new Date(),
-      });
-      const user = await db.getUserByEmail(email);
+      const upsertPayload = existing
+        ? {
+            ...existing,
+            name: existing.name || inferredName,
+            loginMethod: "email",
+            passwordHash,
+            promoCode: promoCode?.trim() || existing.promoCode || null,
+            lastSignedIn: new Date(),
+          }
+        : {
+            openId: `email_${randomBytes(12).toString("hex")}`,
+            name: inferredName,
+            email: normalizedEmail,
+            loginMethod: "email",
+            passwordHash,
+            promoCode: promoCode?.trim() || null,
+            lastSignedIn: new Date(),
+          };
+      await db.upsertUser(upsertPayload);
+      const user = await db.getUserByEmail(normalizedEmail);
       if (!user) return json(res, 500, { error: "Failed to create account." });
 
       const sessionToken = await sdk.createSessionToken(user.openId, {
