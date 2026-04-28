@@ -237,7 +237,21 @@ export function Settings() {
   });
 
   const factsRaw = (factsQuery.data as any)?.facts ?? factsQuery.data ?? [];
-  const facts = (Array.isArray(factsRaw) ? factsRaw : []).filter((f: any) => f.factKey !== 'custom_instructions');
+  const facts = (() => {
+    const source = (Array.isArray(factsRaw) ? factsRaw : []).filter((f: any) => f.factKey !== 'custom_instructions');
+    const seen = new Set<string>();
+    const deduped: any[] = [];
+    for (const fact of source) {
+      const normalizedValue = String(fact.factValue ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizedKey = String(fact.factKey ?? '').trim().toLowerCase();
+      const normalizedCategory = String(fact.category ?? '').trim().toLowerCase();
+      const dedupeKey = `${normalizedCategory}::${normalizedKey}::${normalizedValue}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      deduped.push(fact);
+    }
+    return deduped;
+  })();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
