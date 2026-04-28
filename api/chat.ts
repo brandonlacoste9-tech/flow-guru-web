@@ -14,6 +14,7 @@ const deepseek = createOpenAICompatible({
 });
 
 const ANONYMOUS_OPEN_ID = '__flow_guru_anonymous__';
+const normalizeMemoryText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 const recallMemoryInputSchema = z.object({ query: z.string() });
 const saveMemoryInputSchema = z.object({
   fact: z.string(),
@@ -83,13 +84,51 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
           inputSchema: saveMemoryInputSchema,
           execute: async ({ fact, category, factKey }: SaveMemoryInput) => {
             try {
+              const cleanFact = fact.trim();
+              const cleanFactKey = factKey?.trim() || null;
+
+              if (!cleanFact) return { saved: false, error: 'Empty memory fact.' };
+
+              const existingRows = await db
+                .select({
+                  id: userMemoryFacts.id,
+                  factValue: userMemoryFacts.factValue,
+                  factKey: userMemoryFacts.factKey,
+                })
+                .from(userMemoryFacts)
+                .where(and(
+                  eq(userMemoryFacts.userId, userIdInt),
+                  eq(userMemoryFacts.category, category),
+                ))
+                .orderBy(desc(userMemoryFacts.updatedAt))
+                .limit(100);
+
+              const normalizedIncoming = normalizeMemoryText(cleanFact);
+
+              if (cleanFactKey) {
+                const keyedMatch = existingRows.find((row) => (row.factKey ?? '').trim() === cleanFactKey);
+                if (keyedMatch) {
+                  if (normalizeMemoryText(keyedMatch.factValue) === normalizedIncoming) {
+                    return { saved: true, deduped: true };
+                  }
+                  await db
+                    .update(userMemoryFacts)
+                    .set({ factValue: cleanFact, updatedAt: new Date() })
+                    .where(eq(userMemoryFacts.id, keyedMatch.id));
+                  return { saved: true, updated: true };
+                }
+              }
+
+              const duplicate = existingRows.find((row) => normalizeMemoryText(row.factValue) === normalizedIncoming);
+              if (duplicate) return { saved: true, deduped: true };
+
               await db.insert(userMemoryFacts).values({
                 userId: userIdInt,
-                factValue: fact,
+                factValue: cleanFact,
                 category,
-                factKey: factKey ?? null,
+                factKey: cleanFactKey,
               });
-              return { saved: true };
+              return { saved: true, inserted: true };
             } catch (err) {
               console.error('saveMemory failed', err);
               return { saved: false, error: String(err) };
