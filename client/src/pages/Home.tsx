@@ -473,7 +473,9 @@ export default function Home() {
   };
 
   const { alarmState, dismissAlarm, snoozeAlarm } = useReminders({
-    enabled: speechEnabled,
+    // Keep alarms active even when voice playback is muted.
+    // The speaker toggle controls TTS, not reminder scheduling.
+    enabled: true,
     userName,
     wakeUpTime,
     speakText,
