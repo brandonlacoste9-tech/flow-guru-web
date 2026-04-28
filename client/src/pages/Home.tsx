@@ -591,7 +591,14 @@ export default function Home() {
             <Settings size={14} />
           </button>
 
-          <button onClick={() => setSpeechEnabled(!speechEnabled)}
+          <button onClick={() => {
+              const next = !speechEnabled;
+              setSpeechEnabled(next);
+              toast.info(next ? "Voice replies on" : "Voice replies muted", {
+                description: "Alarms and reminders stay active.",
+              });
+            }}
+            title="Toggle voice replies (alarms stay active)"
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">
             {speechEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
           </button>
