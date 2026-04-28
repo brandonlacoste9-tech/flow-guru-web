@@ -210,7 +210,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
           <form onSubmit={handleSignUp} className="space-y-4">
             <div>
               <label className={leatherLabel}>Your name</label>
-              <input type="text" required autoComplete="name" value={name}
+              <input type="text" autoComplete="name" value={name}
                 onChange={(e) => setName(e.target.value)} className={leatherInput} placeholder="Brandon" />
             </div>
             <div>
