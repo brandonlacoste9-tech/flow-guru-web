@@ -1390,5 +1390,5 @@ export function buildActionFallbackReply(result: AssistantActionResult | null) {
     return result.summary;
   }
 
-  return "I hit a snag while checking that, but I can try again or help another way.";
+  return `${result.title}\n\n${result.summary}`;
 }

@@ -876,6 +876,26 @@ describe("assistantActions", () => {
       });
     });
 
+    it("returns the underlying list write error instead of the generic fallback", async () => {
+      const { buildActionFallbackReply, executeAssistantAction } = await import("./assistantActions");
+      dbMocks.listUserLists.mockResolvedValue([{ id: 1, name: "Grocery" }]);
+      dbMocks.addListItem.mockRejectedValue(new Error("column fg_lists.icon does not exist"));
+
+      const result = await executeAssistantAction(
+        listPlan({ action: "add", listName: "Grocery", itemContent: "apples" }),
+        opts,
+      );
+
+      expect(result).toMatchObject({
+        action: "list.manage",
+        status: "failed",
+        title: "List update failed",
+      });
+      expect(result?.summary).toContain("column fg_lists.icon does not exist");
+      expect(buildActionFallbackReply(result)).toContain("List update failed");
+      expect(buildActionFallbackReply(result)).toContain("column fg_lists.icon does not exist");
+    });
+
     it("prefers an exact list-name match over a substring match", async () => {
       const { executeAssistantAction } = await import("./assistantActions");
       dbMocks.listUserLists.mockResolvedValue([
