@@ -99,8 +99,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (action === "register") {
       const { email, password, name, promoCode } = req.body || {};
-      if (!email || !password || !name) {
-        return json(res, 400, { error: "Name, email and password are required." });
+      if (!email || !password) {
+        return json(res, 400, { error: "Email and password are required." });
       }
       if (password.length < 8) {
         return json(res, 400, { error: "Password must be at least 8 characters." });
@@ -111,10 +111,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const passwordHash = await hashPassword(password);
       const openId = `email_${randomBytes(12).toString("hex")}`;
+      const normalizedEmail = email.toLowerCase().trim();
+      const inferredName = (typeof name === "string" && name.trim())
+        ? name.trim()
+        : normalizedEmail.split("@")[0];
       await db.upsertUser({
         openId,
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
+        name: inferredName,
+        email: normalizedEmail,
         loginMethod: "email",
         passwordHash,
         promoCode: promoCode?.trim() || null,
