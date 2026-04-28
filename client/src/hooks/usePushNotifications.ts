@@ -9,6 +9,15 @@ export type ReminderPayload = {
   alarmSound?: string; // passed to SW so it can tell the page to play sound
 };
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = window.atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; ++i) output[i] = raw.charCodeAt(i);
+  return output;
+}
+
 export function usePushNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [swReady, setSwReady] = useState(false);
@@ -37,9 +46,12 @@ export function usePushNotifications() {
 
     const subscribeAndRegister = async () => {
       try {
+        const vapidKey =
+          import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+          'BHjQ-4anMIWuj2qfTO3hHmoyemSuchf_gqxKAyCqEkE56fC7iRAWrQwQ8Ts_wifuxW4NA2InsvSTYzg-7M_Eaxk';
         const sub = await swRef.current!.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BHjQ-4anMIWuj2qfTO3hHmoyemSuchf_gqxKAyCqEkE56fC7iRAWrQwQ8Ts_wifuxW4NA2InsvSTYzg-7M_Eaxk',
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
         });
 
         const p256dh = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('p256dh')!) as any));
@@ -58,7 +70,7 @@ export function usePushNotifications() {
     };
 
     subscribeAndRegister();
-  }, [swReady, permission]);
+  }, [swReady, permission, registerMutation]);
 
   // Request notification permission
   const requestPermission = async (): Promise<boolean> => {

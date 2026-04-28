@@ -25,6 +25,7 @@ const saveMemoryInputSchema = z.object({
 
 type RecallMemoryInput = z.infer<typeof recallMemoryInputSchema>;
 type SaveMemoryInput = z.infer<typeof saveMemoryInputSchema>;
+type MemoryFactRow = { id: number; factValue: string; factKey: string | null };
 
 type ChatRequestBody = {
   messages: UIMessage[];
@@ -113,7 +114,7 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
               const normalizedIncoming = normalizeMemoryText(cleanFact);
 
               if (cleanFactKey) {
-                const keyedMatch = existingRows.find((row) => (row.factKey ?? '').trim() === cleanFactKey);
+                const keyedMatch = (existingRows as MemoryFactRow[]).find((row: MemoryFactRow) => (row.factKey ?? '').trim() === cleanFactKey);
                 if (keyedMatch) {
                   if (normalizeMemoryText(keyedMatch.factValue) === normalizedIncoming) {
                     return { saved: true, deduped: true };
@@ -126,7 +127,7 @@ Use saveMemory when the user shares a fact about themselves (preferences, routin
                 }
               }
 
-              const duplicate = existingRows.find((row) => normalizeMemoryText(row.factValue) === normalizedIncoming);
+              const duplicate = (existingRows as MemoryFactRow[]).find((row: MemoryFactRow) => normalizeMemoryText(row.factValue) === normalizedIncoming);
               if (duplicate) return { saved: true, deduped: true };
 
               await db.insert(userMemoryFacts).values({
