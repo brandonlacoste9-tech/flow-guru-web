@@ -9,14 +9,14 @@ export default function ReminderDaemon() {
   const [location] = useLocation();
 
   const profileQuery = trpc.settings.getProfile.useQuery(undefined, {
-    enabled: Boolean(user),
+    enabled: true,
     refetchOnWindowFocus: false,
   });
 
   const profile = (profileQuery.data as any) ?? null;
 
   // Home already mounts useReminders with on-screen alarm UI; avoid duplicate alarms.
-  const enabled = Boolean(user) && location !== "/";
+  const enabled = location !== "/";
 
   useReminders({
     enabled,
