@@ -1250,7 +1250,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
       action: "list.manage",
       status: "failed",
       title: "List update failed",
-      summary: `I understood the list request, but the list write failed: ${message}`,
+      summary: "I couldn't update that list right now. Please try again in a moment.",
       data: { action, listName, itemContent, error: message },
     };
   }
@@ -1345,14 +1345,13 @@ export async function executeAssistantAction(
     }
   } catch (error) {
     console.warn("[Flow Guru] External action execution failed.", error);
-    const message = error instanceof Error ? error.message : String(error);
     return {
       action: plan.action,
       status: "failed" as const,
       title: plan.action === "list.manage" ? "List action unavailable" : "Action unavailable",
       summary: plan.action === "list.manage"
-        ? `I understood the list request, but the list action failed before it could write: ${message}`
-        : `I understood the live request, but that data source did not return a usable result just now: ${message}`,
+        ? "I couldn't complete that list action right now. Please try again."
+        : "That action is temporarily unavailable. Please try again in a moment.",
       provider: plan.action.startsWith("route")
         ? "google-maps"
         : plan.action.startsWith("weather")
