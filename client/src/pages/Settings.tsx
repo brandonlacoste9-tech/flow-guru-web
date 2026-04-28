@@ -91,7 +91,7 @@ export function Settings() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [promoCode, setPromoCode] = useState<string>('GURU1976');
+  const [promoCode, setPromoCode] = useState<string>('');
   const [pushSubscribed, setPushSubscribed] = useState<boolean | null>(null);
   const [lastAlarmSignalAt, setLastAlarmSignalAt] = useState<string | null>(null);
   const [waterBreakEnabled, setWaterBreakEnabled] = useState<boolean>(() => localStorage.getItem('fg_water_break_enabled') === '1');

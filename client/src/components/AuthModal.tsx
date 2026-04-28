@@ -186,6 +186,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
                 onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                 className={leatherInput}
                 placeholder="GURU1976"
+                autoComplete="off"
               />
             </div>
             {error && <p className="text-red-400 text-xs bg-red-950/30 border border-red-900/40 rounded-lg px-3 py-2">{error}</p>}
@@ -233,7 +234,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
               <label className={leatherLabel}>
                 Promo code <span className="text-[#5a3c18] normal-case tracking-normal font-normal">(optional)</span>
               </label>
-              <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value)}
+              <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                 className={leatherInput} placeholder="EARLYBIRD" />
             </div>
             {error && <p className="text-red-400 text-xs bg-red-950/30 border border-red-900/40 rounded-lg px-3 py-2">{error}</p>}
