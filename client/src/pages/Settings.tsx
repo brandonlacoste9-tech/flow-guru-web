@@ -241,7 +241,11 @@ export function Settings() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('tab') === 'billing') setActiveTab('billing');
+    const tabParam = params.get('tab');
+    const allowedTabs: Tab[] = ['profile', 'alarms', 'memory', 'persona', 'instructions', 'billing', 'referral', 'integrations'];
+    if (tabParam && allowedTabs.includes(tabParam as Tab)) {
+      setActiveTab(tabParam as Tab);
+    }
     const billing = params.get('billing');
     if (billing === 'success') {
       trackConversion('checkout_success');
@@ -461,6 +465,16 @@ export function Settings() {
                   <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">{t('settings_profile_title')}</h2>
                 </div>
                 <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">{t('settings_profile_desc')}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('alarms');
+                    window.history.replaceState({}, '', '/settings?tab=alarms');
+                  }}
+                  className="w-full rounded-2xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-left text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+                >
+                  Open Alarms settings
+                </button>
                 
                 <div className="space-y-1">
                   <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">{t('settings_profile_language')}</label>
