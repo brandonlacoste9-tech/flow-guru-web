@@ -4,6 +4,15 @@
  */
 import { SearchServiceClient } from "@google-cloud/discoveryengine";
 
+/** Narrow SDK response shape — tuple inference for search() can resolve as ISearchResult[] incorrectly. */
+type SearchResponseShape = {
+  results?: Array<Record<string, unknown>>;
+  summary?: {
+    summaryText?: string | null;
+    summaryWithMetadata?: { summary?: string | null };
+  } | null;
+};
+
 export type VertexSearchSource = { title: string; snippet: string; uri?: string };
 
 export type VertexSearchOutcome = {
@@ -86,7 +95,7 @@ export async function searchKnowledgeBase(query: string): Promise<VertexSearchOu
     servingConfigId,
   );
 
-  const [response] = await client.search({
+  const tuple = await client.search({
     servingConfig,
     query: query.trim(),
     pageSize: 8,
@@ -103,6 +112,7 @@ export async function searchKnowledgeBase(query: string): Promise<VertexSearchOu
       },
     },
   });
+  const response = tuple[0] as unknown as SearchResponseShape;
 
   const sources: VertexSearchSource[] = [];
   const rawResults = (response.results ?? []) as Array<Record<string, unknown>>;
@@ -120,10 +130,10 @@ export async function searchKnowledgeBase(query: string): Promise<VertexSearchOu
     });
   }
 
-  const summaryWrapper = response.summary as Record<string, unknown> | undefined | null;
+  const summaryWrapper = response.summary;
   let summaryText =
-    (summaryWrapper?.summaryText as string | undefined) ??
-    ((summaryWrapper?.summaryWithMetadata as Record<string, unknown> | undefined)?.summary as string | undefined) ??
+    summaryWrapper?.summaryText ??
+    summaryWrapper?.summaryWithMetadata?.summary ??
     "";
 
   summaryText = typeof summaryText === "string" ? summaryText.trim() : "";
