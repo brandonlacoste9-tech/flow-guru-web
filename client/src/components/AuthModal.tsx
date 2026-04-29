@@ -130,6 +130,10 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
             <img
               src="/floguru-logo.png"
               alt="FLO GURU"
+              width={80}
+              height={80}
+              fetchPriority="high"
+              decoding="async"
               className="relative w-20 h-20 rounded-full object-cover"
               style={{ boxShadow: '0 0 20px 6px rgba(212,160,23,0.55), 0 0 40px 12px rgba(180,120,10,0.3)' }}
             />

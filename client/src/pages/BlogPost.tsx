@@ -1,12 +1,40 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useRoute, Link } from 'wouter';
-import { ArrowLeft, Calendar, User, Clock, Share2 } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Share2 } from 'lucide-react';
 import { BLOG_POSTS } from './Blog';
+import { useSeoMeta } from '@/lib/seo';
 
 const BlogPost = () => {
-  const [match, params] = useRoute('/blog/:slug');
+  const [, params] = useRoute('/blog/:slug');
   const post = BLOG_POSTS.find(p => p.slug === params?.slug);
+
+  useSeoMeta({
+    title: post ? `${post.title} | Flow Guru` : 'Post not found | Flow Guru Blog',
+    description: post
+      ? post.description
+      : 'The article you are looking for could not be found in Flow Guru Insights.',
+    canonicalPath: post ? `/blog/${post.slug}` : '/blog',
+    ogType: post ? 'article' : 'website',
+    jsonLd: post
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'BlogPosting',
+          headline: post.title,
+          description: post.description,
+          author: {
+            '@type': 'Organization',
+            name: post.author,
+          },
+          datePublished: post.date,
+          mainEntityOfPage: `https://floguru.com/blog/${post.slug}`,
+          publisher: {
+            '@type': 'Organization',
+            name: 'Flow Guru',
+          },
+        }
+      : undefined,
+  });
 
   if (!post) {
     return (

@@ -1,7 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, Calendar, User, Clock } from 'lucide-react';
+import { ChevronRight, Calendar, User } from 'lucide-react';
 import { Link } from 'wouter';
+import { useSeoMeta } from '@/lib/seo';
 
 export const BLOG_POSTS = [
   {
@@ -25,6 +26,19 @@ export const BLOG_POSTS = [
 ];
 
 const Blog = () => {
+  useSeoMeta({
+    title: 'AI Productivity Blog | Flow Guru Insights',
+    description: 'Read Flow Guru insights on AI privacy, productivity, reminders, and autonomous planning workflows.',
+    canonicalPath: '/blog',
+    ogType: 'website',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'Blog',
+      name: 'Flow Guru Insights',
+      url: 'https://floguru.com/blog',
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30">
       {/* Hero Section */}

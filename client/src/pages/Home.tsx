@@ -554,7 +554,15 @@ export default function Home() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <img src="/floguru-logo.png" alt="FLO GURU" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shadow-sm" />
+          <img
+            src="/floguru-logo.png"
+            alt="FLO GURU"
+            width={36}
+            height={36}
+            fetchPriority="high"
+            decoding="async"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shadow-sm"
+          />
           <h1 className="text-base sm:text-lg font-bold tracking-tighter uppercase">
             FLO GURU
             <span className="sr-only"> - Your Autonomous AI Lifestyle Companion</span>
