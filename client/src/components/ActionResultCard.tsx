@@ -80,9 +80,32 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
     const mapsUrlGoogle = data.mapsUrlGoogle as string | undefined;
     const mapsUrlApple = data.mapsUrlApple as string | undefined;
     const steps = (data.steps as string[] | undefined) ?? [];
+    const routeOrigin = data.origin as string | undefined;
+    const routeDestination = data.destination as string | undefined;
+    const routeMode = ((data.mode as string | undefined) || "driving").toLowerCase();
+    const embedModes = new Set(["driving", "walking", "bicycling", "transit"]);
+    const embedMode = embedModes.has(routeMode) ? routeMode : "driving";
+    const embedKey = import.meta.env.VITE_GOOGLE_MAPS_EMBED_API_KEY?.trim();
+    const embedSrc =
+      embedKey && routeOrigin && routeDestination
+        ? `https://www.google.com/maps/embed/v1/directions?key=${encodeURIComponent(embedKey)}&origin=${encodeURIComponent(routeOrigin)}&destination=${encodeURIComponent(routeDestination)}&mode=${encodeURIComponent(embedMode)}`
+        : null;
+
     body = (
       <div className="space-y-3 mt-1">
         <p className="text-foreground text-[16px] leading-relaxed">{result.summary}</p>
+        {embedSrc && (
+          <div className="overflow-hidden rounded-xl border border-border bg-muted/30 shadow-inner">
+            <iframe
+              title="Route preview map"
+              className="h-[min(240px,40vw)] w-full min-h-[180px] border-0 sm:h-[260px]"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+              src={embedSrc}
+            />
+          </div>
+        )}
         {(mapsUrlGoogle || mapsUrlApple) && (
           <div className="flex flex-wrap gap-2">
             {mapsUrlGoogle && (
