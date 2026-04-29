@@ -57,6 +57,18 @@ function mergeLatestAssistantActionResult(
   return next;
 }
 
+/** Bootstrap refetches (invalidate, refocus) replace messages from DB without actionResult — reattach from prior client state. */
+function mergePreservedActionResults(incoming: Message[], prev: Message[]): Message[] {
+  const prevById = new Map(prev.map(m => [String(m.id), m]));
+  return incoming.map(m => {
+    const old = prevById.get(String(m.id));
+    if (old?.actionResult) {
+      return { ...m, actionResult: old.actionResult };
+    }
+    return { ...m };
+  });
+}
+
 type BillingLimit = {
   limitReached?: boolean;
   limit?: number;
@@ -244,7 +256,9 @@ export default function Home() {
   useEffect(() => {
     const data = bootstrap.data;
     if (!data) return;
-    if (data.messages) setMessages(data.messages as Message[]);
+    if (data.messages) {
+      setMessages(prev => mergePreservedActionResults(data.messages as Message[], prev));
+    }
     if (data.thread) setCurrentThreadId(data.thread.id);
     if (data.assistantName) setAssistantName(data.assistantName);
     if (data.weather) {
