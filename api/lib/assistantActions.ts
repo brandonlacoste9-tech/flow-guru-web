@@ -1,7 +1,7 @@
 import fs from "fs";
 import * as chrono from "chrono-node";
 import { z } from "zod";
-import { getProviderConnection, createLocalEvent } from "./db.js";
+import { getProviderConnection, createLocalEvent, listUserMemoryFacts } from "./db.js";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
@@ -22,6 +22,7 @@ const ACTION_NAMES = [
   "system.subagent",
   "list.manage",
   "knowledge.search",
+  "contact.open",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -101,6 +102,13 @@ const plannerSchema = z.object({
     })
     .optional()
     .nullable(),
+  contact: z
+    .object({
+      channel: z.enum(["call", "sms", "email"]).optional().nullable(),
+      targetName: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
 });
 
 const calendarResolutionSchema = z.object({
@@ -169,6 +177,8 @@ function buildListPlan(params: {
       time: null,
       location: null,
     },
+    knowledge: null,
+    contact: null,
   };
 }
 
@@ -193,10 +203,12 @@ function buildCalendarCreatePlan(params: {
     browser: null,
     subagent: null,
     list: null,
+    knowledge: null,
+    contact: null,
   };
 }
 
-function parseSimpleListIntent(message: string): AssistantActionPlan | null {
+export function parseSimpleListIntent(message: string): AssistantActionPlan | null {
   const text = message.trim().replace(/\s+/g, " ");
   if (!text) return null;
 
@@ -286,6 +298,48 @@ function parseSimpleCalendarCreateIntent(message: string): AssistantActionPlan |
     endDescription: null,
     rationale: "The user wants to create a calendar event.",
   });
+}
+
+function parseSimpleContactIntent(message: string): AssistantActionPlan | null {
+  const text = message.trim().replace(/\s+/g, " ");
+  if (!text) return null;
+
+  let channel: "call" | "sms" | "email" = "call";
+  let rawTarget: string | undefined;
+
+  const callMatch = text.match(/^(?:please\s+)?(?:call|phone|ring|dial)\s+(?:my\s+)?(.+)$/i);
+  const smsMatch = text.match(/^(?:please\s+)?(?:text|sms)\s+(?:my\s+)?(.+)$/i);
+  const mailMatch = text.match(/^(?:please\s+)?(?:email|e-mail|mail)\s+(?:my\s+)?(.+)$/i);
+
+  if (smsMatch) {
+    channel = "sms";
+    rawTarget = smsMatch[1];
+  } else if (mailMatch) {
+    channel = "email";
+    rawTarget = mailMatch[1];
+  } else if (callMatch) {
+    rawTarget = callMatch[1];
+  }
+
+  if (!rawTarget) return null;
+
+  const targetName = normalizeText(rawTarget.replace(/[.!?]+$/g, ""));
+  if (!targetName || targetName.length < 2) return null;
+
+  return {
+    action: "contact.open",
+    rationale: "The user wants to reach someone via phone, SMS, or email.",
+    route: null,
+    weather: null,
+    news: null,
+    calendar: null,
+    music: null,
+    browser: null,
+    subagent: null,
+    list: null,
+    knowledge: null,
+    contact: { channel, targetName },
+  };
 }
 
 function resolveCalendarDetailsFallback(params: {
@@ -431,6 +485,9 @@ export async function planAssistantAction(params: {
   const deterministicCalendarPlan = parseSimpleCalendarCreateIntent(params.message);
   if (deterministicCalendarPlan) return deterministicCalendarPlan;
 
+  const deterministicContactPlan = parseSimpleContactIntent(params.message);
+  if (deterministicContactPlan) return deterministicContactPlan;
+
   const response = await invokeLLM({
     messages: [
       {
@@ -451,6 +508,7 @@ export async function planAssistantAction(params: {
           "- system.subagent: For ANY complex system tasks: file operations, terminal commands, writing scripts, running Python, or performing multi-step autonomous actions on the user's machine.",
           "- list.manage: For creating, adding items, removing items, clearing, or listing smart collections (like grocery lists, todos, or ideas).",
           "- knowledge.search: For questions answered from YOUR indexed knowledge base / uploaded docs / internal corpus in Vertex AI Search — NOT for random internet trivia (use browser.use for that).",
+          "- contact.open: For placing a phone call, SMS/text, or email to a PERSON by relationship or name using saved contact facts (e.g. 'call my wife', 'text Jenny', 'email mom'). User must have saved contact_phone_<name> or contact_email_<name> in memory.",
           "- none: Use this for general conversation or if no tool fits.",
           "",
           "AGENT DELEGATION RULES:",
@@ -468,7 +526,7 @@ export async function planAssistantAction(params: {
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
           "",
           "RESPONSE FORMAT: You MUST respond with a single JSON object (no markdown, no code blocks, no explanation). The JSON must have these keys:",
-          '{ "action": "<tool_name>", "rationale": "<why>", "route": null, "weather": null, "news": null, "calendar": null, "music": null, "browser": null, "subagent": null, "list": null, "knowledge": null }',
+          '{ "action": "<tool_name>", "rationale": "<why>", "route": null, "weather": null, "news": null, "calendar": null, "music": null, "browser": null, "subagent": null, "list": null, "knowledge": null, "contact": null }',
           "",
           "For list.manage, populate the list field:",
           '{ "action": "list.manage", "rationale": "...", "list": { "action": "add", "listName": "Grocery", "itemContent": "bread", "newName": null, "time": null, "location": null }, ... }',
@@ -484,6 +542,10 @@ export async function planAssistantAction(params: {
           "",
           "For knowledge.search, populate the knowledge field with the user's question:",
           '{ "action": "knowledge.search", "rationale": "...", "knowledge": { "query": "plain-language question to run against the corpus" }, ... }',
+          "",
+          "For contact.open, populate the contact field:",
+          '{ "action": "contact.open", "rationale": "...", "contact": { "channel": "call", "targetName": "wife" }, ... }',
+          "contact.channel is one of: call, sms, email",
           "",
           "ONLY respond with the JSON object. No other text.",
         ].join("\n"),
@@ -514,7 +576,7 @@ export async function planAssistantAction(params: {
     jsonString = JSON.stringify({
       action: raw.trim(),
       rationale: "Defaulted from bare action string",
-      route: null, weather: null, news: null, calendar: null, music: null, browser: null, subagent: null, list: { action: "list", listName: "Grocery" }, knowledge: null
+      route: null, weather: null, news: null, calendar: null, music: null, browser: null, subagent: null, list: { action: "list", listName: "Grocery" }, knowledge: null, contact: null
     });
   } else {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -649,6 +711,226 @@ async function resolveCalendarDetails(params: {
   return resolveCalendarDetailsFallback(params);
 }
 
+function extractHomeOriginFromMemory(memoryContext: string | null | undefined): string | null {
+  if (!memoryContext) return null;
+  for (const line of memoryContext.split("\n")) {
+    const trimmed = line.trim();
+    const homeAddr = trimmed.match(/^-\s*\[[^\]]+\]\s*home_address:\s*(.+)$/i);
+    if (homeAddr?.[1]) return homeAddr[1].trim();
+    const home = trimmed.match(/^-\s*\[[^\]]+\]\s*home:\s*(.+)$/i);
+    if (home?.[1]) return home[1].trim();
+  }
+  return null;
+}
+
+function googleTravelMode(mode: TravelMode): string {
+  if (mode === "walking") return "walking";
+  if (mode === "bicycling") return "bicycling";
+  if (mode === "transit") return "transit";
+  return "driving";
+}
+
+function buildDirectionsMapsUrls(originLabel: string, destinationLabel: string, mode: TravelMode): {
+  mapsUrlGoogle: string;
+  mapsUrlApple: string;
+} {
+  const travelmode = googleTravelMode(mode);
+  const o = encodeURIComponent(originLabel);
+  const d = encodeURIComponent(destinationLabel);
+  const mapsUrlGoogle = `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=${travelmode}`;
+  const dirflg = mode === "walking" ? "w" : "d";
+  const mapsUrlApple = `https://maps.apple.com/?dirflg=${dirflg}&saddr=${o}&daddr=${d}`;
+  return { mapsUrlGoogle, mapsUrlApple };
+}
+
+function slugifyContactTarget(raw: string): string {
+  return (
+    raw
+      .toLowerCase()
+      .replace(/^my\s+/, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "") || raw.toLowerCase().trim()
+  );
+}
+
+function expandContactSlugCandidates(raw: string): string[] {
+  const base = slugifyContactTarget(raw);
+  const aliasMap: Record<string, string[]> = {
+    wife: ["wife", "spouse"],
+    husband: ["husband", "spouse"],
+    spouse: ["spouse", "wife", "husband"],
+    mom: ["mom", "mother"],
+    mother: ["mother", "mom"],
+    dad: ["dad", "father"],
+    father: ["father", "dad"],
+  };
+  const extras = aliasMap[base] ?? [];
+  return [...new Set([base, ...extras])];
+}
+
+function findContactPhone(
+  facts: Array<{ factKey: string | null; factValue: string }>,
+  slugs: string[],
+): string | null {
+  for (const slug of slugs) {
+    const want = `contact_phone_${slug}`.toLowerCase();
+    const hit = facts.find(f => f.factKey?.toLowerCase() === want);
+    if (hit?.factValue?.trim()) return hit.factValue.trim();
+  }
+  return null;
+}
+
+function findContactEmail(
+  facts: Array<{ factKey: string | null; factValue: string }>,
+  slugs: string[],
+): string | null {
+  for (const slug of slugs) {
+    const want = `contact_email_${slug}`.toLowerCase();
+    const hit = facts.find(f => f.factKey?.toLowerCase() === want);
+    if (hit?.factValue?.trim()) return hit.factValue.trim();
+  }
+  return null;
+}
+
+/** Exposed for tests — normalize stored phone for tel:/sms: hrefs. */
+export function sanitizePhoneForHref(raw: string): string | null {
+  const trimmed = raw.trim();
+  const digits = trimmed.replace(/[^\d+]/g, "");
+  if (!/\d/.test(digits)) return null;
+  return digits.startsWith("+") ? digits : digits;
+}
+
+async function executeContactOpenAction(
+  plan: AssistantActionPlan,
+  options: { userId: number; language?: "en" | "fr" },
+): Promise<AssistantActionResult> {
+  const targetRaw = normalizeText(plan.contact?.targetName);
+  const lang = options.language ?? "en";
+
+  if (!Number.isFinite(options.userId) || options.userId <= 0) {
+    return {
+      action: "contact.open",
+      status: "failed",
+      title: "Session needed",
+      summary:
+        lang === "fr"
+          ? "Connecte-toi pour que je puisse charger tes contacts enregistrés."
+          : "Sign in so I can look up your saved contacts.",
+    };
+  }
+
+  if (!targetRaw) {
+    return {
+      action: "contact.open",
+      status: "needs_input",
+      title: "Who should I reach?",
+      summary:
+        lang === "fr"
+          ? "Dis-moi qui appeler ou texter — par exemple « appelle ma femme »."
+          : "Say who to call or text — for example “call my wife.”",
+    };
+  }
+
+  let facts: Array<{ factKey: string | null; factValue: string }>;
+  try {
+    facts = await listUserMemoryFacts(options.userId);
+  } catch {
+    return {
+      action: "contact.open",
+      status: "failed",
+      title: "Contacts unavailable",
+      summary:
+        lang === "fr"
+          ? "Je n’ai pas pu charger tes contacts enregistrés pour le moment."
+          : "I couldn’t load your saved contacts right now.",
+    };
+  }
+
+  const slugCandidates = expandContactSlugCandidates(targetRaw);
+  const phone = findContactPhone(facts, slugCandidates);
+  const email = findContactEmail(facts, slugCandidates);
+  const channel = plan.contact?.channel ?? "call";
+
+  if (channel === "email") {
+    if (!email) {
+      return {
+        action: "contact.open",
+        status: "needs_input",
+        title: "No email saved",
+        summary:
+          lang === "fr"
+            ? `Je n’ai pas d’e-mail enregistré pour ${targetRaw}. Donne-le-moi et je m’en souviendrai.`
+            : `I don't have an email saved for ${targetRaw}. Tell me and I'll remember it next time.`,
+      };
+    }
+    return {
+      action: "contact.open",
+      status: "executed",
+      title: `Email ${targetRaw}`,
+      summary:
+        lang === "fr"
+          ? `Ouvre ton app mail pour écrire à ${email}.`
+          : `Open your mail app to email ${email}.`,
+      data: {
+        targetName: targetRaw,
+        channel: "email",
+        hrefMailto: `mailto:${email}`,
+      },
+    };
+  }
+
+  if (!phone) {
+    return {
+      action: "contact.open",
+      status: "needs_input",
+      title: "No number saved",
+      summary:
+        lang === "fr"
+          ? `Je n’ai pas de numéro pour ${targetRaw}. Dis quelque chose comme « le numéro de ma femme est … » et je l’enregistrerai.`
+          : `I don't have a phone number saved for ${targetRaw}. Say something like “my wife's number is …” and I'll remember.`,
+    };
+  }
+
+  const sanitized = sanitizePhoneForHref(phone);
+  if (!sanitized) {
+    return {
+      action: "contact.open",
+      status: "needs_input",
+      title: "Invalid number",
+      summary:
+        lang === "fr"
+          ? "Ce numéro ne semble pas valide. Peux-tu le corriger dans ta mémoire?"
+          : "That saved number doesn't look valid. Try updating it in memory.",
+    };
+  }
+
+  const hrefCall = `tel:${sanitized}`;
+  const hrefSms = `sms:${sanitized}`;
+  const hrefMailto = email ? `mailto:${encodeURIComponent(email)}` : undefined;
+
+  return {
+    action: "contact.open",
+    status: "executed",
+    title: channel === "sms" ? `Text ${targetRaw}` : `Call ${targetRaw}`,
+    summary:
+      channel === "sms"
+        ? lang === "fr"
+          ? `Voici un lien pour ouvrir Messages avec ce numéro.`
+          : `Here's a link to open Messages with this number.`
+        : lang === "fr"
+          ? `Voici un lien pour ouvrir l’app Téléphone.`
+          : `Here's a link to open your phone app.`,
+    data: {
+      targetName: targetRaw,
+      channel,
+      phoneDisplay: phone,
+      hrefCall,
+      hrefSms,
+      ...(hrefMailto ? { hrefMailto } : {}),
+    },
+  };
+}
+
 async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
   const origin = normalizeText(plan.route?.origin);
   const destination = normalizeText(plan.route?.destination);
@@ -687,24 +969,29 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
   const route = directions.routes[0];
   const leg = route.legs[0];
   const steps = leg.steps.slice(0, 4).map(step => stripHtml(step.html_instructions));
+  const originLabel = leg.start_address;
+  const destinationLabel = leg.end_address;
+  const { mapsUrlGoogle, mapsUrlApple } = buildDirectionsMapsUrls(originLabel, destinationLabel, mode);
 
   return {
     action: plan.action,
     status: "executed",
-    title: `Route to ${leg.end_address}`,
+    title: `Route to ${destinationLabel}`,
     summary: leg.duration_in_traffic
       ? `${leg.distance.text}, about ${leg.duration_in_traffic.text} in current traffic.`
       : `${leg.distance.text}, about ${leg.duration.text}.`,
     provider: "google-maps",
     data: {
-      origin: leg.start_address,
-      destination: leg.end_address,
+      origin: originLabel,
+      destination: destinationLabel,
       distanceText: leg.distance.text,
       durationText: leg.duration.text,
       durationInTrafficText: leg.duration_in_traffic?.text ?? null,
       mode,
       routeSummary: route.summary,
       steps,
+      mapsUrlGoogle,
+      mapsUrlApple,
     },
   };
 }
@@ -1349,8 +1636,24 @@ async function executeKnowledgeSearch(
 
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
-  options: { userId: number; userName?: string | null; message: string; memoryContext: string; timeZone?: string | null; language?: 'en' | 'fr'; }
+  optionsIn?: {
+    userId?: number;
+    userName?: string | null;
+    message?: string;
+    memoryContext?: string;
+    timeZone?: string | null;
+    language?: "en" | "fr";
+  },
 ): Promise<AssistantActionResult> {
+  const options = {
+    userId: optionsIn?.userId ?? -1,
+    userName: optionsIn?.userName,
+    message: optionsIn?.message ?? "",
+    memoryContext: optionsIn?.memoryContext ?? "",
+    timeZone: optionsIn?.timeZone ?? null,
+    language: (optionsIn?.language ?? "en") as "en" | "fr",
+  };
+
   console.log(`[Assistant Action] Executing: ${plan.action}`, plan);
 
   try {
@@ -1363,8 +1666,27 @@ export async function executeAssistantAction(
         return await executeCalendarCreateAction(plan, options as any);
       case "calendar.list_events":
         return await executeCalendarListAction(plan, options as any);
-      case "route.get":
-        return await executeRouteAction(plan);
+      case "route.get": {
+        const destination = normalizeText(plan.route?.destination);
+        let origin = normalizeText(plan.route?.origin);
+        if (!origin && options.memoryContext) {
+          origin = extractHomeOriginFromMemory(options.memoryContext);
+        }
+        const enrichedPlan: AssistantActionPlan = {
+          ...plan,
+          route: {
+            origin,
+            destination,
+            mode: plan.route?.mode ?? "driving",
+          },
+        };
+        return await executeRouteAction(enrichedPlan);
+      }
+      case "contact.open":
+        return await executeContactOpenAction(plan, {
+          userId: options.userId,
+          language: options.language,
+        });
       case "weather.get":
         return await executeWeatherAction(plan, options as any);
       case "news.get":

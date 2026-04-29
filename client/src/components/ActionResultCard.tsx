@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { Calendar, Cloud, MapPin, Newspaper, Music, Globe, Bot, Sparkles, AlertCircle, ListTodo } from "lucide-react";
+import { Calendar, Cloud, MapPin, Newspaper, Music, Globe, Bot, Sparkles, AlertCircle, ListTodo, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Mirrors server `AssistantActionResult` without importing server code into the client bundle. */
@@ -21,6 +21,7 @@ function getActionIcon(action: string) {
   if (action?.includes("browser")) return Globe;
   if (action?.includes("subagent")) return Bot;
   if (action?.includes("list")) return ListTodo;
+  if (action?.includes("contact")) return Phone;
   return Sparkles;
 }
 
@@ -76,17 +77,81 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
       );
     }
   } else if (result.action === "route.get") {
-    const origin = (data as { origin?: string }).origin;
-    const destination = (data as { destination?: string }).destination;
-    const hasRouteDetail =
-      (data as { routes?: unknown }).routes != null || (data as { duration?: unknown }).duration != null;
-    if (origin && destination && !hasRouteDetail) {
-      body = (
-        <p className="text-muted-foreground text-[16px] leading-relaxed">
-          Route details for {origin} to {destination} are not available yet.
-        </p>
-      );
-    }
+    const mapsUrlGoogle = data.mapsUrlGoogle as string | undefined;
+    const mapsUrlApple = data.mapsUrlApple as string | undefined;
+    const steps = (data.steps as string[] | undefined) ?? [];
+    body = (
+      <div className="space-y-3 mt-1">
+        <p className="text-foreground text-[16px] leading-relaxed">{result.summary}</p>
+        {(mapsUrlGoogle || mapsUrlApple) && (
+          <div className="flex flex-wrap gap-2">
+            {mapsUrlGoogle && (
+              <a
+                href={mapsUrlGoogle}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              >
+                Open in Google Maps
+              </a>
+            )}
+            {mapsUrlApple && (
+              <a
+                href={mapsUrlApple}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-muted"
+              >
+                Open in Apple Maps
+              </a>
+            )}
+          </div>
+        )}
+        {steps.length > 0 && (
+          <ol className="text-muted-foreground text-sm list-decimal pl-5 space-y-1 border-t border-border pt-3">
+            {steps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        )}
+      </div>
+    );
+  } else if (result.action === "contact.open") {
+    const hrefCall = data.hrefCall as string | undefined;
+    const hrefSms = data.hrefSms as string | undefined;
+    const hrefMailto = data.hrefMailto as string | undefined;
+    const channel = data.channel as string | undefined;
+    body = (
+      <div className="space-y-3 mt-1">
+        <p className="text-foreground text-[16px] leading-relaxed">{result.summary}</p>
+        <div className="flex flex-wrap gap-2">
+          {hrefCall && channel !== "email" && (
+            <a
+              href={hrefCall}
+              className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            >
+              Call
+            </a>
+          )}
+          {hrefSms && channel !== "email" && (
+            <a
+              href={hrefSms}
+              className="inline-flex items-center rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-muted"
+            >
+              Text
+            </a>
+          )}
+          {hrefMailto && (
+            <a
+              href={hrefMailto}
+              className="inline-flex items-center rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-muted"
+            >
+              Email
+            </a>
+          )}
+        </div>
+      </div>
+    );
   } else if (result.action === "weather.get") {
     const keys = Object.keys(data);
     if (keys.length === 0 || (data as { forecast?: unknown }).forecast == null) {

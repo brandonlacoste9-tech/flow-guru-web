@@ -58,6 +58,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [error, setError] = useState("");
+  const [loginHint, setLoginHint] = useState<null | "PASSWORD_NOT_SET">(null);
   const [loading, setLoading] = useState(false);
 
   async function callAuth(action: string, body: object) {
@@ -88,12 +89,13 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
   }
 
   async function handleSignIn(e: React.FormEvent) {
-    e.preventDefault(); setError(""); setLoading(true);
+    e.preventDefault(); setError(""); setLoginHint(null); setLoading(true);
     try {
       const data = await callAuth("login", { email, password, promoCode });
       onSuccess(data.name || email.split("@")[0]);
     } catch (err: unknown) {
       const e = err as Error & { code?: string };
+      setLoginHint(e.code === "PASSWORD_NOT_SET" ? "PASSWORD_NOT_SET" : null);
       setError(e.message);
     } finally {
       setLoading(false);
@@ -105,7 +107,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
   }
 
   async function handleSignUp(e: React.FormEvent) {
-    e.preventDefault(); setError(""); setLoading(true);
+    e.preventDefault(); setError(""); setLoginHint(null); setLoading(true);
     try {
       const data = await callAuth("register", { name, email, password, promoCode });
       onSuccess(data.name || name);
@@ -118,7 +120,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
   }
 
   async function handleForgot(e: React.FormEvent) {
-    e.preventDefault(); setError(""); setLoading(true);
+    e.preventDefault(); setError(""); setLoginHint(null); setLoading(true);
     try { await callAuth("forgot-password", { email }); setView("forgot-sent"); }
     catch (err: any) { setError(err.message); } finally { setLoading(false); }
   }
@@ -133,7 +135,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: 'rgba(10,6,2,0.85)', backdropFilter: 'blur(8px)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setLoginHint(null); onClose(); } }}
     >
       {/* Card */}
       <div
@@ -152,7 +154,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
 
         {/* Close */}
         <button
-          onClick={onClose}
+          onClick={() => { setLoginHint(null); onClose(); }}
           className="absolute top-4 right-4 text-[#7a5c38] hover:text-[#c8900a] transition-colors"
         >
           <X size={18} />
@@ -262,16 +264,41 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
                 autoComplete="off"
               />
             </div>
-            {error && <p className="text-red-400 text-xs bg-red-950/30 border border-red-900/40 rounded-lg px-3 py-2">{error}</p>}
+            {error && (
+              loginHint === "PASSWORD_NOT_SET" ? (
+                <div className="rounded-lg border border-amber-800/55 bg-amber-950/35 px-3 py-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-100/90">
+                    Google-only account
+                  </p>
+                  <p className="text-[11px] text-[#d4c4a8] leading-relaxed">
+                    No password is saved for this email. Sign in with Google above, or add email login by creating an account with the{" "}
+                    <strong className="text-[#f0e4cc] font-semibold">same email</strong> and a new password (8+ characters).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginHint(null);
+                      setError("");
+                      setView("signup");
+                    }}
+                    className={leatherBtn + " py-2.5 text-xs"}
+                  >
+                    Go to Create account
+                  </button>
+                </div>
+              ) : (
+                <p className="text-red-400 text-xs bg-red-950/30 border border-red-900/40 rounded-lg px-3 py-2">{error}</p>
+              )
+            )}
             <button type="submit" disabled={loading} className={leatherBtn}>
               {loading && <Loader2 size={14} className="animate-spin" />}
               Sign in with email
             </button>
             <div className="flex items-center justify-between text-xs text-[#7a5c38] pt-1">
-              <button type="button" onClick={() => { setError(""); setView("forgot"); }} className={leatherLink}>
+              <button type="button" onClick={() => { setError(""); setLoginHint(null); setView("forgot"); }} className={leatherLink}>
                 Forgot password?
               </button>
-              <button type="button" onClick={() => { setError(""); setView("signup"); }} className={leatherLink}>
+              <button type="button" onClick={() => { setError(""); setLoginHint(null); setView("signup"); }} className={leatherLink}>
                 Create account
               </button>
             </div>
@@ -327,7 +354,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
             </button>
             <p className="text-center text-xs text-[#7a5c38] pt-1">
               Already have an account?{" "}
-              <button type="button" onClick={() => { setError(""); setView("signin"); }} className={leatherLink}>
+              <button type="button" onClick={() => { setError(""); setLoginHint(null); setView("signin"); }} className={leatherLink}>
                 Sign in
               </button>
             </p>
@@ -348,7 +375,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
               {loading && <Loader2 size={14} className="animate-spin" />}
               Send Reset Link
             </button>
-            <button type="button" onClick={() => { setError(""); setView("signin"); }}
+            <button type="button" onClick={() => { setError(""); setLoginHint(null); setView("signin"); }}
               className="w-full text-center text-xs text-[#7a5c38] hover:text-[#c8900a] transition pt-1">
               Back to sign in
             </button>
@@ -361,7 +388,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
             <p className="text-sm text-[#a07840]">
               If an account exists for <strong className="text-[#f0e4cc]">{email}</strong>, you'll receive a reset link shortly.
             </p>
-            <button onClick={() => setView("signin")} className={leatherBtn}>
+            <button onClick={() => { setLoginHint(null); setView("signin"); }} className={leatherBtn}>
               Back to Sign In
             </button>
           </div>
@@ -395,7 +422,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
         {view === "reset-sent" && !resetToken && (
           <div className="text-center space-y-4">
             <p className="text-sm text-[#a07840]">Your password has been updated. You can now sign in.</p>
-            <button onClick={() => setView("signin")} className={leatherBtn}>
+            <button onClick={() => { setLoginHint(null); setView("signin"); }} className={leatherBtn}>
               Sign In
             </button>
           </div>

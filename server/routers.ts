@@ -321,7 +321,7 @@ async function extractAndPersistMemory(params: {
       {
         role: "system",
         content:
-          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.",
+          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.\n\nWhen the user shares a phone number or email for someone (e.g. \"my wife's number is …\", \"mom's email is …\"), save it as a memory fact with factKey contact_phone_wife or contact_email_mom using a short lowercase slug for the person (wife, jenny, mom). Prefer category preference or general.",
       },
       {
         role: "user",
@@ -569,7 +569,7 @@ export const appRouter = router({
   }),
   assistant: router({
     bootstrap: publicProcedure
-      .input(z.object({ language: z.enum(["en", "fr"]).optional() }))
+      .input(z.object({ language: z.enum(["en", "fr"]).optional() }).default({}))
       .query(async ({ ctx, input }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const [profile, memoryFacts, thread, providerConnections] = await Promise.all([
@@ -835,6 +835,7 @@ export const appRouter = router({
         "- List upcoming calendar events",
         "- Check weather for any city",
         "- Get directions and travel times",
+        "- Call, text, or email saved contacts when their numbers or emails are stored in memory",
         "- Set reminders (via calendar)",
         "",
         `The user's saved memory:`,
@@ -1079,7 +1080,7 @@ export const appRouter = router({
         if (userLocation) {
           try {
             const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
-            const plan = await planAssistantAction({ userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
+            const plan = await planAssistantAction({ userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
             const result = await executeAssistantAction(plan, { userId, message: "current weather", memoryContext: `Location: ${userLocation}` });
             if (result.status === "executed") weather = result.data;
           } catch {}

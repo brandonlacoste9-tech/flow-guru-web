@@ -16,6 +16,7 @@
     "test": "vitest run",
     "smoke:billing": "tsx scripts/smoke/billing.ts",
     "test:e2e": "playwright test",
+    "test:e2e:prod": "node scripts/playwright-prod.mjs",
     "test:e2e:install": "playwright install chromium",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",

@@ -6,14 +6,49 @@ vi.mock("streamdown", () => ({
   Streamdown: ({ children }: { children: string }) => children,
 }));
 
-import { ActionResultCard, type AssistantActionResult } from "@/components/ActionResultCard";
+import { ActionResultCard, type AssistantActionResult } from "./ActionResultCard";
 
 function renderCard(result: AssistantActionResult) {
   return renderToStaticMarkup(<ActionResultCard result={result} />);
 }
 
 describe("ActionResultCard", () => {
-  it("renders the route fallback when no route details are available", () => {
+  it("renders maps links and steps for route.get when data includes URLs", () => {
+    const html = renderCard({
+      action: "route.get",
+      status: "executed",
+      title: "Route to Manhattan",
+      summary: "10 mi, about 25 mins.",
+      data: {
+        mapsUrlGoogle: "https://www.google.com/maps/dir/?api=1&origin=o&destination=d",
+        mapsUrlApple: "https://maps.apple.com/?dirflg=d&saddr=o&daddr=d",
+        steps: ["Head north on Route 1"],
+      },
+    });
+
+    expect(html).toContain("Open in Google Maps");
+    expect(html).toContain("Open in Apple Maps");
+    expect(html).toContain("Head north");
+  });
+
+  it("renders contact.open action links when executed", () => {
+    const html = renderCard({
+      action: "contact.open",
+      status: "executed",
+      title: "Call wife",
+      summary: "Open your phone app.",
+      data: {
+        channel: "call",
+        hrefCall: "tel:+15551234567",
+        hrefSms: "sms:+15551234567",
+      },
+    });
+
+    expect(html).toContain("tel:+15551234567");
+    expect(html).toContain("Text");
+  });
+
+  it("route.get without maps URLs still shows summary", () => {
     const html = renderCard({
       action: "route.get",
       status: "executed",
@@ -25,7 +60,7 @@ describe("ActionResultCard", () => {
       },
     });
 
-    expect(html).toContain("Route details for Home to Office are not available yet.");
+    expect(html).toContain("I looked for the route.");
   });
 
   it("renders the weather fallback when forecast details are empty", () => {

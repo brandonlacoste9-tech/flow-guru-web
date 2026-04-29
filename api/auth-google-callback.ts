@@ -64,19 +64,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.redirect(302, "/?auth_error=no_profile_id");
     }
 
-    const openId = `google_${profile.id}`;
+    const googleOpenId = `google_${profile.id}`;
+    let sessionOpenId = googleOpenId;
 
-    await db.upsertUser({
-      openId,
-      name: profile.name || null,
-      email: profile.email || null,
-      loginMethod: "google",
-      lastSignedIn: new Date(),
-    });
+    const byGoogle = await db.getUserByOpenId(googleOpenId);
+    if (byGoogle) {
+      await db.upsertUser({
+        ...byGoogle,
+        name: profile.name ?? byGoogle.name,
+        email: profile.email ?? byGoogle.email,
+        loginMethod: byGoogle.passwordHash ? "both" : "google",
+        lastSignedIn: new Date(),
+      });
+      sessionOpenId = byGoogle.openId;
+    } else if (profile.email) {
+      const oldestWithEmail = await db.getUserByEmailOldest(profile.email);
+      if (oldestWithEmail) {
+        await db.upsertUser({
+          ...oldestWithEmail,
+          name: profile.name ?? oldestWithEmail.name,
+          email: profile.email ?? oldestWithEmail.email,
+          loginMethod: oldestWithEmail.passwordHash ? "both" : "google",
+          lastSignedIn: new Date(),
+        });
+        sessionOpenId = oldestWithEmail.openId;
+      } else {
+        await db.upsertUser({
+          openId: googleOpenId,
+          name: profile.name || null,
+          email: profile.email || null,
+          loginMethod: "google",
+          lastSignedIn: new Date(),
+        });
+      }
+    } else {
+      await db.upsertUser({
+        openId: googleOpenId,
+        name: profile.name || null,
+        email: null,
+        loginMethod: "google",
+        lastSignedIn: new Date(),
+      });
+    }
 
     // verifySession requires name to be a non-empty string — use email prefix or openId as fallback
-    const displayName = profile.name || (profile.email ? profile.email.split('@')[0] : openId);
-    const sessionToken = await sdk.createSessionToken(openId, {
+    const displayName =
+      profile.name ||
+      (profile.email ? profile.email.split("@")[0] : sessionOpenId);
+    const sessionToken = await sdk.createSessionToken(sessionOpenId, {
       name: displayName,
       expiresInMs: ONE_YEAR_MS,
     });

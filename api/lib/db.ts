@@ -339,12 +339,32 @@ export async function getUserByEmail(email: string): Promise<schema.User | null>
     const db = await getDb();
     if (!db) return null;
     await ensureTables(db);
+    const esc = email.replace(/'/g, "''");
+    // Prefer rows that have email/password login when several fg_users share one inbox (Google + email rows).
     const results = await (db as any).execute(
-      `SELECT * FROM fg_users WHERE lower(email) = lower('${email.replace(/'/g, "''")}') LIMIT 1`
+      `SELECT * FROM fg_users WHERE lower(email) = lower('${esc}') ` +
+        `ORDER BY CASE WHEN "passwordHash" IS NOT NULL AND length(trim(COALESCE("passwordHash", ''))) > 0 THEN 0 ELSE 1 END, id ASC LIMIT 1`
     );
     return (results.rows || results)[0] || null;
   } catch (err: any) {
     console.error("[DB] getUserByEmail failed:", err.message);
+    return null;
+  }
+}
+
+/** Same inbox, oldest row first — used by Google OAuth to merge into an existing account instead of inserting a duplicate. */
+export async function getUserByEmailOldest(email: string): Promise<schema.User | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    await ensureTables(db);
+    const esc = email.replace(/'/g, "''");
+    const results = await (db as any).execute(
+      `SELECT * FROM fg_users WHERE lower(email) = lower('${esc}') ORDER BY id ASC LIMIT 1`
+    );
+    return (results.rows || results)[0] || null;
+  } catch (err: any) {
+    console.error("[DB] getUserByEmailOldest failed:", err.message);
     return null;
   }
 }

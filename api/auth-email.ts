@@ -183,7 +183,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!user.passwordHash) {
         return json(res, 401, {
           error:
-            "No password on file for this email. If you usually sign in with Google, use Continue with Google. To add email login, open Create account with the same email and a new password (8+ characters).",
+            "No password on file for this email. Use Continue with Google, or go to Create account with the same email and a new password (8+ characters) to add email login.",
           code: "PASSWORD_NOT_SET",
           loginMethod: user.loginMethod ?? null,
         });

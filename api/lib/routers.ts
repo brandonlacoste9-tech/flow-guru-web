@@ -337,7 +337,7 @@ async function extractAndPersistMemory(params: {
       {
         role: "system",
         content:
-          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.",
+          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.\n\nWhen the user shares a phone number or email for someone (e.g. \"my wife's number is …\", \"mom's email is …\"), save it as a memory fact with factKey contact_phone_wife or contact_email_mom using a short lowercase slug for the person (wife, jenny, mom). Prefer category preference or general.",
       },
       {
         role: "user",
@@ -584,7 +584,9 @@ export const appRouter = router({
     }),
   }),
   assistant: router({
-    bootstrap: publicProcedure.input(z.object({ language: z.enum(['en', 'fr']).optional() })).query(async ({ ctx, input }) => {
+    bootstrap: publicProcedure
+      .input(z.object({ language: z.enum(["en", "fr"]).optional() }).default({}))
+      .query(async ({ ctx, input }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const [profile, memoryFacts, thread, providerConnections] = await Promise.all([
         getUserMemoryProfile(userId),
@@ -838,6 +840,7 @@ export const appRouter = router({
         "- List upcoming calendar events",
         "- Check weather for any city",
         "- Get directions and travel times",
+        "- Call, text, or email saved contacts when their numbers or emails are stored in memory",
         "- Set reminders (via calendar)",
         "",
         `The user's saved memory:`,

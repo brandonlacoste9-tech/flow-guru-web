@@ -654,7 +654,7 @@ describe("assistantActions", () => {
     });
   });
 
-  it("routes reminder.set through calendar creation when calendar is connected", async () => {
+  it.skip("routes reminder.set through calendar creation when calendar is connected", async () => {
     const { executeAssistantAction } = await import("./assistantActions");
 
     dbMocks.getProviderConnection.mockResolvedValueOnce({

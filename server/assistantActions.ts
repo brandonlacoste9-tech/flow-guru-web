@@ -1,7 +1,7 @@
 import fs from "fs";
 import * as chrono from "chrono-node";
 import { z } from "zod";
-import { getProviderConnection, createLocalEvent } from "./db";
+import { getProviderConnection, createLocalEvent, listUserMemoryFacts } from "./db";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,
@@ -22,6 +22,7 @@ const ACTION_NAMES = [
   "system.subagent",
   "list.manage",
   "knowledge.search",
+  "contact.open",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -101,6 +102,13 @@ const plannerSchema = z.object({
     })
     .optional()
     .nullable(),
+  contact: z
+    .object({
+      channel: z.enum(["call", "sms", "email"]).optional().nullable(),
+      targetName: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
 });
 
 const calendarResolutionSchema = z.object({
@@ -169,6 +177,8 @@ function buildListPlan(params: {
       time: null,
       location: null,
     },
+    knowledge: null,
+    contact: null,
   };
 }
 
@@ -193,10 +203,12 @@ function buildCalendarCreatePlan(params: {
     browser: null,
     subagent: null,
     list: null,
+    knowledge: null,
+    contact: null,
   };
 }
 
-function parseSimpleListIntent(message: string): AssistantActionPlan | null {
+export function parseSimpleListIntent(message: string): AssistantActionPlan | null {
   const text = message.trim().replace(/\s+/g, " ");
   if (!text) return null;
 
@@ -288,6 +300,48 @@ function parseSimpleCalendarCreateIntent(message: string): AssistantActionPlan |
   });
 }
 
+function parseSimpleContactIntent(message: string): AssistantActionPlan | null {
+  const text = message.trim().replace(/\s+/g, " ");
+  if (!text) return null;
+
+  let channel: "call" | "sms" | "email" = "call";
+  let rawTarget: string | undefined;
+
+  const callMatch = text.match(/^(?:please\s+)?(?:call|phone|ring|dial)\s+(?:my\s+)?(.+)$/i);
+  const smsMatch = text.match(/^(?:please\s+)?(?:text|sms)\s+(?:my\s+)?(.+)$/i);
+  const mailMatch = text.match(/^(?:please\s+)?(?:email|e-mail|mail)\s+(?:my\s+)?(.+)$/i);
+
+  if (smsMatch) {
+    channel = "sms";
+    rawTarget = smsMatch[1];
+  } else if (mailMatch) {
+    channel = "email";
+    rawTarget = mailMatch[1];
+  } else if (callMatch) {
+    rawTarget = callMatch[1];
+  }
+
+  if (!rawTarget) return null;
+
+  const targetName = normalizeText(rawTarget.replace(/[.!?]+$/g, ""));
+  if (!targetName || targetName.length < 2) return null;
+
+  return {
+    action: "contact.open",
+    rationale: "The user wants to reach someone via phone, SMS, or email.",
+    route: null,
+    weather: null,
+    news: null,
+    calendar: null,
+    music: null,
+    browser: null,
+    subagent: null,
+    list: null,
+    knowledge: null,
+    contact: { channel, targetName },
+  };
+}
+
 function resolveCalendarDetailsFallback(params: {
   plan: AssistantActionPlan;
   message: string;
@@ -327,39 +381,25 @@ function toJsonSchemaEnum<T extends readonly string[]>(values: T) {
   return [...values];
 }
 
-function weatherCodeToLabel(code: number | null | undefined) {
-  const labels: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mostly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Fog",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    56: "Freezing drizzle",
-    57: "Dense freezing drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    66: "Light freezing rain",
-    67: "Heavy freezing rain",
-    71: "Slight snow",
-    73: "Moderate snow",
-    75: "Heavy snow",
-    77: "Snow grains",
-    80: "Rain showers",
-    81: "Moderate rain showers",
-    82: "Violent rain showers",
-    85: "Snow showers",
-    86: "Heavy snow showers",
-    95: "Thunderstorm",
-    96: "Thunderstorm with hail",
-    99: "Severe thunderstorm with hail",
+function weatherCodeToLabel(code: number | null | undefined, language: 'en' | 'fr' = 'en') {
+  const enLabels: Record<number, string> = {
+    0: "Clear sky", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Depositing rime fog",
+    51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle", 56: "Freezing drizzle", 57: "Dense freezing drizzle",
+    61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain", 66: "Light freezing rain", 67: "Heavy freezing rain",
+    71: "Slight snow", 73: "Moderate snow", 75: "Heavy snow", 77: "Snow grains", 80: "Rain showers",
+    81: "Moderate rain showers", 82: "Violent rain showers", 85: "Snow showers", 86: "Heavy snow showers",
+    95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Severe thunderstorm with hail",
   };
-
-  return labels[code ?? -1] ?? "Unspecified conditions";
+  const frLabels: Record<number, string> = {
+    0: "Ciel dégagé", 1: "Principalement dégagé", 2: "Partiellement nuageux", 3: "Couvert", 45: "Brouillard", 48: "Brouillard givrant",
+    51: "Bruine légère", 53: "Bruine modérée", 55: "Bruine dense", 56: "Bruine verglaçante", 57: "Bruine verglaçante dense",
+    61: "Pluie légère", 63: "Pluie modérée", 65: "Forte pluie", 66: "Pluie verglaçante légère", 67: "Forte pluie verglaçante",
+    71: "Neige légère", 73: "Neige modérée", 75: "Forte neige", 77: "Grains de neige", 80: "Averses de pluie",
+    81: "Averses de pluie modérées", 82: "Violentes averses de pluie", 85: "Averses de neige", 86: "Fortes averses de neige",
+    95: "Orage", 96: "Orage avec grêle", 99: "Fort orage avec grêle",
+  };
+  const labels = language === 'fr' ? frLabels : enLabels;
+  return labels[code ?? -1] ?? (language === 'fr' ? "Conditions non spécifiées" : "Unspecified conditions");
 }
 
 type ActuallyRelevantStory = {
@@ -437,7 +477,7 @@ export async function planAssistantAction(params: {
   userName: string | null | undefined;
   memoryContext: string;
   message: string;
-  language?: "en" | "fr";
+  language: 'en' | 'fr';
 }) {
   const deterministicListPlan = parseSimpleListIntent(params.message);
   if (deterministicListPlan) return deterministicListPlan;
@@ -445,13 +485,16 @@ export async function planAssistantAction(params: {
   const deterministicCalendarPlan = parseSimpleCalendarCreateIntent(params.message);
   if (deterministicCalendarPlan) return deterministicCalendarPlan;
 
+  const deterministicContactPlan = parseSimpleContactIntent(params.message);
+  if (deterministicContactPlan) return deterministicContactPlan;
+
   const response = await invokeLLM({
     messages: [
       {
         role: "system",
         content: [
           "You are Flow Guru's intent classifier. Your ONLY job is to decide which tool to call.",
-          `CRITICAL: The user's preferred language is ${params.language === "fr" ? "FRENCH" : "ENGLISH"}. However, you MUST return JSON as specified below regardless of input language.`,
+          `CRITICAL: The user's preferred language is ${params.language === 'fr' ? 'FRENCH' : 'ENGLISH'}. However, you MUST return JSON as specified below regardless of input language.`,
           "ALWAYS choose an action when possible — err on the side of calling a tool rather than returning 'none'.",
           "",
           "AVAILABLE TOOLS:",
@@ -459,12 +502,13 @@ export async function planAssistantAction(params: {
           "- calendar.list_events: For checking a schedule or listing upcoming items.",
           "- weather.get: For checking current or future weather conditions.",
           "- route.get: For travel times, directions, or distances between points.",
-          "- music.play: For playing music on Spotify.",
+          "- music.play: For playing music on our internal radio (Focus, Chill, Energy, Sleep, Space).",
           "- news.get: For latest headlines or specific news issues.",
           "- browser.use: For browsing the web to find answers, research topics, or perform web-based tasks.",
           "- system.subagent: For ANY complex system tasks: file operations, terminal commands, writing scripts, running Python, or performing multi-step autonomous actions on the user's machine.",
           "- list.manage: For creating, adding items, removing items, clearing, or listing smart collections (like grocery lists, todos, or ideas).",
           "- knowledge.search: For questions answered from YOUR indexed knowledge base / uploaded docs / internal corpus in Vertex AI Search — NOT for random internet trivia (use browser.use for that).",
+          "- contact.open: For placing a phone call, SMS/text, or email to a PERSON by relationship or name using saved contact facts (e.g. 'call my wife', 'text Jenny', 'email mom'). User must have saved contact_phone_<name> or contact_email_<name> in memory.",
           "- none: Use this for general conversation or if no tool fits.",
           "",
           "AGENT DELEGATION RULES:",
@@ -482,7 +526,7 @@ export async function planAssistantAction(params: {
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
           "",
           "RESPONSE FORMAT: You MUST respond with a single JSON object (no markdown, no code blocks, no explanation). The JSON must have these keys:",
-          '{ "action": "<tool_name>", "rationale": "<why>", "route": null, "weather": null, "news": null, "calendar": null, "music": null, "browser": null, "subagent": null, "list": null, "knowledge": null }',
+          '{ "action": "<tool_name>", "rationale": "<why>", "route": null, "weather": null, "news": null, "calendar": null, "music": null, "browser": null, "subagent": null, "list": null, "knowledge": null, "contact": null }',
           "",
           "For list.manage, populate the list field:",
           '{ "action": "list.manage", "rationale": "...", "list": { "action": "add", "listName": "Grocery", "itemContent": "bread", "newName": null, "time": null, "location": null }, ... }',
@@ -498,6 +542,10 @@ export async function planAssistantAction(params: {
           "",
           "For knowledge.search, populate the knowledge field with the user's question:",
           '{ "action": "knowledge.search", "rationale": "...", "knowledge": { "query": "plain-language question to run against the corpus" }, ... }',
+          "",
+          "For contact.open, populate the contact field:",
+          '{ "action": "contact.open", "rationale": "...", "contact": { "channel": "call", "targetName": "wife" }, ... }',
+          "contact.channel is one of: call, sms, email",
           "",
           "ONLY respond with the JSON object. No other text.",
         ].join("\n"),
@@ -528,7 +576,7 @@ export async function planAssistantAction(params: {
     jsonString = JSON.stringify({
       action: raw.trim(),
       rationale: "Defaulted from bare action string",
-      route: null, weather: null, news: null, calendar: null, music: null, browser: null, subagent: null, list: { action: "list", listName: "Grocery" }, knowledge: null
+      route: null, weather: null, news: null, calendar: null, music: null, browser: null, subagent: null, list: { action: "list", listName: "Grocery" }, knowledge: null, contact: null
     });
   } else {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -663,6 +711,226 @@ async function resolveCalendarDetails(params: {
   return resolveCalendarDetailsFallback(params);
 }
 
+function extractHomeOriginFromMemory(memoryContext: string | null | undefined): string | null {
+  if (!memoryContext) return null;
+  for (const line of memoryContext.split("\n")) {
+    const trimmed = line.trim();
+    const homeAddr = trimmed.match(/^-\s*\[[^\]]+\]\s*home_address:\s*(.+)$/i);
+    if (homeAddr?.[1]) return homeAddr[1].trim();
+    const home = trimmed.match(/^-\s*\[[^\]]+\]\s*home:\s*(.+)$/i);
+    if (home?.[1]) return home[1].trim();
+  }
+  return null;
+}
+
+function googleTravelMode(mode: TravelMode): string {
+  if (mode === "walking") return "walking";
+  if (mode === "bicycling") return "bicycling";
+  if (mode === "transit") return "transit";
+  return "driving";
+}
+
+function buildDirectionsMapsUrls(originLabel: string, destinationLabel: string, mode: TravelMode): {
+  mapsUrlGoogle: string;
+  mapsUrlApple: string;
+} {
+  const travelmode = googleTravelMode(mode);
+  const o = encodeURIComponent(originLabel);
+  const d = encodeURIComponent(destinationLabel);
+  const mapsUrlGoogle = `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=${travelmode}`;
+  const dirflg = mode === "walking" ? "w" : "d";
+  const mapsUrlApple = `https://maps.apple.com/?dirflg=${dirflg}&saddr=${o}&daddr=${d}`;
+  return { mapsUrlGoogle, mapsUrlApple };
+}
+
+function slugifyContactTarget(raw: string): string {
+  return (
+    raw
+      .toLowerCase()
+      .replace(/^my\s+/, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "") || raw.toLowerCase().trim()
+  );
+}
+
+function expandContactSlugCandidates(raw: string): string[] {
+  const base = slugifyContactTarget(raw);
+  const aliasMap: Record<string, string[]> = {
+    wife: ["wife", "spouse"],
+    husband: ["husband", "spouse"],
+    spouse: ["spouse", "wife", "husband"],
+    mom: ["mom", "mother"],
+    mother: ["mother", "mom"],
+    dad: ["dad", "father"],
+    father: ["father", "dad"],
+  };
+  const extras = aliasMap[base] ?? [];
+  return [...new Set([base, ...extras])];
+}
+
+function findContactPhone(
+  facts: Array<{ factKey: string | null; factValue: string }>,
+  slugs: string[],
+): string | null {
+  for (const slug of slugs) {
+    const want = `contact_phone_${slug}`.toLowerCase();
+    const hit = facts.find(f => f.factKey?.toLowerCase() === want);
+    if (hit?.factValue?.trim()) return hit.factValue.trim();
+  }
+  return null;
+}
+
+function findContactEmail(
+  facts: Array<{ factKey: string | null; factValue: string }>,
+  slugs: string[],
+): string | null {
+  for (const slug of slugs) {
+    const want = `contact_email_${slug}`.toLowerCase();
+    const hit = facts.find(f => f.factKey?.toLowerCase() === want);
+    if (hit?.factValue?.trim()) return hit.factValue.trim();
+  }
+  return null;
+}
+
+/** Exposed for tests — normalize stored phone for tel:/sms: hrefs. */
+export function sanitizePhoneForHref(raw: string): string | null {
+  const trimmed = raw.trim();
+  const digits = trimmed.replace(/[^\d+]/g, "");
+  if (!/\d/.test(digits)) return null;
+  return digits.startsWith("+") ? digits : digits;
+}
+
+async function executeContactOpenAction(
+  plan: AssistantActionPlan,
+  options: { userId: number; language?: "en" | "fr" },
+): Promise<AssistantActionResult> {
+  const targetRaw = normalizeText(plan.contact?.targetName);
+  const lang = options.language ?? "en";
+
+  if (!Number.isFinite(options.userId) || options.userId <= 0) {
+    return {
+      action: "contact.open",
+      status: "failed",
+      title: "Session needed",
+      summary:
+        lang === "fr"
+          ? "Connecte-toi pour que je puisse charger tes contacts enregistrés."
+          : "Sign in so I can look up your saved contacts.",
+    };
+  }
+
+  if (!targetRaw) {
+    return {
+      action: "contact.open",
+      status: "needs_input",
+      title: "Who should I reach?",
+      summary:
+        lang === "fr"
+          ? "Dis-moi qui appeler ou texter — par exemple « appelle ma femme »."
+          : "Say who to call or text — for example “call my wife.”",
+    };
+  }
+
+  let facts: Array<{ factKey: string | null; factValue: string }>;
+  try {
+    facts = await listUserMemoryFacts(options.userId);
+  } catch {
+    return {
+      action: "contact.open",
+      status: "failed",
+      title: "Contacts unavailable",
+      summary:
+        lang === "fr"
+          ? "Je n’ai pas pu charger tes contacts enregistrés pour le moment."
+          : "I couldn’t load your saved contacts right now.",
+    };
+  }
+
+  const slugCandidates = expandContactSlugCandidates(targetRaw);
+  const phone = findContactPhone(facts, slugCandidates);
+  const email = findContactEmail(facts, slugCandidates);
+  const channel = plan.contact?.channel ?? "call";
+
+  if (channel === "email") {
+    if (!email) {
+      return {
+        action: "contact.open",
+        status: "needs_input",
+        title: "No email saved",
+        summary:
+          lang === "fr"
+            ? `Je n’ai pas d’e-mail enregistré pour ${targetRaw}. Donne-le-moi et je m’en souviendrai.`
+            : `I don't have an email saved for ${targetRaw}. Tell me and I'll remember it next time.`,
+      };
+    }
+    return {
+      action: "contact.open",
+      status: "executed",
+      title: `Email ${targetRaw}`,
+      summary:
+        lang === "fr"
+          ? `Ouvre ton app mail pour écrire à ${email}.`
+          : `Open your mail app to email ${email}.`,
+      data: {
+        targetName: targetRaw,
+        channel: "email",
+        hrefMailto: `mailto:${email}`,
+      },
+    };
+  }
+
+  if (!phone) {
+    return {
+      action: "contact.open",
+      status: "needs_input",
+      title: "No number saved",
+      summary:
+        lang === "fr"
+          ? `Je n’ai pas de numéro pour ${targetRaw}. Dis quelque chose comme « le numéro de ma femme est … » et je l’enregistrerai.`
+          : `I don't have a phone number saved for ${targetRaw}. Say something like “my wife's number is …” and I'll remember.`,
+    };
+  }
+
+  const sanitized = sanitizePhoneForHref(phone);
+  if (!sanitized) {
+    return {
+      action: "contact.open",
+      status: "needs_input",
+      title: "Invalid number",
+      summary:
+        lang === "fr"
+          ? "Ce numéro ne semble pas valide. Peux-tu le corriger dans ta mémoire?"
+          : "That saved number doesn't look valid. Try updating it in memory.",
+    };
+  }
+
+  const hrefCall = `tel:${sanitized}`;
+  const hrefSms = `sms:${sanitized}`;
+  const hrefMailto = email ? `mailto:${encodeURIComponent(email)}` : undefined;
+
+  return {
+    action: "contact.open",
+    status: "executed",
+    title: channel === "sms" ? `Text ${targetRaw}` : `Call ${targetRaw}`,
+    summary:
+      channel === "sms"
+        ? lang === "fr"
+          ? `Voici un lien pour ouvrir Messages avec ce numéro.`
+          : `Here's a link to open Messages with this number.`
+        : lang === "fr"
+          ? `Voici un lien pour ouvrir l’app Téléphone.`
+          : `Here's a link to open your phone app.`,
+    data: {
+      targetName: targetRaw,
+      channel,
+      phoneDisplay: phone,
+      hrefCall,
+      hrefSms,
+      ...(hrefMailto ? { hrefMailto } : {}),
+    },
+  };
+}
+
 async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
   const origin = normalizeText(plan.route?.origin);
   const destination = normalizeText(plan.route?.destination);
@@ -701,29 +969,35 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
   const route = directions.routes[0];
   const leg = route.legs[0];
   const steps = leg.steps.slice(0, 4).map(step => stripHtml(step.html_instructions));
+  const originLabel = leg.start_address;
+  const destinationLabel = leg.end_address;
+  const { mapsUrlGoogle, mapsUrlApple } = buildDirectionsMapsUrls(originLabel, destinationLabel, mode);
 
   return {
     action: plan.action,
     status: "executed",
-    title: `Route to ${leg.end_address}`,
+    title: `Route to ${destinationLabel}`,
     summary: leg.duration_in_traffic
       ? `${leg.distance.text}, about ${leg.duration_in_traffic.text} in current traffic.`
       : `${leg.distance.text}, about ${leg.duration.text}.`,
     provider: "google-maps",
     data: {
-      origin: leg.start_address,
-      destination: leg.end_address,
+      origin: originLabel,
+      destination: destinationLabel,
       distanceText: leg.distance.text,
       durationText: leg.duration.text,
       durationInTrafficText: leg.duration_in_traffic?.text ?? null,
       mode,
       routeSummary: route.summary,
       steps,
+      mapsUrlGoogle,
+      mapsUrlApple,
     },
   };
 }
 
-async function executeWeatherAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
+async function executeWeatherAction(plan: AssistantActionPlan, options?: { language?: 'en' | 'fr' }): Promise<AssistantActionResult> {
+  const language = options?.language ?? 'en';
   const location = normalizeText(plan.weather?.location);
   const timeframe = plan.weather?.timeframe ?? "current";
 
@@ -761,18 +1035,20 @@ async function executeWeatherAction(plan: AssistantActionPlan): Promise<Assistan
     status: "executed",
     title: `Weather for ${geocode.formatted_address}`,
     summary: current
-      ? `${weatherCodeToLabel(current.weather_code)} and ${current.temperature_2m}°C right now, feeling like ${current.apparent_temperature}°C.`
-      : "The latest conditions are available.",
+      ? `${weatherCodeToLabel(current.weather_code, language)} and ${current.temperature_2m}°C right now, feeling like ${current.apparent_temperature}°C.`
+      : (language === 'fr' ? "Les conditions actuelles sont disponibles." : "The latest conditions are available."),
     provider: "open-meteo",
     data: {
       location: geocode.formatted_address,
+      lat,
+      lon: lng,
       timezone: weather.timezone ?? null,
       current: current
         ? {
             time: current.time ?? null,
             temperatureC: current.temperature_2m ?? null,
             apparentTemperatureC: current.apparent_temperature ?? null,
-            weatherLabel: weatherCodeToLabel(current.weather_code),
+            weatherLabel: weatherCodeToLabel(current.weather_code, language),
             windSpeedKph: current.wind_speed_10m ?? null,
           }
         : null,
@@ -780,7 +1056,7 @@ async function executeWeatherAction(plan: AssistantActionPlan): Promise<Assistan
         daily && daily.time?.[todayIndex]
           ? {
               date: daily.time[todayIndex],
-              weatherLabel: weatherCodeToLabel(daily.weather_code?.[todayIndex]),
+              weatherLabel: weatherCodeToLabel(daily.weather_code?.[todayIndex], language),
               temperatureMaxC: daily.temperature_2m_max?.[todayIndex] ?? null,
               temperatureMinC: daily.temperature_2m_min?.[todayIndex] ?? null,
               precipitationProbabilityMax: daily.precipitation_probability_max?.[todayIndex] ?? null,
@@ -1052,7 +1328,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
     const {
       listUserLists, createList, addListItem, deleteListItem,
       deleteList, getListItems, updateList, updateListItem
-    } = await import("./db");
+    } = await import("./db.js");
 
     const allLists = await listUserLists(options.userId);
 
@@ -1115,7 +1391,14 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           return { action: "list.manage", status: "failed", title: "Cannot remove", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
         }
         const items = await getListItems(options.userId, targetList.id);
-        const _itemSearch = (itemContent ?? "").trim().toLowerCase(); const item = _itemSearch ? (items.find(i => !i.completed && i.content.trim().toLowerCase() === _itemSearch) ?? items.find(i => !i.completed && i.content.toLowerCase().includes(_itemSearch)) ?? items.find(i => i.content.trim().toLowerCase() === _itemSearch)) : undefined;
+        const itemSearch = (itemContent ?? "").trim().toLowerCase();
+        const item = itemSearch
+          ? (
+              items.find(i => !i.completed && i.content.trim().toLowerCase() === itemSearch) ??
+              items.find(i => !i.completed && i.content.toLowerCase().includes(itemSearch)) ??
+              items.find(i => i.content.trim().toLowerCase() === itemSearch)
+            )
+          : undefined;
         if (!item) {
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in the ${listName} list.` };
         }
@@ -1160,7 +1443,14 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
           return { action: "list.manage", status: "failed", title: "Cannot update", summary: `I need to know which item to change and what to change it to.` };
         }
         const items = await getListItems(options.userId, targetList.id);
-        const _itemSearch = (itemContent ?? "").trim().toLowerCase(); const item = _itemSearch ? (items.find(i => !i.completed && i.content.trim().toLowerCase() === _itemSearch) ?? items.find(i => !i.completed && i.content.toLowerCase().includes(_itemSearch)) ?? items.find(i => i.content.trim().toLowerCase() === _itemSearch)) : undefined;
+        const itemSearch = (itemContent ?? "").trim().toLowerCase();
+        const item = itemSearch
+          ? (
+              items.find(i => !i.completed && i.content.trim().toLowerCase() === itemSearch) ??
+              items.find(i => !i.completed && i.content.toLowerCase().includes(itemSearch)) ??
+              items.find(i => i.content.trim().toLowerCase() === itemSearch)
+            )
+          : undefined;
         if (!item) {
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' in your ${listName} list.` };
         }
@@ -1197,12 +1487,19 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
         }
         
         const items = await getListItems(options.userId, targetList.id);
-        const _itemSearch = (itemContent ?? "").trim().toLowerCase(); const item = _itemSearch ? (items.find(i => !i.completed && i.content.trim().toLowerCase() === _itemSearch) ?? items.find(i => !i.completed && i.content.toLowerCase().includes(_itemSearch)) ?? items.find(i => i.content.trim().toLowerCase() === _itemSearch)) : undefined;
+        const itemSearch = (itemContent ?? "").trim().toLowerCase();
+        const item = itemSearch
+          ? (
+              items.find(i => !i.completed && i.content.trim().toLowerCase() === itemSearch) ??
+              items.find(i => !i.completed && i.content.toLowerCase().includes(itemSearch)) ??
+              items.find(i => i.content.trim().toLowerCase() === itemSearch)
+            )
+          : undefined;
         if (!item) {
           return { action: "list.manage", status: "failed", title: "Item not found", summary: `I couldn't find '${itemContent}' on your ${listName} list.` };
         }
 
-        const { setListItemReminder, setListItemLocationTrigger } = await import("./db");
+        const { setListItemReminder, setListItemLocationTrigger } = await import("./db.js");
 
         if (locationTrigger) {
           await setListItemLocationTrigger(options.userId, item.id, locationTrigger);
@@ -1216,7 +1513,7 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
         }
 
         if (time) {
-          const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar");
+          const { resolveNaturalLanguageTime } = await import("./_core/googleCalendar.js");
           const resolvedTime = await resolveNaturalLanguageTime(time, options.timeZone || "UTC");
           
           if (!resolvedTime) {
@@ -1261,56 +1558,47 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
 
 async function executeMusicAction(
   plan: AssistantActionPlan,
-  options: { userId: number }
+  _options: { userId: number }
 ): Promise<AssistantActionResult> {
-  const query = plan.music?.query || "some good music";
-  const targetType = plan.music?.targetType || "track";
-
-  try {
-    const { searchAndPlaySpotify } = await import("./_core/spotify");
-    const result = await searchAndPlaySpotify({
-      userId: options.userId,
-      query,
-      type: (targetType as string) || "track",
-    });
-
-    if (result.status === "no_device") {
-      return {
-        action: "music.play",
-        status: "needs_input",
-        title: "Spotify Device Needed",
-        summary: result.message || "I found the music, but I couldn't find an active Spotify device to play it on.",
-        provider: "spotify",
-      };
-    }
-
-    const item = result.item;
-    return {
-      action: "music.play",
-      status: "executed",
-      title: `Playing: ${item.name}`,
-      summary: `I've started ${item.name} by ${item.artists?.[0]?.name || "the artist"} on Spotify for you.`,
-      provider: "spotify",
-      data: {
-        item,
-        externalUrl: item.external_urls?.spotify,
-      },
-    };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Spotify failed.";
-    return {
-      action: "music.play",
-      status: "failed",
-      title: "Spotify snag",
-      summary: msg,
-      provider: "spotify",
-    };
+  const query = (plan.music?.query || "lofi").toLowerCase();
+  
+  // Simple mapping from query to internal station IDs
+  let stationId = "focus";
+  let label = "Focus";
+  
+  if (query.includes("chill") || query.includes("relax") || query.includes("lush")) {
+    stationId = "chill";
+    label = "Chill";
+  } else if (query.includes("energy") || query.includes("beat") || query.includes("workout") || query.includes("dance")) {
+    stationId = "energy";
+    label = "Energy";
+  } else if (query.includes("sleep") || query.includes("night") || query.includes("calm")) {
+    stationId = "sleep";
+    label = "Sleep";
+  } else if (query.includes("space") || query.includes("deep") || query.includes("ambient")) {
+    stationId = "space";
+    label = "Space";
+  } else if (query.includes("focus") || query.includes("study") || query.includes("groove")) {
+    stationId = "focus";
+    label = "Focus";
   }
+
+  return {
+    action: "music.play",
+    status: "executed",
+    title: `Switching to ${label} Radio`,
+    summary: `I've started the ${label} station for you.`,
+    provider: "internal-radio",
+    data: {
+      stationId,
+      label,
+    },
+  };
 }
 
 async function executeKnowledgeSearch(
   plan: AssistantActionPlan,
-  options: { message?: string },
+  options: { message: string },
 ): Promise<AssistantActionResult> {
   if (!isVertexSearchConfigured()) {
     return {
@@ -1323,16 +1611,7 @@ async function executeKnowledgeSearch(
     };
   }
 
-  const q = plan.knowledge?.query?.trim() || options.message?.trim();
-  if (!q) {
-    return {
-      action: "knowledge.search",
-      status: "failed",
-      title: "Knowledge search",
-      summary: "I need a question or topic to search your knowledge base.",
-      provider: "vertex-ai-search",
-    };
-  }
+  const q = plan.knowledge?.query?.trim() || options.message.trim();
   try {
     const { summary, sources } = await searchKnowledgeBase(q);
     return {
@@ -1357,9 +1636,8 @@ async function executeKnowledgeSearch(
 
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
-  options: {
-    userId: number;
-    threadId?: number;
+  optionsIn?: {
+    userId?: number;
     userName?: string | null;
     message?: string;
     memoryContext?: string;
@@ -1367,6 +1645,15 @@ export async function executeAssistantAction(
     language?: "en" | "fr";
   },
 ): Promise<AssistantActionResult> {
+  const options = {
+    userId: optionsIn?.userId ?? -1,
+    userName: optionsIn?.userName,
+    message: optionsIn?.message ?? "",
+    memoryContext: optionsIn?.memoryContext ?? "",
+    timeZone: optionsIn?.timeZone ?? null,
+    language: (optionsIn?.language ?? "en") as "en" | "fr",
+  };
+
   console.log(`[Assistant Action] Executing: ${plan.action}`, plan);
 
   try {
@@ -1379,26 +1666,45 @@ export async function executeAssistantAction(
         return await executeCalendarCreateAction(plan, options as any);
       case "calendar.list_events":
         return await executeCalendarListAction(plan, options as any);
-      case "route.get":
-        return await executeRouteAction(plan);
+      case "route.get": {
+        const destination = normalizeText(plan.route?.destination);
+        let origin = normalizeText(plan.route?.origin);
+        if (!origin && options.memoryContext) {
+          origin = extractHomeOriginFromMemory(options.memoryContext);
+        }
+        const enrichedPlan: AssistantActionPlan = {
+          ...plan,
+          route: {
+            origin,
+            destination,
+            mode: plan.route?.mode ?? "driving",
+          },
+        };
+        return await executeRouteAction(enrichedPlan);
+      }
+      case "contact.open":
+        return await executeContactOpenAction(plan, {
+          userId: options.userId,
+          language: options.language,
+        });
       case "weather.get":
-        return await executeWeatherAction(plan);
+        return await executeWeatherAction(plan, options as any);
       case "news.get":
         return await executeNewsAction(plan, options as any);
       case "music.play":
         return await executeMusicAction(plan, options as any);
       case "browser.use":
         return {
-          action: "browser.use",
-          status: "executed",
+          action: "browser.use" as const,
+          status: "executed" as const,
           title: "Opening Browser",
           summary: `I'm looking that up for you now.`,
           data: { task: plan.browser?.task },
         };
       case "system.subagent":
         return {
-          action: "system.subagent",
-          status: "executed",
+          action: "system.subagent" as const,
+          status: "executed" as const,
           title: "Working on it",
           summary: `I'm handling that task in the background.`,
           data: { task: plan.subagent?.task },
@@ -1406,8 +1712,8 @@ export async function executeAssistantAction(
       case "none":
       default:
         return {
-          action: "none",
-          status: "executed",
+          action: "none" as const,
+          status: "executed" as const,
           title: "Chatting",
           summary: "I'm just chatting with you.",
         };
@@ -1416,7 +1722,7 @@ export async function executeAssistantAction(
     console.warn("[Flow Guru] External action execution failed.", error);
     return {
       action: plan.action,
-      status: "failed",
+      status: "failed" as const,
       title: plan.action === "list.manage" ? "List action unavailable" : "Action unavailable",
       summary: plan.action === "list.manage"
         ? "I couldn't complete that list action right now. Please try again."
@@ -1430,7 +1736,7 @@ export async function executeAssistantAction(
             : plan.action.startsWith("calendar")
               ? "google-calendar"
               : plan.action.startsWith("music")
-                ? "spotify"
+                ? "internal-radio"
                 : plan.action === "knowledge.search"
                   ? "vertex-ai-search"
                   : undefined,
