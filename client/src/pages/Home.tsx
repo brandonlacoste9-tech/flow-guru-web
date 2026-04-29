@@ -35,6 +35,28 @@ interface Message {
   actionResult?: any;
 }
 
+/** DB messages omit actionResult; the send mutation returns it separately — attach for inline cards. */
+function mergeLatestAssistantActionResult(
+  messages: Message[],
+  actionResult: unknown,
+): Message[] {
+  if (
+    !actionResult ||
+    typeof actionResult !== "object" ||
+    (actionResult as { action?: string }).action === "none"
+  ) {
+    return messages;
+  }
+  const next = messages.map(m => ({ ...m }));
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].role === "assistant") {
+      next[i] = { ...next[i], actionResult };
+      break;
+    }
+  }
+  return next;
+}
+
 type BillingLimit = {
   limitReached?: boolean;
   limit?: number;
@@ -277,7 +299,11 @@ export default function Home() {
 
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
-      setMessages(result.messages as Message[]);
+      const withCard = mergeLatestAssistantActionResult(
+        result.messages as Message[],
+        result.actionResult,
+      );
+      setMessages(withCard);
       if (result.threadId) setCurrentThreadId(result.threadId);
       const limit = (result as any).billing as BillingLimit | undefined;
       if (limit?.limitReached) {
