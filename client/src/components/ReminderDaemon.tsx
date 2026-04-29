@@ -33,6 +33,25 @@ export default function ReminderDaemon() {
   return (
     <>
       {alarmState.firing && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
+          <div className="pointer-events-auto flex w-full max-w-sm gap-2 rounded-2xl border border-border bg-card/95 p-2 shadow-2xl backdrop-blur">
+            <button
+              onClick={snoozeAlarm}
+              className="flex-1 rounded-xl bg-muted py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80"
+            >
+              Snooze
+            </button>
+            <button
+              onClick={dismissAlarm}
+              className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Turn Off Alarm
+            </button>
+          </div>
+        </div>
+      )}
+
+      {alarmState.firing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 flex w-full max-w-sm flex-col items-center gap-6 rounded-3xl border border-border bg-card px-8 py-10 shadow-2xl">
             <div className="select-none text-6xl">⏰</div>

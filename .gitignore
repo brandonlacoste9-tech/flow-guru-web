@@ -1,5 +1,14 @@
 # Dependencies
 **/node_modules
+
+# Local reference (cloned cookbook — keep out of repo)
+/cookbook/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 .pnpm-store/
 
 # Build outputs
@@ -17,6 +26,7 @@ build/
 # IDE and editor files
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~

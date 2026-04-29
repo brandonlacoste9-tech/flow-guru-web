@@ -36,7 +36,8 @@ When reporting, please include:
 
 In scope:
 
-- The web application at `https://flow-guru-web.vercel.app` (and any `*.vercel.app` preview deploys for this repo)
+- The production site **`https://floguru.com`** (apex; **`https://www.floguru.com`** redirects here)
+- The default Vercel hostname **`https://flow-guru-web.vercel.app`** and other **`*.vercel.app`** preview deployments for this repo
 - Source code in this repository, including the API layer (`api/`), server (`server/`), client (`client/`), and mobile app (`mobile/`)
 
 Out of scope:
@@ -53,6 +54,6 @@ Good-faith research conducted within this policy will not be pursued legally. Pl
 
 - ✅ Dependabot alerts enabled
 - ✅ Dependabot version updates configured (`.github/dependabot.yml`)
-- ⏳ CodeQL code scanning — planned
-- ⏳ Secret scanning alerts — planned
-- ⏳ Private vulnerability reporting — to enable in repo Settings → Security
+- ⏳ CodeQL code scanning — enable in GitHub → Settings → Security → Code security and analysis
+- ⏳ Secret scanning — enable GitHub secret scanning for the repository (recommended)
+- ⏳ Confirm **Private vulnerability reporting** is enabled (repo **Settings → Security**); reporting link: `https://github.com/brandonlacoste9-tech/flow-guru-web/security/advisories/new`

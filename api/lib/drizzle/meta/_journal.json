@@ -1,33 +1,12 @@
 {
   "version": "7",
-  "dialect": "mysql",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1776646442700,
-      "tag": "0000_flowery_vertigo",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1776646542084,
-      "tag": "0001_handy_living_tribunal",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1776650438628,
-      "tag": "0002_green_johnny_storm",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1776655782223,
-      "tag": "0003_complete_ezekiel",
+      "version": "7",
+      "when": 1777484505243,
+      "tag": "0000_baseline_pg",
       "breakpoints": true
     }
   ]

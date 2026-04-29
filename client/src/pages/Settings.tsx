@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Gift, Copy, Share2, Loader2, CreditCard, Bell, Droplets, CalendarClock } from 'lucide-react';
+import { ArrowLeft, User, Brain, MessageSquare, Save, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle, Volume2, Wand2, Share2, Loader2, CreditCard, Bell, Droplets, CalendarClock } from 'lucide-react';
 import { trpc } from '@/lib/trpc-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -10,7 +10,7 @@ import { getLoginUrl } from '@/const';
 import { trackConversion } from '@/lib/telemetry';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 
-type Tab = 'profile' | 'alarms' | 'memory' | 'persona' | 'instructions' | 'billing' | 'referral' | 'integrations';
+type Tab = 'profile' | 'alarms' | 'memory' | 'persona' | 'instructions' | 'billing' | 'integrations';
 
 const RADIO_URLS: Record<string, string> = {
   'radio-focus': 'https://ice6.somafm.com/groovesalad-128-mp3',
@@ -157,7 +157,6 @@ export function Settings() {
 
   const factsQuery = trpc.settings.getMemoryFacts.useQuery();
   const personaQuery = trpc.settings.getPersona.useQuery(undefined);
-  const referralQuery = trpc.settings.getReferralInfo.useQuery(undefined);
 
   useEffect(() => {
     const data = personaQuery.data as any;
@@ -257,7 +256,7 @@ export function Settings() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
-    const allowedTabs: Tab[] = ['profile', 'alarms', 'memory', 'persona', 'instructions', 'billing', 'referral', 'integrations'];
+    const allowedTabs: Tab[] = ['profile', 'alarms', 'memory', 'persona', 'instructions', 'billing', 'integrations'];
     if (tabParam && allowedTabs.includes(tabParam as Tab)) {
       setActiveTab(tabParam as Tab);
     }
@@ -430,7 +429,6 @@ export function Settings() {
     { id: 'instructions' as Tab, label: t('settings_tab_instructions'), icon: MessageSquare },
     { id: 'billing' as Tab, label: 'Billing', icon: CreditCard },
     { id: 'integrations' as Tab, label: t('settings_tab_integrations'), icon: Share2 },
-    { id: 'referral' as Tab, label: t('settings_tab_referral'), icon: Gift },
   ];
 
   const PERSONA_STYLES = [
@@ -445,27 +443,27 @@ export function Settings() {
   const isBillingUnauthenticated = billingStatus?.authenticated === false;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl px-4 sm:px-6 py-3 sm:py-4">
+    <div className="min-h-[100dvh] min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl px-4 sm:px-6 py-3 sm:py-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="max-w-2xl mx-auto flex items-center gap-3 sm:gap-4">
           <button onClick={() => navigate('/')} className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground shrink-0">
             <ArrowLeft size={16} />
           </button>
-          <div className="min-w-0">
-            <h1 className="text-sm sm:text-base font-bold tracking-tight line-clamp-2 sm:line-clamp-1">{t('settings_title')}</h1>
-            <p className="text-[10px] sm:text-xs text-muted-foreground leading-snug line-clamp-2 sm:line-clamp-1">{t('settings_desc')}</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm sm:text-base font-bold tracking-tight">{t('settings_title')}</h1>
+            <p className="text-[10px] sm:text-xs text-muted-foreground leading-snug mt-0.5">{t('settings_desc')}</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-[calc(2rem+env(safe-area-inset-bottom,0px))]">
         {/* Scrollable tab bar */}
-        <div className="flex gap-1 mb-6 sm:mb-8 bg-secondary/40 p-1 rounded-2xl overflow-x-auto no-scrollbar touch-pan-x">
+        <div className="flex gap-1 mb-6 sm:mb-8 bg-secondary/40 p-1 rounded-2xl overflow-x-auto no-scrollbar touch-pan-x [-webkit-overflow-scrolling:touch] snap-x snap-mandatory">
           {TABS.map(tab => {
             const Icon = tab.icon;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={cn('flex-1 min-w-[92px] sm:min-w-[100px] flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold transition-all px-2 text-center leading-tight',
+                className={cn('snap-start shrink-0 min-w-[5rem] sm:flex-1 sm:min-w-[100px] flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold transition-all px-1.5 sm:px-2 text-center leading-tight',
                   activeTab === tab.id ? 'bg-card shadow-sm text-foreground border border-border' : 'text-muted-foreground hover:text-foreground')}>
                 <Icon size={12} className="sm:w-3.5 sm:h-3.5 shrink-0" />
                 <span className="whitespace-normal break-words">{tab.label}</span>
@@ -1047,59 +1045,6 @@ export function Settings() {
               </div>
             </motion.div>
           )}
-
-          {activeTab === 'referral' && (
-            <motion.div key="referral" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-              <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 space-y-5">
-                <div className="flex items-center gap-2 mb-1">
-                  <Gift size={14} className="text-primary" />
-                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-muted-foreground">Referral Program</h2>
-                </div>
-                <p className="text-[11px] sm:text-xs text-muted-foreground -mt-2 leading-relaxed">Share your referral code with friends. When they sign up using your code, you both earn bonus credits.</p>
-                <div className="space-y-1">
-                  <label className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Referral Code</label>
-                  {(referralQuery.data as any)?.referralCode ? (
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-sm font-mono font-bold tracking-[0.2em] text-primary truncate">
-                        {(referralQuery.data as any).referralCode}
-                      </div>
-                      <button
-                        onClick={() => { navigator.clipboard.writeText((referralQuery.data as any).referralCode); toast.success('Copied to clipboard!'); }}
-                        className="w-11 h-11 rounded-xl border border-border flex items-center justify-center hover:bg-accent/10 transition-colors text-muted-foreground shrink-0">
-                        <Copy size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="bg-background border border-border rounded-xl px-4 py-3 text-sm text-muted-foreground">
-                      {referralQuery.isLoading ? 'Loading...' : 'Sign in to get your code.'}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
-                  <Sparkles size={14} className="text-primary shrink-0" />
-                  <div>
-                    <p className="text-[11px] sm:text-xs font-bold text-foreground">Credits Balance</p>
-                    <p className="text-[11px] sm:text-xs text-muted-foreground">{(referralQuery.data as any)?.credits ?? 0} credits earned from referrals</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    const code = (referralQuery.data as any)?.referralCode;
-                    if (code) {
-                      navigator.clipboard.writeText(`Join me on FLO GURU — the AI personal assistant that actually knows you. Sign up with my code ${code} at https://floguru.com`);
-                      toast.success('Share message copied!');
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold bg-primary text-primary-foreground hover:opacity-90 transition-all">
-                  <Share2 size={14} />Share Your Code
-                </button>
-              </div>
-              <div className="flex items-start gap-3 bg-card border border-border rounded-2xl px-4 py-3">
-                <Gift size={14} className="text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">Referral credits can be used toward premium features. Credits are added automatically when your friend signs up using your code.</p>
-              </div>
-            </motion.div>
-          )}
         </AnimatePresence>
       </main>
     </div>
@@ -1154,7 +1099,7 @@ function IntegrationsPanel() {
             <div className="min-w-0">
               <p className="text-sm font-bold">Google Calendar</p>
               {status.googleCalendar ? (
-                <p className="text-[10px] text-blue-500 uppercase tracking-wider font-semibold truncate">Connected as {status.googleCalendarLabel ?? 'User'}</p>
+                <p className="text-[10px] text-blue-500 uppercase tracking-wider font-semibold break-words">Connected as {status.googleCalendarLabel ?? 'User'}</p>
               ) : (
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Schedule & Events</p>
               )}
