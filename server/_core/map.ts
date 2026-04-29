@@ -26,7 +26,7 @@ function getForgeMapsConfig(): ForgeMapsConfig | null {
 }
 
 function getDirectGoogleMapsApiKey(): string | undefined {
-  const k = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  const k = ENV.googleMapsApiKey?.trim();
   return k || undefined;
 }
 
