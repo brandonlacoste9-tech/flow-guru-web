@@ -10,13 +10,13 @@ Client-server monorepo. Client/server communicate primarily via tRPC, with Expre
 
 - Frontend: React + Vite + TypeScript, Tailwind CSS, Radix UI, Framer Motion, Wouter routing
 - Backend: Node.js Express + tRPC
-- Database: **MySQL** via Drizzle ORM (`drizzle-orm/mysql-core`)
+- Database: **Postgres** (e.g. Neon) via `postgres` + Drizzle (`drizzle-orm/pg-core`); runtime entrypoint `api/lib/db.ts`
 - AI core: LLM-based intent classification and tool orchestration
 - `shared/` for cross-stack types and constants
 
 ## 3. Frontend (Client)
 
-Lives in `client/`. SPA built on React 19.2.1, Vite 7.1.7, TypeScript 5.9.3, Tailwind 4.1.14, Radix UI, Framer Motion 12.23.22, Wouter 3.7.1. State and data via TanStack Query 5.90.2 + tRPC client 11.6.0.
+Lives in `client/`. SPA built on React ^19.2.1, Vite ^7.1.7, TypeScript 5.9.3, Tailwind CSS ^4.2.4, Radix UI, Framer Motion ^12.23.22, Wouter 3.7.1. State and data via TanStack Query ^5.100.5 + tRPC client ^11.6.0 (see root `package.json` for resolved versions).
 
 ### Key Frontend Files
 
@@ -32,7 +32,7 @@ Lives in `client/`. SPA built on React 19.2.1, Vite 7.1.7, TypeScript 5.9.3, Tai
 
 ## 4. Backend (Server)
 
-Lives in `server/`. Node + Express 4.21.2 + tRPC 11.6.0. Drizzle ORM 0.45.2 against MySQL.
+Lives in `server/`. Node + Express 5.x + tRPC 11.6.0. Persistence goes through `api/lib/db.ts` (Postgres / Drizzle).
 
 ### Key Backend Files
 
@@ -71,26 +71,31 @@ Lives in `server/`. Node + Express 4.21.2 + tRPC 11.6.0. Drizzle ORM 0.45.2 agai
 
 `shared/const.ts` defines shared constants (e.g., `COOKIE_NAME`). `shared/types.ts` contains cross-stack TypeScript types.
 
-## 6. Database Schema
+## 6. Database Schema (production)
 
-Defined in `drizzle/schema.ts` using `drizzle-orm/mysql-core` (MySQL). Migrations in `drizzle/migrations/` and SQL files (`0000_*.sql` … `0003_*.sql`).
+**Source of truth:** `api/lib/drizzle/schema.ts` — Postgres tables prefixed `fg_*`, consumed by `api/lib/db.ts`.
 
-| Table | Description |
+| Physical table | Logical entity |
 | :-- | :-- |
-| `users` | Core user (openId, name, email, loginMethod, role, timestamps, lastSignedIn). |
-| `userMemoryProfiles` | Summarized prefs/routines (wakeUpTime, dailyRoutine, preferencesSummary). |
-| `userMemoryFacts` | Granular durable facts, categorized. |
-| `conversationThreads` | Threads linking messages to users. |
-| `conversationMessages` | Messages with role + content. |
-| `providerConnections` | Google Calendar / Spotify tokens + status. |
-| `localEvents` | User-created local events. |
+| `fg_users` | Core user (openId, auth fields, persona, referrals). |
+| `fg_profiles` | Memory profile / prefs (wake time, voice, alarms). |
+| `fg_facts` | Durable memory facts. |
+| `fg_threads` / `fg_messages` | Conversation threads and messages. |
+| `fg_connections` | OAuth provider tokens (e.g. Google Calendar). |
+| `fg_local_events` | In-app calendar events. |
+| `fg_lists` / `fg_list_items` | Lists feature. |
+| `fg_push_subscriptions` | Web push endpoints. |
+| `fg_subscriptions` / `fg_stripe_events` | Stripe billing sync and idempotency. |
+
+Legacy `drizzle/schema.ts` at repo root (MySQL-shaped) is **not** used by `api/lib/db.ts`. See §10.
 
 ## 7. Top-Level Directories
 
 - `api/` — Vercel serverless endpoints, DB layer (`api/lib/db.js`)
 - `mobile/` — mobile app (own `package-lock.json`)
-- `client/`, `server/`, `shared/`, `drizzle/`, `db/`
-- `supabase/` — Supabase config (reconcile with MySQL Drizzle usage)
+- `client/`, `server/`, `shared/`, `db/`
+- `drizzle/` at repo root — legacy duplicate migration SQL + old schema stub; **`drizzle.config.ts` writes to `api/lib/drizzle/`** (see §10)
+- `supabase/` — Supabase SQL snapshots (not wired to `api/lib/db.ts`; see §10)
 - `openclaw/`, `patches/`, `scripts/`
 
 ## 8. Development Workflow
@@ -101,36 +106,31 @@ Defined in `drizzle/schema.ts` using `drizzle-orm/mysql-core` (MySQL). Migration
 - `check`: `tsc --noEmit`
 - `format`: `prettier --write .`
 - `test`: `vitest run`
-- `db:push`: `drizzle-kit generate && drizzle-kit migrate`
+- `test:e2e`: Playwright smoke (`PLAYWRIGHT_BASE_URL` optional; see `playwright.config.ts`)
+- `db:generate` / `db:migrate`: Drizzle Kit against `drizzle.config.ts` (requires `DATABASE_URL`)
+- `db:push`: runs `db:generate` then `db:migrate` (full migration pipeline)
+
+**Drizzle migrations:** Production schema migrations live under **`api/lib/drizzle/`** as Postgres SQL (see `0000_baseline_pg.sql`). Run migrations against **empty** databases or new branches. If your Neon DB **already** has `fg_*` tables (e.g. created by runtime DDL in `api/lib/db.ts`), treat this baseline as already applied: record it in Drizzle’s migration history **without** re-executing conflicting `CREATE` statements, or rely on idempotent app DDL only — otherwise `migrate` may fail with “already exists.”
 
 Node `>=20`. pnpm 10.4.1. License MIT. Tests cover assistant router, assistant actions, auth logout, Google OAuth credentials, Google Calendar core.
 
 ## 9. Conclusion
 
-TypeScript across the stack, tRPC for type-safe APIs, Drizzle ORM (MySQL) for the data layer, and a dedicated AI assistant orchestration layer combine to form a responsive personal-assistant platform. OAuth-based third-party integrations (Google Calendar, Spotify) extend its reach.
+TypeScript across the stack, tRPC for type-safe APIs, Drizzle ORM on **Postgres** for the data layer, and a dedicated AI assistant orchestration layer combine to form a responsive personal-assistant platform. OAuth-based third-party integrations (e.g. Google Calendar) extend its reach.
 
-## 10. Schema Reality (Important)
+## 10. Legacy / alternate schema files
 
-The repository contains **three distinct schema definitions**. Be aware of which one is actually used by the production runtime.
+The repo still contains **older or parallel** schema artifacts. Production traffic uses **`api/lib/drizzle/schema.ts` + `api/lib/db.ts`** only.
 
-| Path | Engine | Status |
-| :-- | :-- | :-- |
-| `drizzle/schema.ts` | MySQL (`drizzle-orm/mysql-core`) | **Stale / unused at runtime.** Likely scaffolding from an early iteration. |
-| `api/lib/drizzle/schema.ts` | **Postgres** (`drizzle-orm/pg-core`, tables prefixed `fg_`) | **Production schema.** Imported by `api/lib/db.ts`. |
-| `supabase/schema.sql` | Postgres on Supabase (`auth.users`, `jsonb`, `uuid`) | Independent Supabase project, snake_case tables (`profiles`, `user_memory`, `conversations`, `provider_connections`). Not consumed by `api/lib/db.ts`. |
+| Path | Notes |
+| :-- | :-- |
+| `drizzle/schema.ts` | MySQL-shaped Drizzle artifact — **not** imported by `api/lib/db.ts`. |
+| `drizzle/*.sql` + `drizzle/meta/` (repo root) | **Obsolete** MySQL-era migrations and snapshots — **do not use**. Canonical migrations are **`api/lib/drizzle/`** (Postgres `0000_baseline_pg.sql` + `meta/`). |
+| `supabase/schema.sql` | Standalone Supabase-oriented SQL — **not** consumed by `api/lib/db.ts`. |
 
-The production DB layer in `api/lib/db.ts` uses `drizzle-orm/postgres-js` against Neon Postgres and self-heals via idempotent `CREATE TABLE IF NOT EXISTS fg_users` DDL.
+The DB layer uses `drizzle-orm/postgres-js` against Postgres (typically Neon) and may apply idempotent `CREATE TABLE IF NOT EXISTS …` DDL when tables are missing.
 
-The production schema in `api/lib/drizzle/schema.ts` includes fields beyond the seven tables shown above:
+### Recommended cleanup (backlog)
 
-- `passwordHash`, `promoCode`, `resetToken`, `resetTokenExpiresAt`
-- Referrals: `referralCode`, `referredBy`, `credits`
-- Assistant persona: `personaName`, `personaStyle`
-- Enums: `fg_role`, `fg_memory_category`, `fg_message_role`, `fg_provider_type`, `fg_connection_status`
-
-### Recommended cleanup
-
-1. Delete `drizzle/schema.ts` (MySQL stub) and the duplicate root-level migration SQL files; keep `api/lib/drizzle/` as the single source of truth.
-2. Update `db:push` in `package.json` to point drizzle-kit at `api/lib/drizzle/` only.
-3. Decide the role of `supabase/`. If unused, archive or delete. If used for a specific feature, document it explicitly.
-4. Update Section 6 of this document once cleanup lands so the table list reflects `fg_`-prefixed Postgres tables.
+1. Remove or relocate root `drizzle/schema.ts` and root **`drizzle/*.sql` / `meta/`** once CI/scripts no longer reference them.
+2. Document or delete `supabase/` based on whether any workflow still references it.

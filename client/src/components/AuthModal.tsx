@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Eye, EyeOff, X, Loader2 } from "lucide-react";
+import { getLoginUrl } from "@/const";
 
 type View = "signin" | "signup" | "forgot" | "forgot-sent" | "reset-sent";
 
@@ -30,6 +31,23 @@ const leatherBtn =
 
 const leatherLink = "text-[#c8900a] hover:text-[#e0a820] transition font-semibold";
 
+const googleOutlineBtn =
+  "w-full rounded-xl py-3 text-sm font-bold uppercase tracking-wider transition flex items-center justify-center gap-2 " +
+  "border border-[#6b4a22] bg-[#1e1208] text-[#f0e4cc] hover:bg-[#2a1810] hover:border-[#c8900a]/50";
+
+function OrDivider() {
+  return (
+    <div className="relative py-1">
+      <div className="absolute inset-0 flex items-center">
+        <span className="w-full border-t border-[#6b4a22]/60" />
+      </div>
+      <div className="relative flex justify-center text-[10px] uppercase tracking-wider">
+        <span className="bg-[#140c04] px-2 text-[#7a5c38]">or</span>
+      </div>
+    </div>
+  );
+}
+
 export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
   const [view, setView] = useState<View>(resetToken ? "reset-sent" : "signin");
   const [name, setName] = useState("");
@@ -49,21 +67,54 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
       credentials: "include",
       body: JSON.stringify(body),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Something went wrong.");
+    const data = (await res.json()) as {
+      error?: string;
+      code?: string;
+      loginMethod?: string | null;
+      ok?: boolean;
+      name?: string;
+      promoApplied?: boolean;
+    };
+    if (!res.ok) {
+      const err = new Error(data.error || "Something went wrong.") as Error & {
+        code?: string;
+        loginMethod?: string | null;
+      };
+      err.code = data.code;
+      err.loginMethod = data.loginMethod;
+      throw err;
+    }
     return data;
   }
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault(); setError(""); setLoading(true);
-    try { const data = await callAuth("login", { email, password, promoCode }); onSuccess(data.name || email.split("@")[0]); }
-    catch (err: any) { setError(err.message); } finally { setLoading(false); }
+    try {
+      const data = await callAuth("login", { email, password, promoCode });
+      onSuccess(data.name || email.split("@")[0]);
+    } catch (err: unknown) {
+      const e = err as Error & { code?: string };
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function continueWithGoogle() {
+    window.location.href = getLoginUrl();
   }
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault(); setError(""); setLoading(true);
-    try { const data = await callAuth("register", { name, email, password, promoCode }); onSuccess(data.name || name); }
-    catch (err: any) { setError(err.message); } finally { setLoading(false); }
+    try {
+      const data = await callAuth("register", { name, email, password, promoCode });
+      onSuccess(data.name || name);
+    } catch (err: unknown) {
+      const e = err as Error & { code?: string };
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleForgot(e: React.FormEvent) {
@@ -153,16 +204,34 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
           </div>
 
           {view === "signin" && (
-            <p className="text-xs text-[#7a5c38] tracking-wide">Sign in to your FLO GURU account</p>
+            <>
+              <p className="text-xs text-[#7a5c38] tracking-wide leading-relaxed">
+                Sign in with Google or your email and password — both link to one account.
+              </p>
+            </>
           )}
           {view === "signup" && (
-            <p className="text-xs text-[#7a5c38] tracking-wide">Free to use — no credit card required</p>
+            <>
+              <p className="text-xs text-[#7a5c38] tracking-wide leading-relaxed">
+                Choose Google or register with email — use the same email later to use either sign-in.
+              </p>
+              <p className="text-[11px] text-[#6b5340] mt-2 leading-snug">
+                Free to use — no credit card required
+              </p>
+            </>
           )}
         </div>
 
         {/* SIGN IN */}
         {view === "signin" && (
           <form onSubmit={handleSignIn} className="space-y-4">
+            <button type="button" onClick={continueWithGoogle} className={googleOutlineBtn}>
+              Continue with Google
+            </button>
+            <OrDivider />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#a07840] text-center">
+              Email & password
+            </p>
             <div>
               <label className={leatherLabel}>Email</label>
               <input type="email" required autoComplete="email" value={email}
@@ -196,7 +265,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
             {error && <p className="text-red-400 text-xs bg-red-950/30 border border-red-900/40 rounded-lg px-3 py-2">{error}</p>}
             <button type="submit" disabled={loading} className={leatherBtn}>
               {loading && <Loader2 size={14} className="animate-spin" />}
-              Sign In
+              Sign in with email
             </button>
             <div className="flex items-center justify-between text-xs text-[#7a5c38] pt-1">
               <button type="button" onClick={() => { setError(""); setView("forgot"); }} className={leatherLink}>
@@ -212,6 +281,13 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
         {/* SIGN UP */}
         {view === "signup" && (
           <form onSubmit={handleSignUp} className="space-y-4">
+            <button type="button" onClick={continueWithGoogle} className={googleOutlineBtn}>
+              Continue with Google
+            </button>
+            <OrDivider />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#a07840] text-center">
+              Register with email
+            </p>
             <div>
               <label className={leatherLabel}>Your name</label>
               <input type="text" autoComplete="name" value={name}
@@ -241,10 +317,13 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
               <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                 className={leatherInput} placeholder="EARLYBIRD" />
             </div>
+            <p className="text-[10px] text-[#6b5340] leading-snug text-center px-1">
+              Already use Google? Same email + password here adds email login — you can sign in either way.
+            </p>
             {error && <p className="text-red-400 text-xs bg-red-950/30 border border-red-900/40 rounded-lg px-3 py-2">{error}</p>}
             <button type="submit" disabled={loading} className={leatherBtn}>
               {loading && <Loader2 size={14} className="animate-spin" />}
-              Create Account
+              Create account with email
             </button>
             <p className="text-center text-xs text-[#7a5c38] pt-1">
               Already have an account?{" "}

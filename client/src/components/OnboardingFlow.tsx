@@ -1,60 +1,57 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Cloud, Music, Newspaper, Sparkles, ChevronRight, Check } from 'lucide-react';
+import { Check, ChevronRight, Loader2 } from 'lucide-react';
+import { trpc } from '@/lib/trpc-client';
 
 interface OnboardingFlowProps {
   onComplete: () => void;
   userName?: string;
 }
 
-const STEPS = [
+type StepId = 'assistant-name' | 'user-name' | 'wake' | 'alarm' | 'briefing' | 'done';
+
+const STEPS: Array<{ id: StepId; subtitle: string; title: string; body: string; cta: string }> = [
   {
-    id: 'welcome',
-    icon: null,
-    title: 'Welcome to FLO GURU',
-    subtitle: 'Your premium personal assistant',
-    body: 'FLO GURU is your intelligent daily companion — it learns your routines, keeps your schedule, and helps you flow through every day with ease.',
-    cta: 'Get Started',
-  },
-  {
-    id: 'ai',
-    icon: Sparkles,
-    title: 'Intelligent Conversations',
-    subtitle: 'Ask anything, anytime',
-    body: 'Talk to FLO GURU like a trusted advisor. Ask about your schedule, the weather, the news, or anything on your mind. It remembers your preferences and gets smarter over time.',
+    id: 'assistant-name',
+    subtitle: 'Welcome',
+    title: 'Hi, I am FloGuru',
+    body: 'You can rename me if you want. What would you like to call me?',
     cta: 'Next',
   },
   {
-    id: 'calendar',
-    icon: Calendar,
-    title: 'Your Calendar, Elevated',
-    subtitle: 'Never miss a moment',
-    body: 'Connect your Google Calendar or create events directly in the app. FLO GURU will remind you of upcoming events and help you plan your day.',
+    id: 'user-name',
+    subtitle: 'Personalized setup',
+    title: 'What is your name?',
+    body: 'I will use your name to make reminders and updates feel more personal.',
     cta: 'Next',
   },
   {
-    id: 'weather',
-    icon: Cloud,
-    title: 'Live Weather & News',
-    subtitle: 'Always in the know',
-    body: 'Get real-time weather for your location and curated top news headlines — all without leaving the app. Tap the cards on your dashboard to explore.',
-    cta: 'Next',
+    id: 'wake',
+    subtitle: 'Wake schedule',
+    title: 'What time do you wake up?',
+    body: 'Set your weekday wake-up routine so alarms and planning start on time.',
+    cta: 'Save wake schedule',
   },
   {
-    id: 'music',
-    icon: Music,
-    title: 'Focus Music',
-    subtitle: 'Set the mood',
-    body: 'Choose from curated radio stations — Focus, Chill, Energy, Sleep, and Space — to match your workflow. Great music makes everything flow better.',
-    cta: 'Next',
+    id: 'alarm',
+    subtitle: 'Alarm style',
+    title: 'Pick your alarm sound',
+    body: 'Choose how your wake-up alarm sounds: chime, radio, or silent plus vibration.',
+    cta: 'Save alarm style',
   },
   {
-    id: 'ready',
-    icon: null,
-    title: "You're All Set",
-    subtitle: 'Welcome to the flow',
-    body: 'Your dashboard is ready. Start by asking FLO GURU anything — or just explore the cards below. Everything is designed to help you move through your day with clarity and ease.',
-    cta: 'Enter FLO GURU',
+    id: 'briefing',
+    subtitle: 'Daily briefing',
+    title: 'Set your daily briefing time',
+    body: 'I can send AI news and your calendar agenda each morning at your chosen time.',
+    cta: 'Finish setup',
+  },
+  {
+    id: 'done',
+    subtitle: 'You are all set',
+    title: 'Ready when you are',
+    body: 'If you want, I can save your to-do lists, grocery lists, and calendar reminders anytime — just say the word.',
+    cta: 'Enter Flow Guru',
   },
 ];
 
@@ -79,18 +76,87 @@ const CORNER = (cls: string) => (
 
 export function OnboardingFlow({ onComplete, userName }: OnboardingFlowProps) {
   const [step, setStep] = useState(0);
+  const [assistantAlias, setAssistantAlias] = useState('FloGuru');
+  const [displayName, setDisplayName] = useState(userName ?? '');
+  const [wakeTime, setWakeTime] = useState('08:00');
+  const [alarmDays, setAlarmDays] = useState('1,2,3,4,5');
+  const [alarmSound, setAlarmSound] = useState<'chime' | 'radio-focus' | 'none'>('radio-focus');
+  const [briefingTime, setBriefingTime] = useState('09:15');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const utils = trpc.useUtils();
+  const saveProfileMutation = trpc.settings.saveProfile.useMutation();
+  const addMemoryFactMutation = trpc.settings.addMemoryFact.useMutation();
+
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
-  const isFirst = step === 0;
 
-  const next = () => {
-    if (isLast) {
+  const summaryName = useMemo(() => displayName.trim() || userName || 'friend', [displayName, userName]);
+
+  const persistSetup = async () => {
+    setIsSaving(true);
+    try {
+      await saveProfileMutation.mutateAsync({
+        wakeUpTime: wakeTime,
+        alarmDays,
+        alarmSound,
+      });
+
+      const memoryWrites: Array<Promise<unknown>> = [];
+      const trimmedAssistantAlias = assistantAlias.trim();
+      const trimmedDisplayName = displayName.trim();
+
+      if (trimmedAssistantAlias) {
+        memoryWrites.push(addMemoryFactMutation.mutateAsync({
+          factKey: 'assistant_name',
+          factValue: trimmedAssistantAlias,
+          category: 'preference',
+        }));
+      }
+
+      if (trimmedDisplayName) {
+        memoryWrites.push(addMemoryFactMutation.mutateAsync({
+          factKey: 'user_name',
+          factValue: trimmedDisplayName,
+          category: 'profile',
+        }));
+      }
+
+      memoryWrites.push(addMemoryFactMutation.mutateAsync({
+        factKey: 'daily_briefing_time',
+        factValue: briefingTime,
+        category: 'preference',
+      }));
+
+      memoryWrites.push(addMemoryFactMutation.mutateAsync({
+        factKey: 'daily_briefing_topics',
+        factValue: 'ai news, calendar agenda',
+        category: 'preference',
+      }));
+
+      await Promise.all(memoryWrites);
+      await utils.assistant.bootstrap.invalidate();
       localStorage.setItem('floguru_onboarded', '1');
       onComplete();
-    } else {
-      setStep(s => s + 1);
+    } catch {
+      // Keep lightweight and quiet; user can still continue.
+      localStorage.setItem('floguru_onboarded', '1');
+      onComplete();
+    } finally {
+      setIsSaving(false);
     }
   };
+
+  const next = async () => {
+    if (current.id === 'user-name' && !displayName.trim()) return;
+    if (current.id === 'done') {
+      await persistSetup();
+      return;
+    }
+    setStep(s => Math.min(s + 1, STEPS.length - 1));
+  };
+
+  const disableNext = (current.id === 'user-name' && !displayName.trim()) || isSaving;
 
   return (
     <div
@@ -113,46 +179,34 @@ export function OnboardingFlow({ onComplete, userName }: OnboardingFlowProps) {
           {CORNER('bottom-3 left-3 border-b-2 border-l-2 rounded-bl-lg')}
           {CORNER('bottom-3 right-3 border-b-2 border-r-2 rounded-br-lg')}
 
-          {/* Logo or icon */}
-          {isFirst || isLast ? (
-            <div className="mb-6 relative flex items-center justify-center">
-              {/* Outer glow */}
-              <div
-                className="absolute rounded-full pointer-events-none"
-                style={{
-                  width: '160px', height: '160px',
-                  background: 'radial-gradient(circle, rgba(212,160,23,0.4) 0%, rgba(180,120,10,0.2) 40%, transparent 70%)',
-                  filter: 'blur(20px)',
-                  animation: 'pulse 3s ease-in-out infinite',
-                }}
-              />
-              <div
-                className="absolute rounded-full pointer-events-none"
-                style={{
-                  width: '120px', height: '120px',
-                  background: 'radial-gradient(circle, rgba(255,200,50,0.5) 0%, rgba(210,150,20,0.3) 45%, transparent 70%)',
-                  filter: 'blur(10px)',
-                }}
-              />
-              <img
-                src="/floguru-logo.png"
-                alt="FLO GURU"
-                className="relative w-20 h-20 rounded-full object-cover"
-                style={{ boxShadow: '0 0 20px 6px rgba(212,160,23,0.55), 0 0 40px 12px rgba(180,120,10,0.3)' }}
-              />
-            </div>
-          ) : current.icon ? (
+          {/* Logo */}
+          <div className="mb-6 relative flex items-center justify-center">
             <div
-              className="mb-6 w-16 h-16 rounded-2xl flex items-center justify-center"
+              className="absolute rounded-full pointer-events-none"
               style={{
-                background: 'linear-gradient(135deg, rgba(200,144,10,0.2) 0%, rgba(140,90,6,0.1) 100%)',
-                border: '1px solid rgba(200,144,10,0.3)',
-                boxShadow: '0 0 20px rgba(200,144,10,0.15)',
+                width: '160px', height: '160px',
+                background: 'radial-gradient(circle, rgba(212,160,23,0.4) 0%, rgba(180,120,10,0.2) 40%, transparent 70%)',
+                filter: 'blur(20px)',
+                animation: 'pulse 3s ease-in-out infinite',
               }}
-            >
-              {React.createElement(current.icon, { size: 28, style: { color: '#c8900a' } })}
-            </div>
-          ) : null}
+            />
+            <div
+              className="absolute rounded-full pointer-events-none"
+              style={{
+                width: '120px', height: '120px',
+                background: 'radial-gradient(circle, rgba(255,200,50,0.5) 0%, rgba(210,150,20,0.3) 45%, transparent 70%)',
+                filter: 'blur(10px)',
+              }}
+            />
+            <img
+              src="/floguru-logo.png"
+              alt="FLO GURU"
+              width={80}
+              height={80}
+              className="relative w-20 h-20 rounded-full object-cover"
+              style={{ boxShadow: '0 0 20px 6px rgba(212,160,23,0.55), 0 0 40px 12px rgba(180,120,10,0.3)' }}
+            />
+          </div>
 
           {/* Gold divider */}
           <div className="flex items-center gap-3 mb-5 w-full">
@@ -165,13 +219,101 @@ export function OnboardingFlow({ onComplete, userName }: OnboardingFlowProps) {
 
           {/* Title */}
           <h2 className="text-2xl font-bold tracking-tight mb-3" style={{ color: '#f0e4cc' }}>
-            {isFirst && userName ? `Welcome, ${userName}` : current.title}
+            {current.id === 'done' ? `Ready when you are, ${summaryName}` : current.title}
           </h2>
 
           {/* Body */}
           <p className="text-sm leading-relaxed mb-8" style={{ color: 'rgba(200,170,120,0.8)' }}>
             {current.body}
           </p>
+
+          {current.id === 'assistant-name' && (
+            <input
+              type="text"
+              value={assistantAlias}
+              onChange={(e) => setAssistantAlias(e.target.value)}
+              maxLength={64}
+              placeholder="FloGuru"
+              className="mb-6 w-full rounded-xl border border-[#6b4a22] bg-[#140c04] px-4 py-2.5 text-sm text-[#f0e4cc] placeholder:text-[#8f7653] focus:outline-none focus:border-[#c8900a]"
+            />
+          )}
+
+          {current.id === 'user-name' && (
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={64}
+              placeholder="Your name"
+              className="mb-6 w-full rounded-xl border border-[#6b4a22] bg-[#140c04] px-4 py-2.5 text-sm text-[#f0e4cc] placeholder:text-[#8f7653] focus:outline-none focus:border-[#c8900a]"
+            />
+          )}
+
+          {current.id === 'wake' && (
+            <div className="mb-6 w-full space-y-3 text-left">
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#c8900a]">Wake-up time</label>
+              <input
+                type="time"
+                value={wakeTime}
+                onChange={(e) => setWakeTime(e.target.value)}
+                className="w-full rounded-xl border border-[#6b4a22] bg-[#140c04] px-4 py-2.5 text-sm text-[#f0e4cc] focus:outline-none focus:border-[#c8900a]"
+              />
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#c8900a]">Days</label>
+              <button
+                type="button"
+                onClick={() => setAlarmDays(prev => prev === '1,2,3,4,5' ? '0,1,2,3,4,5,6' : '1,2,3,4,5')}
+                className="w-full rounded-xl border border-[#6b4a22] px-4 py-2.5 text-sm text-[#f0e4cc] hover:border-[#c8900a] transition-colors"
+              >
+                {alarmDays === '1,2,3,4,5' ? 'Monday to Friday' : 'Every day'}
+              </button>
+            </div>
+          )}
+
+          {current.id === 'alarm' && (
+            <div className="mb-6 w-full space-y-2">
+              {[
+                { id: 'radio-focus', label: 'Radio' },
+                { id: 'chime', label: 'Chime' },
+                { id: 'none', label: 'Silent + vibration' },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setAlarmSound(opt.id as 'chime' | 'radio-focus' | 'none')}
+                  className={`w-full rounded-xl border px-4 py-2.5 text-sm transition-colors ${
+                    alarmSound === opt.id
+                      ? 'border-[#c8900a] bg-[#2a1a0a] text-[#f0e4cc]'
+                      : 'border-[#6b4a22] text-[#d9bf97] hover:border-[#c8900a]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {current.id === 'briefing' && (
+            <div className="mb-6 w-full space-y-3 text-left">
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#c8900a]">
+                Briefing time
+              </label>
+              <input
+                type="time"
+                value={briefingTime}
+                onChange={(e) => setBriefingTime(e.target.value)}
+                className="w-full rounded-xl border border-[#6b4a22] bg-[#140c04] px-4 py-2.5 text-sm text-[#f0e4cc] focus:outline-none focus:border-[#c8900a]"
+              />
+              <p className="text-xs text-[#d9bf97]">
+                Includes daily AI news plus your calendar agenda for the day.
+              </p>
+            </div>
+          )}
+
+          {current.id === 'done' && (
+            <p className="mb-6 text-sm text-[#d9bf97]">
+              And I am here anytime you need help, {summaryName} — ready when you are.
+            </p>
+          )}
 
           {/* Step dots */}
           <div className="flex gap-2 mb-6">
@@ -191,16 +333,17 @@ export function OnboardingFlow({ onComplete, userName }: OnboardingFlowProps) {
           {/* CTA Button */}
           <button
             onClick={next}
+            disabled={disableNext}
             className="w-full py-3.5 rounded-2xl text-sm font-bold uppercase tracking-wider transition-all hover:opacity-90 active:scale-95 flex items-center justify-center gap-2"
             style={GOLD_BTN_STYLE}
           >
-            {isLast ? <Check size={16} /> : null}
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : isLast ? <Check size={16} /> : null}
             {current.cta}
-            {!isLast ? <ChevronRight size={16} /> : null}
+            {!isLast && !isSaving ? <ChevronRight size={16} /> : null}
           </button>
 
           {/* Skip */}
-          {!isLast && !isFirst && (
+          {!isLast && (
             <button
               onClick={() => {
                 localStorage.setItem('floguru_onboarded', '1');

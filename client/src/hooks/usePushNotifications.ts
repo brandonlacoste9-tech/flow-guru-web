@@ -64,7 +64,7 @@ export function usePushNotifications() {
         if (!sub) {
           sub = await swRef.current!.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+            applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
           });
         }
 
@@ -92,7 +92,7 @@ export function usePushNotifications() {
             'BHjQ-4anMIWuj2qfTO3hHmoyemSuchf_gqxKAyCqEkE56fC7iRAWrQwQ8Ts_wifuxW4NA2InsvSTYzg-7M_Eaxk';
           const sub = await swRef.current!.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+            applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
           });
           const p256dh = arrayBufferToBase64(sub.getKey('p256dh'));
           const auth = arrayBufferToBase64(sub.getKey('auth'));

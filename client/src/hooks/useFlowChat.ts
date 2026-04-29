@@ -7,6 +7,6 @@ export function useFlowChat(userId: string = 'anonymous') {
       api: '/api/chat',
       body: { userId },
     }),
-    onError: (err) => console.error('[useFlowChat]', err),
+    onError: (err: unknown) => console.error('[useFlowChat]', err),
   });
 }

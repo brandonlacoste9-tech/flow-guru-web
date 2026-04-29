@@ -1,6 +1,8 @@
 const clean = (val: string | undefined) => val?.trim().replace(/^["']|["']$/g, "") ?? "";
 
 export const ENV = {
+  /** Canonical site URL (no trailing slash). Used for Google OAuth redirect_uri so apex vs www matches Google Console. */
+  publicAppUrl: clean(process.env.PUBLIC_APP_URL || process.env.INTEGRATION_BROWSER_BASE || ""),
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",
   databaseUrl: process.env.DATABASE_URL ?? "",

@@ -18,6 +18,7 @@ import { useReminders } from "@/hooks/useReminders";
 import { prewarmAudio } from "@/hooks/useAlarmSound";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { trackConversion } from "@/lib/telemetry";
+import type { TranslationKeys } from "@/lib/translations";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -1210,6 +1211,25 @@ export default function Home() {
       )}
 
       {/* ── Alarm Overlay ── */}
+      {alarmState.firing && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
+          <div className="pointer-events-auto flex w-full max-w-sm gap-2 rounded-2xl border border-border bg-card/95 p-2 shadow-2xl backdrop-blur">
+            <button
+              onClick={snoozeAlarm}
+              className="flex-1 rounded-xl bg-muted py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80"
+            >
+              Snooze
+            </button>
+            <button
+              onClick={dismissAlarm}
+              className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Turn Off Alarm
+            </button>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence>
         {alarmState.firing && (
           <motion.div

@@ -36,7 +36,8 @@ When reporting, please include:
 
 In scope:
 
-- The web application at `https://flow-guru-web.vercel.app` (and any `*.vercel.app` preview deploys for this repo)
+- The production site **`https://floguru.com`** (apex; **`https://www.floguru.com`** redirects here)
+- The default Vercel hostname **`https://flow-guru-web.vercel.app`** and other **`*.vercel.app`** preview deployments for this repo
 - Source code in this repository, including the API layer (`api/`), server (`server/`), client (`client/`), and mobile app (`mobile/`)
 
 Out of scope:
@@ -44,6 +45,27 @@ Out of scope:
 - Third-party services (Neon, Supabase, Vercel, Spotify, Google) — report directly to those providers
 - Social engineering, physical attacks, or DoS that requires excessive volume
 - Issues in dependencies already tracked by Dependabot (see open alerts and tracking issues)
+
+## Google Sign-In (`redirect_uri_mismatch`)
+
+Google rejects logins when **Authorized redirect URIs** for your OAuth 2.0 Client ID do not **exactly** match the URI the app uses (scheme, host, path; no trailing slash after `callback`).
+
+The app sends:
+
+`{ORIGIN}/api/auth/google/callback`
+
+**Recommended (production):** In Vercel → Project → Environment Variables (Production), set **`PUBLIC_APP_URL`** to **`https://floguru.com`** (no trailing slash). Then in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → APIs & Services → Credentials → your Web client → **Authorized redirect URIs**, include:
+
+- `https://floguru.com/api/auth/google/callback`
+
+If people can still open **`https://www.floguru.com`** and stay on `www` when they click “Continue with Google”, either enforce apex-only in hosting or **also** add:
+
+- `https://www.floguru.com/api/auth/google/callback`
+
+**Preview / `*.vercel.app`:** Prefer leaving **`PUBLIC_APP_URL` unset** on Preview so the redirect URI follows the deployment hostname. Add each preview URL you care about under Authorized redirect URIs, or use a dedicated OAuth client for staging.
+
+Also confirm **Authorized JavaScript origins** includes the site origin(s) you use (e.g. `https://floguru.com`).
+
 
 ## Safe Harbor
 
@@ -53,6 +75,6 @@ Good-faith research conducted within this policy will not be pursued legally. Pl
 
 - ✅ Dependabot alerts enabled
 - ✅ Dependabot version updates configured (`.github/dependabot.yml`)
-- ⏳ CodeQL code scanning — planned
-- ⏳ Secret scanning alerts — planned
-- ⏳ Private vulnerability reporting — to enable in repo Settings → Security
+- ⏳ CodeQL code scanning — enable in GitHub → Settings → Security → Code security and analysis
+- ⏳ Secret scanning — enable GitHub secret scanning for the repository (recommended)
+- ⏳ Confirm **Private vulnerability reporting** is enabled (repo **Settings → Security**); reporting link: `https://github.com/brandonlacoste9-tech/flow-guru-web/security/advisories/new`

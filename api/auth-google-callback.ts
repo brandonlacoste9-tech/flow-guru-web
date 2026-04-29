@@ -1,14 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { COOKIE_NAME, ONE_YEAR_MS } from "./lib/shared/const.js";
 import { ENV } from "./lib/_core/env.js";
+import { getGoogleAuthCallbackUrl } from "./lib/_core/googleAuthRedirect.js";
 import { sdk } from "./lib/_core/sdk.js";
 import * as db from "./lib/db.js";
-
-function getCallbackUrl(req: VercelRequest): string {
-  const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() || "https";
-  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "floguru.com";
-  return `${proto}://${host}/api/auth/google/callback`;
-}
 
 function buildSetCookieHeader(name: string, value: string, maxAgeMs: number, secure: boolean): string {
   const maxAgeSec = Math.floor(maxAgeMs / 1000);
@@ -61,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const redirectUri = getCallbackUrl(req);
+    const redirectUri = getGoogleAuthCallbackUrl(req);
     const accessToken = await exchangeGoogleCode(code, redirectUri);
     const profile = await fetchGoogleProfile(accessToken);
 

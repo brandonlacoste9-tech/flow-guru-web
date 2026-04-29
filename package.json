@@ -15,12 +15,19 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "smoke:billing": "tsx scripts/smoke/billing.ts",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
+    "db:push": "pnpm run db:generate && pnpm run db:migrate"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.41",
+    "@ai-sdk/react": "^3.0.172",
     "@aws-sdk/client-s3": "^3.1037.0",
     "@aws-sdk/s3-request-presigner": "^3.1037.0",
+    "@google-cloud/dialogflow-cx": "^5.7.0",
+    "@google-cloud/discoveryengine": "^2.6.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -95,6 +102,7 @@
   },
   "devDependencies": {
     "@browserbasehq/sdk": "^2.10.0",
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.2.4",
     "@types/express": "5.0.6",
