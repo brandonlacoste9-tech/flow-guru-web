@@ -41,14 +41,15 @@ const FALLBACK_VOICES = [
  */
 export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
   const apiKey = ENV.elevenLabsApiKey;
-  if (!apiKey) {
+  const useLocalTts = ENV.useLocalAi && !options.voiceId;
+  if (!apiKey && !useLocalTts) {
     throw new Error("ElevenLabs API key is not configured.");
   }
 
   const voiceId = options.voiceId || DEFAULT_VOICE_ID;
-  const url = ENV.useLocalAi ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+  const url = useLocalTts ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
-  const body: any = ENV.useLocalAi 
+  const body: any = useLocalTts 
     ? { model: "en-us-librispeech-low.onnx", input: options.text } // LocalAI TTS payload
     : {
         text: options.text,
@@ -81,14 +82,15 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
  */
 export async function textToSpeechStream(options: TtsOptions): Promise<ReadableStream<Uint8Array>> {
   const apiKey = ENV.elevenLabsApiKey;
-  if (!apiKey && !ENV.useLocalAi) {
+  const useLocalTts = ENV.useLocalAi && !options.voiceId;
+  if (!apiKey && !useLocalTts) {
     throw new Error("ElevenLabs API key is not configured.");
   }
 
   const voiceId = options.voiceId || DEFAULT_VOICE_ID;
-  const url = ENV.useLocalAi ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
+  const url = useLocalTts ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
 
-  const body: any = ENV.useLocalAi 
+  const body: any = useLocalTts 
     ? { model: "en-us-librispeech-low.onnx", input: options.text } // LocalAI TTS payload
     : {
         text: options.text,

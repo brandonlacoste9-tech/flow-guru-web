@@ -25,7 +25,14 @@ const LoadingScreen = () => {
           animate={{ rotate: 360 }}
           transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
         >
-          <img src="/floguru-logo.png" alt="Loading" className="w-12 h-12 rounded-full object-cover" />
+          <img
+            src="/floguru-logo.png"
+            alt="Loading"
+            width={48}
+            height={48}
+            decoding="async"
+            className="w-12 h-12 rounded-full object-cover"
+          />
         </motion.div>
       </div>
       
