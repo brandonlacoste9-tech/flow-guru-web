@@ -457,11 +457,11 @@ export function Settings() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-[calc(2rem+env(safe-area-inset-bottom,0px))]">
-        {/* Tabs: 2-column grid on phones (readable, tappable); horizontal strip on sm+ */}
+        {/* Tabs: 2-column grid on phones & small viewports; horizontal strip only on large screens (sm/md alone match phone landscape width). */}
         <div
           className={cn(
-            'mb-6 sm:mb-8',
-            'grid grid-cols-2 gap-2 sm:flex sm:flex-nowrap sm:gap-1 sm:bg-secondary/40 sm:p-1 sm:rounded-2xl sm:overflow-x-auto sm:no-scrollbar sm:snap-x sm:snap-mandatory sm:touch-pan-x [-webkit-overflow-scrolling:touch]'
+            'mb-6 lg:mb-8',
+            'grid grid-cols-2 gap-2 lg:flex lg:flex-nowrap lg:gap-1 lg:bg-secondary/40 lg:p-1 lg:rounded-2xl lg:overflow-x-auto lg:no-scrollbar lg:snap-x lg:snap-mandatory lg:touch-pan-x [-webkit-overflow-scrolling:touch]'
           )}
         >
           {TABS.map(tab => {
@@ -472,16 +472,16 @@ export function Settings() {
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'rounded-xl text-xs font-semibold transition-all text-left sm:text-center',
-                  'min-h-[44px] px-3 py-2.5 sm:py-2 sm:px-2 sm:min-w-[5.5rem] sm:max-w-[9rem] md:min-w-[6rem] md:max-w-none md:flex-1 md:min-w-[100px]',
-                  'flex flex-row items-center gap-2 sm:flex-col sm:gap-1 sm:justify-center sm:snap-start sm:shrink-0',
-                  'leading-snug sm:leading-tight',
+                  'rounded-xl text-xs font-semibold transition-all text-left lg:text-center',
+                  'min-h-[44px] px-3 py-2.5 lg:py-2 lg:px-2 lg:min-w-[5.5rem] lg:max-w-[9rem] xl:min-w-[6rem] xl:max-w-none xl:flex-1 xl:min-w-[100px]',
+                  'flex flex-row items-center gap-2 lg:flex-col lg:gap-1 lg:justify-center lg:snap-start lg:shrink-0',
+                  'leading-snug lg:leading-tight',
                   activeTab === tab.id
                     ? 'bg-card shadow-sm text-foreground border border-border'
-                    : 'bg-secondary/30 sm:bg-transparent text-muted-foreground hover:text-foreground active:bg-secondary/50'
+                    : 'bg-secondary/30 lg:bg-transparent text-muted-foreground hover:text-foreground active:bg-secondary/50'
                 )}
               >
-                <Icon size={16} className="sm:w-3.5 sm:h-3.5 shrink-0 opacity-90" aria-hidden />
+                <Icon size={16} className="lg:w-3.5 lg:h-3.5 shrink-0 opacity-90" aria-hidden />
                 <span className="flex-1 min-w-0 whitespace-normal break-words">{tab.label}</span>
               </button>
             );
