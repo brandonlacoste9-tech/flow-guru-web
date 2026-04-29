@@ -1186,9 +1186,22 @@ export default function Calendar() {
 
   const goToToday = () => { setViewDate(new Date()); setSelectedDay(new Date()); };
 
-  const handleDayClick = (day: Date) => {
+  /** Sidebar mini-calendar: pick a day and open “new event” with that day pre-filled */
+  const handleMiniCalendarSelectDay = (day: Date) => {
+    const normalized = new Date(day.getFullYear(), day.getMonth(), day.getDate());
     setSelectedDay(day);
-    if (viewMode === "month") setViewDate(new Date(day.getFullYear(), day.getMonth(), day.getDate()));
+    setViewDate(normalized);
+    if (viewMode !== "month") setViewMode("day");
+    setForm(blankForm(day));
+    setShowForm(true);
+  };
+
+  /** Main month grid: click a date → open “new event” with that day pre-filled (times default 9–10am) */
+  const handleMonthGridDayClick = (day: Date) => {
+    setSelectedDay(day);
+    setViewDate(new Date(day.getFullYear(), day.getMonth(), day.getDate()));
+    setForm(blankForm(day));
+    setShowForm(true);
   };
 
   const handleSlotClick = (d: Date) => { setForm(blankForm(d)); setShowForm(true); };
@@ -1345,7 +1358,7 @@ export default function Calendar() {
           <MiniCalendar
             viewDate={viewMode === "month" ? viewDate : new Date(viewDate.getFullYear(), viewDate.getMonth(), 1)}
             selectedDay={selectedDay}
-            onSelectDay={d => { handleDayClick(d); if (viewMode !== "month") setViewMode("day"); }}
+            onSelectDay={handleMiniCalendarSelectDay}
             onChangeMonth={d => setViewDate(d)}
             events={events}
             t={t}
@@ -1384,7 +1397,7 @@ export default function Calendar() {
               transition={{ duration: 0.15 }}>
               {viewMode === "month" && (
                 <MonthView viewDate={viewDate} selectedDay={selectedDay} events={filteredEvents}
-                  onDayClick={handleDayClick} onEventClick={setSelectedEvent} themeId={themeId} t={t}/>
+                  onDayClick={handleMonthGridDayClick} onEventClick={setSelectedEvent} themeId={themeId} t={t}/>
               )}
               {viewMode === "week" && (
                 <WeekView viewDate={viewDate} events={filteredEvents}
