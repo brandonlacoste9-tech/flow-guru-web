@@ -207,10 +207,11 @@ export default function Home() {
 
   const addMemoryFactMutation = trpc.settings.addMemoryFact.useMutation();
 
-  // Auto-geolocation: fetch weather client-side if bootstrap didn't return any
+  // Browser geolocation: always capture lat/lon for assistant directions when permitted.
+  // Client-side weather fetch only runs if bootstrap did not already supply weather.
   useEffect(() => {
     if (bootstrap.isLoading) return;
-    if (weather !== null) return;
+    if (coords != null) return;
     if (geoFetchedRef.current) return;
     if (!('geolocation' in navigator)) return;
     
@@ -218,6 +219,7 @@ export default function Home() {
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
       setCoords({ lat: latitude, lon: longitude });
+      if (weather !== null) return;
       try {
         const [cityRes, wxRes] = await Promise.all([
           fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`),
@@ -251,7 +253,7 @@ export default function Home() {
       console.warn("Geolocation failed", err);
       // We don't reset geoFetchedRef here to avoid infinite loops if it's permanently denied
     });
-  }, [bootstrap.isLoading, weather, user]);
+  }, [bootstrap.isLoading, weather, user, coords]);
 
   useEffect(() => {
     const data = bootstrap.data;
@@ -415,7 +417,10 @@ export default function Home() {
       message: text,
       threadId: startsFresh ? undefined : currentThreadId,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      language
+      language,
+      ...(coords != null
+        ? { deviceLatitude: coords.lat, deviceLongitude: coords.lon }
+        : {}),
     });
   };
 

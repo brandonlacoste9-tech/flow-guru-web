@@ -502,6 +502,7 @@ export async function planAssistantAction(params: {
           "- calendar.list_events: For checking a schedule or listing upcoming items.",
           "- weather.get: For checking current or future weather conditions.",
           "- route.get: For travel times, directions, or distances between points.",
+          "- If saved memory includes 'Approximate current device location (latitude, longitude):' and the user only names a destination (no clear starting place), choose route.get with route.destination set and route.origin null — the server will start from their device GPS.",
           "- music.play: For playing music on our internal radio (Focus, Chill, Energy, Sleep, Space).",
           "- news.get: For latest headlines or specific news issues.",
           "- browser.use: For browsing the web to find answers, research topics, or perform web-based tasks.",
@@ -619,12 +620,58 @@ async function freeGeocodeAddress(address: string) {
   return {
     formatted_address: result.name + (result.admin1 ? `, ${result.admin1}` : "") + `, ${result.country}`,
     geometry: {
-      location: { lat: result.latitude, lng: result.longitude }
-    }
+      location: { lat: result.latitude, lng: result.longitude },
+    },
   };
 }
 
+/** Parse "lat,lng" or "lat, lng" from planner / device GPS. */
+function parseLatLngPair(text: string): { lat: number; lng: number } | null {
+  const m = text.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+async function freeReverseGeocode(lat: number, lng: number) {
+  const url = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${encodeURIComponent(String(lat))}&longitude=${encodeURIComponent(String(lng))}&language=en`;
+  const resp = await fetch(url);
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  if (!data.results?.[0]) return null;
+  const r = data.results[0];
+  const line =
+    [r.name, r.admin2, r.admin1, r.country].filter(Boolean).join(", ") || `${lat}, ${lng}`;
+  return {
+    formatted_address: line,
+    geometry: { location: { lat, lng } },
+  };
+}
+
+async function geocodeLatLng(lat: number, lng: number) {
+  try {
+    const result = await makeRequest<GeocodingResult>("/maps/api/geocode/json", {
+      latlng: `${lat},${lng}`,
+    });
+    if (result.status === "OK" && result.results[0]) {
+      return result.results[0];
+    }
+  } catch (err) {
+    console.warn("[Maps] Google reverse geocode failed, trying Open-Meteo:", err);
+  }
+  const fallback = await freeReverseGeocode(lat, lng);
+  if (fallback) return fallback;
+  throw new Error(`Could not reverse geocode: ${lat},${lng}`);
+}
+
 async function geocodeAddress(address: string) {
+  const coords = parseLatLngPair(address);
+  if (coords) {
+    return geocodeLatLng(coords.lat, coords.lng);
+  }
   try {
     const result = await makeRequest<GeocodingResult>("/maps/api/geocode/json", {
       address,
@@ -1643,6 +1690,8 @@ export async function executeAssistantAction(
     memoryContext?: string;
     timeZone?: string | null;
     language?: "en" | "fr";
+    deviceLatitude?: number;
+    deviceLongitude?: number;
   },
 ): Promise<AssistantActionResult> {
   const options = {
@@ -1652,6 +1701,8 @@ export async function executeAssistantAction(
     memoryContext: optionsIn?.memoryContext ?? "",
     timeZone: optionsIn?.timeZone ?? null,
     language: (optionsIn?.language ?? "en") as "en" | "fr",
+    deviceLatitude: optionsIn?.deviceLatitude,
+    deviceLongitude: optionsIn?.deviceLongitude,
   };
 
   console.log(`[Assistant Action] Executing: ${plan.action}`, plan);
@@ -1671,6 +1722,15 @@ export async function executeAssistantAction(
         let origin = normalizeText(plan.route?.origin);
         if (!origin && options.memoryContext) {
           origin = extractHomeOriginFromMemory(options.memoryContext);
+        }
+        if (
+          !origin &&
+          options.deviceLatitude != null &&
+          options.deviceLongitude != null &&
+          Number.isFinite(options.deviceLatitude) &&
+          Number.isFinite(options.deviceLongitude)
+        ) {
+          origin = `${options.deviceLatitude},${options.deviceLongitude}`;
         }
         const enrichedPlan: AssistantActionPlan = {
           ...plan,

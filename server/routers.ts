@@ -49,6 +49,8 @@ const sendMessageInput = z.object({
   timeZone: z.string().trim().min(1).max(100).optional(),
   threadId: z.number().int().positive().optional(),
   language: z.enum(["en", "fr"]).optional(),
+  deviceLatitude: z.number().finite().gte(-90).lte(90).optional(),
+  deviceLongitude: z.number().finite().gte(-180).lte(180).optional(),
 });
 
 const MEMORY_FACT_CATEGORIES = [
@@ -809,11 +811,19 @@ export const appRouter = router({
       const assistantName = assistantNameFact?.factValue || "FLO GURU";
       const userName = ctx.user?.name || "Brandon";
 
-      const memoryContext = buildMemoryContext({
+      let memoryContext = buildMemoryContext({
         userName,
         profile,
         facts: memoryFacts,
       });
+      if (
+        input.deviceLatitude != null &&
+        input.deviceLongitude != null &&
+        Number.isFinite(input.deviceLatitude) &&
+        Number.isFinite(input.deviceLongitude)
+      ) {
+        memoryContext += `\n\nApproximate current device location (latitude, longitude): ${input.deviceLatitude}, ${input.deviceLongitude}. For route.get, if the user asks for directions or driving time without naming where they start (e.g. only 'to the airport', 'how far to X'), leave route.origin null so the route starts from this position.`;
+      }
 
       const systemPrompt = [
         `You are ${assistantName}, ${userName}'s personal assistant.`,
@@ -860,6 +870,8 @@ export const appRouter = router({
           memoryContext,
           timeZone: input.timeZone ?? null,
           language: input.language ?? "en",
+          deviceLatitude: input.deviceLatitude,
+          deviceLongitude: input.deviceLongitude,
         });
       } catch (error) {
         console.error("[Flow Guru] SYSTEM FAILURE IN SEND:", error);
