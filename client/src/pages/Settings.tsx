@@ -452,8 +452,8 @@ export function Settings() {
             <ArrowLeft size={16} />
           </button>
           <div className="min-w-0">
-            <h1 className="text-sm sm:text-base font-bold tracking-tight truncate">{t('settings_title')}</h1>
-            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t('settings_desc')}</p>
+            <h1 className="text-sm sm:text-base font-bold tracking-tight line-clamp-2 sm:line-clamp-1">{t('settings_title')}</h1>
+            <p className="text-[10px] sm:text-xs text-muted-foreground leading-snug line-clamp-2 sm:line-clamp-1">{t('settings_desc')}</p>
           </div>
         </div>
       </header>
@@ -465,9 +465,10 @@ export function Settings() {
             const Icon = tab.icon;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={cn('flex-1 min-w-[85px] sm:min-w-[100px] flex items-center justify-center gap-1.5 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap px-2',
+                className={cn('flex-1 min-w-[92px] sm:min-w-[100px] flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold transition-all px-2 text-center leading-tight',
                   activeTab === tab.id ? 'bg-card shadow-sm text-foreground border border-border' : 'text-muted-foreground hover:text-foreground')}>
-                <Icon size={12} className="sm:w-3.5 sm:h-3.5" />{tab.label}
+                <Icon size={12} className="sm:w-3.5 sm:h-3.5 shrink-0" />
+                <span className="whitespace-normal break-words">{tab.label}</span>
               </button>
             );
           })}
