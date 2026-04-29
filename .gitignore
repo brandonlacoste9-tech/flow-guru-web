@@ -1,9 +1,6 @@
 # Dependencies
 **/node_modules
 
-# Local reference (cloned cookbook — keep out of repo)
-/cookbook/
-
 # Playwright
 /test-results/
 /playwright-report/

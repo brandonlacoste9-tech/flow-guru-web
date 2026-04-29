@@ -1,0 +1,37 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Agent Kanban</title>
+  <defs>
+    <linearGradient id="background" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#25262F"/>
+      <stop offset="0.54" stop-color="#111217"/>
+      <stop offset="1" stop-color="#08090C"/>
+    </linearGradient>
+    <linearGradient id="laneAccent" x1="18" y1="17" x2="48" y2="49" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="0.46" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#60A5FA"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(44 15) rotate(124) scale(34 30)">
+      <stop stop-color="#8B5CF6" stop-opacity="0.68"/>
+      <stop offset="0.45" stop-color="#2563EB" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#111217" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="8" y="13" width="48" height="43" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#background)"/>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#glow)"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" stroke="white" stroke-opacity="0.12"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="13" y="17" width="38" height="34" rx="8" fill="#15161C" stroke="white" stroke-opacity="0.14"/>
+    <path d="M19 24.5C19.8 20.6 23.2 18 27.2 18C29.9 18 32.3 19.2 33.9 21.1C34.9 20.6 36.1 20.3 37.3 20.3C41 20.3 44.1 23 44.7 26.5" stroke="#F8FAFC" stroke-opacity="0.82" stroke-width="3" stroke-linecap="round"/>
+    <rect x="17" y="30" width="8" height="15" rx="2.5" fill="url(#laneAccent)"/>
+    <rect x="28" y="26" width="8" height="19" rx="2.5" fill="#F8FAFC" fill-opacity="0.92"/>
+    <rect x="39" y="32" width="8" height="13" rx="2.5" fill="#93C5FD"/>
+    <circle cx="45" cy="22" r="3" fill="#A78BFA"/>
+    <circle cx="45" cy="22" r="1.25" fill="#F8FAFC"/>
+  </g>
+</svg>
