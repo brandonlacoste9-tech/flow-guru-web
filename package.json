@@ -23,6 +23,8 @@
     "@ai-sdk/openai-compatible": "^2.0.41",
     "@aws-sdk/client-s3": "^3.1037.0",
     "@aws-sdk/s3-request-presigner": "^3.1037.0",
+    "@google-cloud/dialogflow-cx": "^5.7.0",
+    "@google-cloud/discoveryengine": "^2.6.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",

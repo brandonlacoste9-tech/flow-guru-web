@@ -7,6 +7,7 @@ import {
   listGoogleCalendarEvents,
 } from "./_core/googleCalendar";
 import { invokeLLM } from "./_core/llm";
+import { isVertexSearchConfigured, searchKnowledgeBase } from "../api/lib/_core/vertexSearch.js";
 import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map";
 
 const ACTION_NAMES = [
@@ -20,6 +21,7 @@ const ACTION_NAMES = [
   "browser.use",
   "system.subagent",
   "list.manage",
+  "knowledge.search",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -90,6 +92,12 @@ const plannerSchema = z.object({
       newName: z.string().optional().nullable(),
       time: z.string().optional().nullable(),
       location: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
+  knowledge: z
+    .object({
+      query: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
@@ -454,6 +462,7 @@ export async function planAssistantAction(params: {
           "- browser.use: For browsing the web to find answers, research topics, or perform web-based tasks.",
           "- system.subagent: For ANY complex system tasks: file operations, terminal commands, writing scripts, running Python, or performing multi-step autonomous actions on the user's machine.",
           "- list.manage: For creating, adding items, removing items, clearing, or listing smart collections (like grocery lists, todos, or ideas).",
+          "- knowledge.search: For questions answered from YOUR indexed knowledge base / uploaded docs / internal corpus in Vertex AI Search — NOT for random internet trivia (use browser.use for that).",
           "- none: Use this for general conversation or if no tool fits.",
           "",
           "AGENT DELEGATION RULES:",
@@ -462,6 +471,7 @@ export async function planAssistantAction(params: {
           "- NEVER use 'calendar.create_event' for groceries, bread, milk, eggs, or simple shopping items.",
           "- Only use 'calendar.create_event' for meetings, appointments, or scheduled blocks of time with a specific duration.",
           "- If the user says 'Remind me to [item]' and the item is a grocery or small task, use 'list.manage' with action 'remind'.",
+          "- If the user asks something that depends on YOUR uploaded documents, internal wiki, or indexed library phrased like 'what does my docs say', 'in my knowledge base', 'from our handbook', use 'knowledge.search'.",
           "- If the user asks to 'Check XYZ website', 'Search for...', or 'Find out who won...', use 'browser.use'.",
           "- If the user asks to 'Add a file', 'Create a folder', 'Python script', 'Run a command', or 'Do a system audit', use 'system.subagent'.",
           "",
@@ -470,7 +480,7 @@ export async function planAssistantAction(params: {
           "Resolve defaults from saved memory when possible. If a field is unclear, leave it null — do NOT return 'none' just because a detail is missing.",
           "",
           "RESPONSE FORMAT: You MUST respond with a single JSON object (no markdown, no code blocks, no explanation). The JSON must have these keys:",
-          '{ "action": "<tool_name>", "rationale": "<why>", "route": null, "weather": null, "news": null, "calendar": null, "music": null, "browser": null, "subagent": null, "list": null }',
+          '{ "action": "<tool_name>", "rationale": "<why>", "route": null, "weather": null, "news": null, "calendar": null, "music": null, "browser": null, "subagent": null, "list": null, "knowledge": null }',
           "",
           "For list.manage, populate the list field:",
           '{ "action": "list.manage", "rationale": "...", "list": { "action": "add", "listName": "Grocery", "itemContent": "bread", "newName": null, "time": null, "location": null }, ... }',
@@ -483,6 +493,9 @@ export async function planAssistantAction(params: {
           "",
           "For weather.get, populate the weather field:",
           '{ "action": "weather.get", "rationale": "...", "weather": { "location": "...", "timeframe": "current" }, ... }',
+          "",
+          "For knowledge.search, populate the knowledge field with the user's question:",
+          '{ "action": "knowledge.search", "rationale": "...", "knowledge": { "query": "plain-language question to run against the corpus" }, ... }',
           "",
           "ONLY respond with the JSON object. No other text.",
         ].join("\n"),
@@ -513,7 +526,7 @@ export async function planAssistantAction(params: {
     jsonString = JSON.stringify({
       action: raw.trim(),
       rationale: "Defaulted from bare action string",
-      route: null, weather: null, news: null, calendar: null, music: null, browser: null, subagent: null, list: { action: "list", listName: "Grocery" }
+      route: null, weather: null, news: null, calendar: null, music: null, browser: null, subagent: null, list: { action: "list", listName: "Grocery" }, knowledge: null
     });
   } else {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -1293,6 +1306,44 @@ async function executeMusicAction(
   }
 }
 
+async function executeKnowledgeSearch(
+  plan: AssistantActionPlan,
+  options: { message: string },
+): Promise<AssistantActionResult> {
+  if (!isVertexSearchConfigured()) {
+    return {
+      action: "knowledge.search",
+      status: "needs_connection",
+      title: "Knowledge search unavailable",
+      summary:
+        "Vertex AI Search isn't configured yet. Add VERTEX_SEARCH_PROJECT_ID, VERTEX_SEARCH_LOCATION, VERTEX_SEARCH_DATA_STORE_ID, and VERTEX_SEARCH_GOOGLE_CREDENTIALS_JSON (see docs/VERTEX_SEARCH.md).",
+      provider: "vertex-ai-search",
+    };
+  }
+
+  const q = plan.knowledge?.query?.trim() || options.message.trim();
+  try {
+    const { summary, sources } = await searchKnowledgeBase(q);
+    return {
+      action: "knowledge.search",
+      status: "executed",
+      title: "Knowledge base",
+      summary,
+      provider: "vertex-ai-search",
+      data: { sources },
+    };
+  } catch (err) {
+    console.warn("[Flow Guru] knowledge.search failed:", err);
+    return {
+      action: "knowledge.search",
+      status: "failed",
+      title: "Knowledge search failed",
+      summary: "I couldn't query your knowledge base right now. Try again shortly.",
+      provider: "vertex-ai-search",
+    };
+  }
+}
+
 export async function executeAssistantAction(
   plan: AssistantActionPlan,
   options: { userId: number; threadId?: number; userName?: string | null; message?: string; memoryContext?: string; timeZone?: string | null }
@@ -1303,6 +1354,8 @@ export async function executeAssistantAction(
     switch (plan.action) {
       case "list.manage":
         return await executeListAction(plan, options);
+      case "knowledge.search":
+        return await executeKnowledgeSearch(plan, options);
       case "calendar.create_event":
         return await executeCalendarCreateAction(plan, options as any);
       case "calendar.list_events":
@@ -1359,7 +1412,9 @@ export async function executeAssistantAction(
               ? "google-calendar"
               : plan.action.startsWith("music")
                 ? "spotify"
-                : undefined,
+                : plan.action === "knowledge.search"
+                  ? "vertex-ai-search"
+                  : undefined,
     };
   }
 }

@@ -42,6 +42,7 @@ import {
   updateListItem,
   setListItemReminder,
 } from "./db";
+import { detectDialogflowCxReply, isDialogflowCxConfigured } from "../api/lib/_core/dialogflowCx.js";
 
 const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
@@ -862,22 +863,39 @@ export const appRouter = router({
           }
         }
 
-        // PERF: Final Chat Generation
-        const llmResponse = await invokeLLM({
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
-            ...actionSystemMessages,
-            ...history.slice(-15).map((m: any) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content as string,
-            })),
-          ],
-        });
+        // PERF: Dialogflow CX (optional) vs LLM for conversational replies
+        let usedDialogflowCx = false;
+        if (
+          isDialogflowCxConfigured() &&
+          (!actionResult || actionResult.action === "none")
+        ) {
+          const cxReply = await detectDialogflowCxReply({
+            threadId,
+            message: input.message,
+          });
+          if (cxReply) {
+            assistantReply = cxReply;
+            usedDialogflowCx = true;
+          }
+        }
 
-        assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+        if (!usedDialogflowCx) {
+          const llmResponse = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              ...actionSystemMessages,
+              ...history.slice(-15).map((m: any) => ({
+                role: m.role as "user" | "assistant",
+                content: m.content as string,
+              })),
+            ],
+          });
+
+          assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+        }
         } catch (error) {
           console.error("[Flow Guru] Chat generation failed.", error);
         }
