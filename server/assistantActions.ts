@@ -975,6 +975,36 @@ async function executeContactOpenAction(
       hrefSms,
       ...(hrefMailto ? { hrefMailto } : {}),
     },
+    };
+}
+
+function directionsFailureResult(
+  action: AssistantActionPlan["action"],
+  directions: ExtendedDirectionsResult & { error_message?: string },
+): AssistantActionResult {
+  const status = directions.status;
+  const gm = directions.error_message?.trim();
+  let summary = "Couldn't calculate that route right now. Try again or use more specific place names.";
+  if (status === "ZERO_RESULTS") {
+    summary = "No route turned up for those places — try clearer addresses or landmarks.";
+  } else if (status === "NOT_FOUND") {
+    summary = "One of those places couldn't be located. Try spelling out city and region.";
+  } else if (status === "OVER_QUERY_LIMIT") {
+    summary = "Directions quota was exceeded. Try again later.";
+  } else if (status === "REQUEST_DENIED") {
+    summary =
+      gm ||
+      "Maps denied the request — confirm billing, Geocoding + Directions APIs enabled, and API key restrictions.";
+  } else if (status === "INVALID_REQUEST") {
+    summary = gm || "The maps service couldn't understand that route request.";
+  }
+  return {
+    action,
+    status: "failed",
+    title: "Directions unavailable",
+    summary,
+    provider: "google-maps",
+    data: { googleDirectionsStatus: status },
   };
 }
 
@@ -1001,46 +1031,71 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
     };
   }
 
-  const [originGeo, destinationGeo] = await Promise.all([geocodeAddress(origin), geocodeAddress(destination)]);
-  const directions = await makeRequest<ExtendedDirectionsResult>("/maps/api/directions/json", {
-    origin: originGeo.formatted_address,
-    destination: destinationGeo.formatted_address,
-    mode,
-    departure_time: "now",
-  });
+  try {
+    const [originGeo, destinationGeo] = await Promise.all([geocodeAddress(origin), geocodeAddress(destination)]);
 
-  if (directions.status !== "OK" || !directions.routes[0]?.legs[0]) {
-    throw new Error("No route result was returned by the maps provider.");
-  }
-
-  const route = directions.routes[0];
-  const leg = route.legs[0];
-  const steps = leg.steps.slice(0, 4).map(step => stripHtml(step.html_instructions));
-  const originLabel = leg.start_address;
-  const destinationLabel = leg.end_address;
-  const { mapsUrlGoogle, mapsUrlApple } = buildDirectionsMapsUrls(originLabel, destinationLabel, mode);
-
-  return {
-    action: plan.action,
-    status: "executed",
-    title: `Route to ${destinationLabel}`,
-    summary: leg.duration_in_traffic
-      ? `${leg.distance.text}, about ${leg.duration_in_traffic.text} in current traffic.`
-      : `${leg.distance.text}, about ${leg.duration.text}.`,
-    provider: "google-maps",
-    data: {
-      origin: originLabel,
-      destination: destinationLabel,
-      distanceText: leg.distance.text,
-      durationText: leg.duration.text,
-      durationInTrafficText: leg.duration_in_traffic?.text ?? null,
+    const params: Record<string, unknown> = {
+      origin: originGeo.formatted_address,
+      destination: destinationGeo.formatted_address,
       mode,
-      routeSummary: route.summary,
-      steps,
-      mapsUrlGoogle,
-      mapsUrlApple,
-    },
-  };
+    };
+    if (mode === "driving" || mode === "transit") {
+      params.departure_time = Math.floor(Date.now() / 1000);
+    }
+
+    let directions = await makeRequest<ExtendedDirectionsResult>("/maps/api/directions/json", params);
+
+    if (directions.status === "INVALID_REQUEST" && "departure_time" in params) {
+      const { departure_time: _dt, ...retryParams } = params;
+      directions = await makeRequest<ExtendedDirectionsResult>("/maps/api/directions/json", retryParams);
+    }
+
+    if (directions.status !== "OK" || !directions.routes[0]?.legs[0]) {
+      return directionsFailureResult(plan.action, directions as ExtendedDirectionsResult & { error_message?: string });
+    }
+
+    const route = directions.routes[0];
+    const leg = route.legs[0];
+    const steps = leg.steps.slice(0, 4).map(step => stripHtml(step.html_instructions));
+    const originLabel = leg.start_address;
+    const destinationLabel = leg.end_address;
+    const { mapsUrlGoogle, mapsUrlApple } = buildDirectionsMapsUrls(originLabel, destinationLabel, mode);
+
+    return {
+      action: plan.action,
+      status: "executed",
+      title: `Route to ${destinationLabel}`,
+      summary: leg.duration_in_traffic
+        ? `${leg.distance.text}, about ${leg.duration_in_traffic.text} in current traffic.`
+        : `${leg.distance.text}, about ${leg.duration.text}.`,
+      provider: "google-maps",
+      data: {
+        origin: originLabel,
+        destination: destinationLabel,
+        distanceText: leg.distance.text,
+        durationText: leg.duration.text,
+        durationInTrafficText: leg.duration_in_traffic?.text ?? null,
+        mode,
+        routeSummary: route.summary,
+        steps,
+        mapsUrlGoogle,
+        mapsUrlApple,
+      },
+    };
+  } catch (error) {
+    console.warn("[Flow Guru] route.get failed:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    const summary = msg.includes("Maps not configured") || msg.includes("GOOGLE_MAPS_API_KEY")
+      ? "Maps isn't configured on the server yet."
+      : "Couldn't reach the maps service. Try again shortly.";
+    return {
+      action: plan.action,
+      status: "failed",
+      title: "Directions unavailable",
+      summary,
+      provider: "google-maps",
+    };
+  }
 }
 
 async function executeWeatherAction(plan: AssistantActionPlan, options?: { language?: 'en' | 'fr' }): Promise<AssistantActionResult> {
