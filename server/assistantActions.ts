@@ -882,6 +882,22 @@ function phoneFromInlineDigits(targetRaw: string): string | null {
   return sanitizePhoneForHref(trimmed);
 }
 
+/** e.g. "wife's phone number 514 777 5427" → dial the NANP span (prefer last match if several). */
+function extractEmbeddedPhoneFromTarget(targetRaw: string): { sanitized: string; display: string } | null {
+  const trimmed = targetRaw.trim();
+  const nanpInText =
+    /(?:\+?1[\s.-]*)?(?:\(?\d{3}\)?[\s.-]*)\d{3}[\s.-]*\d{4}/g;
+  const spans = [...trimmed.matchAll(nanpInText)].map(m => m[0].trim()).filter(Boolean);
+  const candidates = spans
+    .map(display => {
+      const s = sanitizePhoneForHref(display);
+      return s && s.replace(/\D/g, "").length >= 10 ? { display, sanitized: s } : null;
+    })
+    .filter((x): x is { display: string; sanitized: string } => x != null);
+  if (candidates.length === 0) return null;
+  return candidates[candidates.length - 1]!;
+}
+
 async function executeContactOpenAction(
   plan: AssistantActionPlan,
   options: { userId: number; language?: "en" | "fr" },
@@ -936,9 +952,13 @@ async function executeContactOpenAction(
   let inlinePhoneDisplay: string | undefined;
   if (channel !== "email" && !phone) {
     const inline = phoneFromInlineDigits(targetRaw);
+    const embedded = inline ? null : extractEmbeddedPhoneFromTarget(targetRaw);
     if (inline) {
       phone = inline;
       inlinePhoneDisplay = targetRaw;
+    } else if (embedded) {
+      phone = embedded.sanitized;
+      inlinePhoneDisplay = embedded.display;
     }
   }
 
@@ -999,11 +1019,12 @@ async function executeContactOpenAction(
   const hrefCall = `tel:${dial}`;
   const hrefSms = `sms:${dial}`;
   const hrefMailto = email ? `mailto:${encodeURIComponent(email)}` : undefined;
+  const reachLabel = inlinePhoneDisplay ?? targetRaw;
 
   return {
     action: "contact.open",
     status: "executed",
-    title: channel === "sms" ? `Text ${targetRaw}` : `Call ${targetRaw}`,
+    title: channel === "sms" ? `Text ${reachLabel}` : `Call ${reachLabel}`,
     summary:
       channel === "sms"
         ? lang === "fr"

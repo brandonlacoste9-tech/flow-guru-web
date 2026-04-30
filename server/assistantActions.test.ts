@@ -318,6 +318,33 @@ describe.sequential("assistantActions", () => {
     expect(result.data?.phoneDisplay).toBe("514 777 5427");
   });
 
+  it("contact.open extracts NANP from mixed text when no saved contact exists", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+    dbMocks.listUserMemoryFacts.mockResolvedValueOnce([]);
+
+    const result = await executeAssistantAction(
+      {
+        action: "contact.open",
+        rationale: "Call",
+        route: null,
+        weather: null,
+        news: null,
+        calendar: null,
+        music: null,
+        list: null,
+        knowledge: null,
+        ...NULL_EXTENSIONS,
+        contact: { channel: "call", targetName: "wifes phone number 514 777 5427" },
+      },
+      { userId: 1, message: "call my wife", memoryContext: "", language: "en" },
+    );
+
+    expect(result.status).toBe("executed");
+    expect(result.title).toBe("Call 514 777 5427");
+    expect(result.data?.hrefCall).toBe("tel:+15147775427");
+    expect(result.data?.phoneDisplay).toBe("514 777 5427");
+  });
+
   it("planAssistantAction uses deterministic contact intent without calling the planner LLM", async () => {
     llmMocks.invokeLLM.mockRejectedValue(new Error("planner should not be called"));
     const { planAssistantAction } = await import("./assistantActions");
