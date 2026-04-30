@@ -98,7 +98,8 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
     const routeMode = ((data.mode as string | undefined) || "driving").toLowerCase();
     const embedModes = new Set(["driving", "walking", "bicycling", "transit"]);
     const embedMode = embedModes.has(routeMode) ? routeMode : "driving";
-    const embedKey = import.meta.env.VITE_GOOGLE_MAPS_EMBED_API_KEY?.trim();
+    const embedKey =
+      import.meta.env.VITE_GOOGLE_MAPS_EMBED_API_KEY?.trim() || import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
     const embedSrc =
       embedKey && routeOrigin && routeDestination
         ? `https://www.google.com/maps/embed/v1/directions?key=${encodeURIComponent(embedKey)}&origin=${encodeURIComponent(routeOrigin)}&destination=${encodeURIComponent(routeDestination)}&mode=${encodeURIComponent(embedMode)}`
