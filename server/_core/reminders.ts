@@ -2,6 +2,7 @@ import { getDb } from '../db';
 import * as schema from '../../api/lib/drizzle/schema';
 import { and, eq, gte, lte } from 'drizzle-orm';
 import { sendPushNotification } from './push';
+import { displayFirstName } from "../../shared/userDisplay.js";
 
 const firedReminders = new Set<string>();
 
@@ -26,11 +27,14 @@ export async function checkAllReminders() {
         if (!firedReminders.has(key)) {
           firedReminders.add(key);
           const user = await db.select().from(schema.users).where(eq(schema.users.id, profile.userId)).limit(1);
-          const name = user[0]?.name || 'Brandon';
-          
+          const name = displayFirstName(user[0]);
+          const body = name
+            ? `It's ${profile.wakeUpTime} — time to rise and shine, ${name}!`
+            : `It's ${profile.wakeUpTime} — time to rise and shine!`;
+
           await sendPushNotification(profile.userId, {
             title: '☀️ Good Morning!',
-            body: `It's ${profile.wakeUpTime} — time to rise and shine, ${name}!`,
+            body,
             tag: key,
             alarmSound: profile.alarmSound || 'chime',
           });

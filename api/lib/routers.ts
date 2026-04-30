@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "./shared/const.js";
+import { displayFirstName } from "@shared/userDisplay";
 import fs from "fs";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies.js";
@@ -620,8 +621,8 @@ export const appRouter = router({
       const weatherPromise = (async () => {
         if (!userLocation) return null;
         try {
-          const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather", language: input.language ?? 'en' });
-          const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: input.language ?? 'en' });
+          const plan = await planAssistantAction({ userName: displayFirstName(ctx.user) || undefined, memoryContext: `Location: ${userLocation}`, message: "current weather", language: input.language ?? 'en' });
+          const result = await executeAssistantAction(plan, { userId, userName: displayFirstName(ctx.user) || undefined, message: "current weather", memoryContext: `Location: ${userLocation}`, language: input.language ?? 'en' });
           if (result.status === "executed" && result.data) {
             const data = result.data as Record<string, any>;
             const c = data.current as any;
@@ -673,7 +674,7 @@ export const appRouter = router({
       let proactiveGreeting: string | null = null;
       if (messages.length === 0) {
         try {
-          const userName = ctx.user?.name?.split(' ')[0] || (input.language === 'fr' ? "toi" : "there");
+          const userName = displayFirstName(ctx.user) || (input.language === 'fr' ? "toi" : "there");
           const language = input.language ?? 'en';
           const weatherContext = weather ? `${weather.tempC}°C and ${weather.label} in ${weather.locationName}` : "";
           
@@ -821,10 +822,11 @@ export const appRouter = router({
         f => f.factKey === "assistant_name" && f.category === "preference"
       );
       const assistantName = assistantNameFact?.factValue || "FLO GURU";
-      const userName = ctx.user?.name || "Brandon";
+      const userFirstName = displayFirstName(ctx.user);
+      const userName = userFirstName;
 
       let memoryContext = buildMemoryContext({
-        userName,
+        userName: userFirstName || "Unknown",
         profile,
         facts: memoryFacts,
       });
@@ -838,7 +840,9 @@ export const appRouter = router({
       }
 
       const systemPrompt = [
-        `You are ${assistantName}, ${userName}'s personal assistant.`,
+        userFirstName
+          ? `You are ${assistantName}, ${userFirstName}'s personal assistant.`
+          : `You are ${assistantName}, this user's personal assistant.`,
         profile?.buddyPersonality ? `Your personality profile: ${profile.buddyPersonality}` : "You sound like a close friend. Short, warm, direct. Never robotic.",
         "",
         "RULES:",
@@ -1002,7 +1006,7 @@ export const appRouter = router({
       // PERF: Fire-and-forget memory extraction to return response immediately
       extractAndPersistMemory({
         userId,
-        userName,
+        userName: userFirstName || null,
         userMessage: input.message,
         assistantReply,
       }).catch(err => console.warn("[Flow Guru] Background memory extraction failed:", err));
@@ -1026,7 +1030,7 @@ export const appRouter = router({
         (f: any) => f.factKey === "assistant_name" && f.category === "preference"
       );
       const assistantName = assistantNameFact?.factValue || "FLO GURU";
-      const userName = ctx.user?.name || "Brandon";
+      const userName = displayFirstName(ctx.user);
 
       const locationFact = memoryFacts.find(
         (f: any) => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
@@ -1089,8 +1093,8 @@ export const appRouter = router({
         if (userLocation) {
           try {
             const { planAssistantAction, executeAssistantAction } = await import("./assistantActions.js");
-            const plan = await planAssistantAction({ userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
-            const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
+            const plan = await planAssistantAction({ userName: displayFirstName(ctx.user) || undefined, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
+            const result = await executeAssistantAction(plan, { userId, userName: displayFirstName(ctx.user) || undefined, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
             if (result.status === "executed") weather = result.data;
           } catch {}
         }
@@ -1113,7 +1117,7 @@ export const appRouter = router({
           calendar: calendar.map(e => ({ title: e.title, start: e.startAt })),
           lists: listSnapshots,
           assistantName: getAssistantName(memoryFacts),
-          userName: ctx.user?.name || "Brandon",
+          userName: displayFirstName(ctx.user),
         };
       }),
   }),

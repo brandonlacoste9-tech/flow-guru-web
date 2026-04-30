@@ -19,6 +19,7 @@ import { prewarmAudio } from "@/hooks/useAlarmSound";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { trackConversion } from "@/lib/telemetry";
 import type { TranslationKeys } from "@/lib/translations";
+import { displayFirstName, displayFirstNameOrNeutral } from "@shared/userDisplay";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -575,7 +576,8 @@ export default function Home() {
   const greeting = language === 'en'
     ? (currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening")
     : (currentTime.getHours() < 12 ? "Bonjour" : currentTime.getHours() < 17 ? "Bon après-midi" : "Bonsoir");
-  const userName = user?.name?.split(' ')[0] || "Brandon";
+  const userFirstName = displayFirstName(user);
+  const userName = displayFirstNameOrNeutral(user);
 
   // AI reminders — checks calendar events and wake-up time every minute
   const handleBriefing = async () => {
@@ -585,8 +587,16 @@ export default function Home() {
         const calCount = data.calendar.length;
         const listCount = data.lists.reduce((acc, l) => acc + l.items.length, 0);
         const w = data.weather;
-        
-        let prompt = (language === 'en' ? `Good morning, ${data.userName}! I'm ${data.assistantName}, and I've got your briefing ready. ` : `Bonjour, ${data.userName} ! Je suis ${data.assistantName}, et j'ai préparé votre briefing. `);
+
+        const bn = data.userName?.trim();
+        let prompt =
+          language === "en"
+            ? bn
+              ? `Good morning, ${bn}! I'm ${data.assistantName}, and I've got your briefing ready. `
+              : `Good morning! I'm ${data.assistantName}, and I've got your briefing ready. `
+            : bn
+              ? `Bonjour, ${bn} ! Je suis ${data.assistantName}, et j'ai préparé votre briefing. `
+              : `Bonjour ! Je suis ${data.assistantName}, et j'ai préparé votre briefing. `;
         
         if (w) {
           const weatherAny = w as any;
@@ -857,7 +867,13 @@ export default function Home() {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.3 }}
                   >
-                    {greeting}, <span className="text-foreground">{userName}</span>
+                    {userFirstName ? (
+                      <>
+                        {greeting}, <span className="text-foreground">{userFirstName}</span>
+                      </>
+                    ) : (
+                      greeting
+                    )}
                   </motion.h2>
                 </div>
 
@@ -1296,7 +1312,7 @@ export default function Home() {
       {showOnboarding && (
         <OnboardingFlow
           onComplete={() => setShowOnboarding(false)}
-          userName={user?.name?.split(' ')[0]}
+          userName={userFirstName || undefined}
         />
       )}
       {(showAuthModal || resetToken) && (
