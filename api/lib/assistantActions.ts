@@ -766,8 +766,26 @@ function extractHomeOriginFromMemory(memoryContext: string | null | undefined): 
     if (homeAddr?.[1]) return homeAddr[1].trim();
     const home = trimmed.match(/^-\s*\[[^\]]+\]\s*home:\s*(.+)$/i);
     if (home?.[1]) return home[1].trim();
+    const homeLoc = trimmed.match(/^-\s*\[[^\]]+\]\s*home_location:\s*(.+)$/i);
+    if (homeLoc?.[1]) return homeLoc[1].trim();
   }
   return null;
+}
+
+/** Same coordinates the router injects into memory when the client sends deviceLatitude/deviceLongitude. */
+function extractApproximateDeviceLocationFromMemory(
+  memoryContext: string | null | undefined,
+): { lat: number; lng: number } | null {
+  if (!memoryContext) return null;
+  const m = memoryContext.match(
+    /Approximate current device location \(latitude, longitude\):\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
 }
 
 function googleTravelMode(mode: TravelMode): string {
@@ -1027,7 +1045,7 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
       action: plan.action,
       status: "needs_input",
       title: "Starting point needed",
-      summary: `I can check the route to ${destination}, but I still need your starting point.`,
+      summary: `I can route to ${destination}, but I need a starting place. Say where you're leaving from (e.g. "from home to …"), or enable location for this site and send your message again so I can use your current position. If you saved a home address in memory, say "from my place".`,
     };
   }
 
@@ -1061,6 +1079,12 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
     const originLabel = leg.start_address;
     const destinationLabel = leg.end_address;
     const { mapsUrlGoogle, mapsUrlApple } = buildDirectionsMapsUrls(originLabel, destinationLabel, mode);
+    const oLoc = originGeo.geometry.location;
+    const dLoc = destinationGeo.geometry.location;
+    const originLat = typeof oLoc.lat === "function" ? oLoc.lat() : oLoc.lat;
+    const originLng = typeof oLoc.lng === "function" ? oLoc.lng() : oLoc.lng;
+    const destinationLat = typeof dLoc.lat === "function" ? dLoc.lat() : dLoc.lat;
+    const destinationLng = typeof dLoc.lng === "function" ? dLoc.lng() : dLoc.lng;
 
     return {
       action: plan.action,
@@ -1073,6 +1097,10 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
       data: {
         origin: originLabel,
         destination: destinationLabel,
+        originLat,
+        originLng,
+        destinationLat,
+        destinationLng,
         distanceText: leg.distance.text,
         durationText: leg.duration.text,
         durationInTrafficText: leg.duration_in_traffic?.text ?? null,
@@ -1787,6 +1815,12 @@ export async function executeAssistantAction(
           Number.isFinite(options.deviceLongitude)
         ) {
           origin = `${options.deviceLatitude},${options.deviceLongitude}`;
+        }
+        if (!origin && options.memoryContext) {
+          const fromMemory = extractApproximateDeviceLocationFromMemory(options.memoryContext);
+          if (fromMemory) {
+            origin = `${fromMemory.lat},${fromMemory.lng}`;
+          }
         }
         const enrichedPlan: AssistantActionPlan = {
           ...plan,

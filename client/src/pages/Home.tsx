@@ -77,6 +77,40 @@ type BillingLimit = {
 
 const FREE_TIER_OVER_DAY_KEY = "fg_free_tier_over_utc_day";
 
+/** Cached device position for directions — survives refresh and avoids racing the async geolocation effect. */
+const DEVICE_COORDS_STORAGE_KEY = "fg_device_coords_v1";
+const DEVICE_COORDS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function readStoredDeviceCoords(): { lat: number; lon: number } | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(DEVICE_COORDS_STORAGE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as { lat?: number; lon?: number; t?: number };
+    if (
+      typeof p.lat !== "number" ||
+      typeof p.lon !== "number" ||
+      typeof p.t !== "number" ||
+      !Number.isFinite(p.lat) ||
+      !Number.isFinite(p.lon)
+    ) {
+      return null;
+    }
+    if (Date.now() - p.t > DEVICE_COORDS_MAX_AGE_MS) return null;
+    return { lat: p.lat, lon: p.lon };
+  } catch {
+    return null;
+  }
+}
+
+function persistDeviceCoords(lat: number, lon: number) {
+  try {
+    sessionStorage.setItem(DEVICE_COORDS_STORAGE_KEY, JSON.stringify({ lat, lon, t: Date.now() }));
+  } catch {
+    /* ignore private mode / quota */
+  }
+}
+
 function currentUtcDayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -109,7 +143,9 @@ export default function Home() {
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [currentStation, setCurrentStation] = useState('');
   const [showForecast, setShowForecast] = useState(false);
-  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(() =>
+    typeof window === "undefined" ? null : readStoredDeviceCoords(),
+  );
   const [showNews, setShowNews] = useState(false);
   const [countryCode, setCountryCode] = useState<string>('us');
   // Guest mode: track how many messages sent without an account
@@ -218,6 +254,7 @@ export default function Home() {
     geoFetchedRef.current = true;
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
+      persistDeviceCoords(latitude, longitude);
       setCoords({ lat: latitude, lon: longitude });
       if (weather !== null) return;
       try {
@@ -390,8 +427,31 @@ export default function Home() {
     else { setIsListening(true); recognitionRef.current.start(); }
   };
 
-  const handleSend = (text: string) => {
+  const handleSend = async (text: string) => {
     if (!text.trim() || sendMutation.isPending) return;
+
+    let sendCoords = coords;
+    if (sendCoords == null) {
+      const cached = readStoredDeviceCoords();
+      if (cached) {
+        sendCoords = cached;
+        setCoords(cached);
+      }
+    }
+    if (sendCoords == null && typeof navigator !== "undefined" && "geolocation" in navigator) {
+      sendCoords = await new Promise<{ lat: number; lon: number } | null>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const next = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+            persistDeviceCoords(next.lat, next.lon);
+            resolve(next);
+          },
+          () => resolve(null),
+          { enableHighAccuracy: false, maximumAge: 300000, timeout: 8000 },
+        );
+      });
+      if (sendCoords) setCoords(sendCoords);
+    }
 
     // Track guest usage and show sign-in nudge after 5 messages
     if (!user) {
@@ -418,8 +478,8 @@ export default function Home() {
       threadId: startsFresh ? undefined : currentThreadId,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       language,
-      ...(coords != null
-        ? { deviceLatitude: coords.lat, deviceLongitude: coords.lon }
+      ...(sendCoords != null
+        ? { deviceLatitude: sendCoords.lat, deviceLongitude: sendCoords.lon }
         : {}),
     });
   };

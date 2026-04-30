@@ -105,7 +105,7 @@ describe.sequential("assistantActions", () => {
       action: "route.get",
       status: "needs_input",
       title: "Starting point needed",
-      summary: "I can check the route to Office, but I still need your starting point.",
+      summary: `I can route to Office, but I need a starting place. Say where you're leaving from (e.g. "from home to …"), or enable location for this site and send your message again so I can use your current position. If you saved a home address in memory, say "from my place".`,
     });
     expect(mapMocks.makeRequest).not.toHaveBeenCalled();
   });

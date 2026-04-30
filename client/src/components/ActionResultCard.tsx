@@ -12,6 +12,17 @@ export type AssistantActionResult = {
   data?: Record<string, unknown>;
 };
 
+/** Fallback when Google Embed API key is unset — bbox overview, no API key. */
+function openStreetMapRouteEmbedUrl(a: { lat: number; lng: number }, b: { lat: number; lng: number }): string {
+  const pad = 0.025;
+  const minLat = Math.min(a.lat, b.lat) - pad;
+  const maxLat = Math.max(a.lat, b.lat) + pad;
+  const minLon = Math.min(a.lng, b.lng) - pad;
+  const maxLon = Math.max(a.lng, b.lng) + pad;
+  const bbox = `${minLon},${minLat},${maxLon},${maxLat}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik`;
+}
+
 function getActionIcon(action: string) {
   if (action?.includes("calendar") || action?.includes("reminder")) return Calendar;
   if (action?.includes("weather")) return Cloud;
@@ -60,10 +71,12 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
     );
   } else if (result.status !== "executed") {
     body = (
-      <p className="text-foreground text-[16px] leading-relaxed">
-        This action <strong className="text-primary">needs input</strong> before we can finish — here is what we know so
-        far, <span className="text-muted-foreground">without fully executing the action</span>.
-      </p>
+      <div className="space-y-2">
+        <p className="text-foreground text-[16px] leading-relaxed">{result.summary}</p>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          Add what's missing above and try again — this step has not run yet.
+        </p>
+      </div>
     );
   } else if (result.action === "music.play") {
     const audioDataUri = (data as { audioDataUri?: string }).audioDataUri;
@@ -91,10 +104,26 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
         ? `https://www.google.com/maps/embed/v1/directions?key=${encodeURIComponent(embedKey)}&origin=${encodeURIComponent(routeOrigin)}&destination=${encodeURIComponent(routeDestination)}&mode=${encodeURIComponent(embedMode)}`
         : null;
 
+    const oLat = data.originLat as number | undefined;
+    const oLng = data.originLng as number | undefined;
+    const dLat = data.destinationLat as number | undefined;
+    const dLng = data.destinationLng as number | undefined;
+    const osmEmbedSrc =
+      embedSrc == null &&
+      typeof oLat === "number" &&
+      typeof oLng === "number" &&
+      typeof dLat === "number" &&
+      typeof dLng === "number" &&
+      [oLat, oLng, dLat, dLng].every(Number.isFinite)
+        ? openStreetMapRouteEmbedUrl({ lat: oLat, lng: oLng }, { lat: dLat, lng: dLng })
+        : null;
+
+    const mapIframeSrc = embedSrc ?? osmEmbedSrc;
+
     body = (
       <div className="space-y-3 mt-1">
         <p className="text-foreground text-[16px] leading-relaxed">{result.summary}</p>
-        {embedSrc && (
+        {mapIframeSrc && (
           <div className="overflow-hidden rounded-xl border border-border bg-muted/30 shadow-inner">
             <iframe
               title="Route preview map"
@@ -102,8 +131,13 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
               allowFullScreen
-              src={embedSrc}
+              src={mapIframeSrc}
             />
+            {osmEmbedSrc && !embedSrc && (
+              <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                Overview map — use Google or Apple Maps below for turn-by-turn directions.
+              </p>
+            )}
           </div>
         )}
         {(mapsUrlGoogle || mapsUrlApple) && (

@@ -63,6 +63,28 @@ describe("ActionResultCard", () => {
     expect(html).toContain("I looked for the route.");
   });
 
+  it("route.get embeds OpenStreetMap when coords are present without Google embed key", () => {
+    const html = renderCard({
+      action: "route.get",
+      status: "executed",
+      title: "Route to Office",
+      summary: "5 mi, about 12 mins.",
+      data: {
+        origin: "A St",
+        destination: "B Ave",
+        originLat: 40.73,
+        originLng: -73.99,
+        destinationLat: 40.75,
+        destinationLng: -73.97,
+        mapsUrlGoogle: "https://example.com/g",
+        mapsUrlApple: "https://example.com/a",
+      },
+    });
+
+    expect(html).toContain("openstreetmap.org/export/embed.html");
+    expect(html).toContain("Overview map");
+  });
+
   it("renders the weather fallback when forecast details are empty", () => {
     const html = renderCard({
       action: "weather.get",
@@ -97,8 +119,8 @@ describe("ActionResultCard", () => {
       summary: "I still need a start time.",
     });
 
-    expect(html).toContain("needs input");
-    expect(html).toContain("without fully executing the action");
+    expect(html).toContain("I still need a start time.");
+    expect(html).toContain("has not run yet");
   });
 
   it("renders an audio player element for music.play with an audio data URI", () => {
