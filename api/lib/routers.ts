@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "./shared/const.js";
-import { displayFirstName } from "@shared/userDisplay";
+import { displayFirstName } from "../../shared/userDisplay.js";
 import fs from "fs";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies.js";
