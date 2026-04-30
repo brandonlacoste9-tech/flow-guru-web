@@ -141,8 +141,20 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Paint behind iOS/Android safe areas (status bar, home indicator) — avoids default white gaps */
+  html {
+    background-color: var(--background);
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+  }
+  #root {
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+  }
   body {
     @apply bg-background text-foreground transition-colors duration-300;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
     font-family: "Plus Jakarta Sans", "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
     background-attachment: fixed;
     overflow-x: hidden;
