@@ -51,6 +51,7 @@ const sendMessageInput = z.object({
   language: z.enum(["en", "fr"]).optional(),
   deviceLatitude: z.number().finite().gte(-90).lte(90).optional(),
   deviceLongitude: z.number().finite().gte(-180).lte(180).optional(),
+  guestDeviceId: z.string().uuid().optional(),
 });
 
 const MEMORY_FACT_CATEGORIES = [
@@ -571,9 +572,9 @@ export const appRouter = router({
   }),
   assistant: router({
     bootstrap: publicProcedure
-      .input(z.object({ language: z.enum(["en", "fr"]).optional() }).default({}))
+      .input(z.object({ language: z.enum(["en", "fr"]).optional(), guestDeviceId: z.string().uuid().optional() }).default({}))
       .query(async ({ ctx, input }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const [profile, memoryFacts, thread, providerConnections] = await Promise.all([
         getUserMemoryProfile(userId),
         listUserMemoryFacts(userId),
@@ -726,8 +727,10 @@ export const appRouter = router({
         proactiveGreeting,
       };
     }),
-    startFresh: publicProcedure.mutation(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+    startFresh: publicProcedure
+      .input(z.object({ guestDeviceId: z.string().uuid().optional() }).default({}))
+      .mutation(async ({ ctx, input }) => {
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const threadId = await createConversationThread({
         userId,
         title: "FLO GURU Chat",
@@ -746,8 +749,10 @@ export const appRouter = router({
         providerConnections,
       };
     }),
-    history: publicProcedure.query(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+    history: publicProcedure
+      .input(z.object({ guestDeviceId: z.string().uuid().optional() }).default({}))
+      .query(async ({ ctx, input }) => {
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const thread = await findLatestConversationThread(userId);
       if (!thread || thread.userId !== userId) {
         return {
@@ -763,7 +768,7 @@ export const appRouter = router({
       };
     }),
     send: publicProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
 
       await createConversationMessage({

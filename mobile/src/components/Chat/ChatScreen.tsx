@@ -10,13 +10,16 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
+  Alert,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { Mic } from 'lucide-react-native';
 import { theme } from '../../theme';
 import { MessageBubble } from './MessageBubble';
 import { ActionCard } from './ActionCard';
 import { useVoice } from '../../hooks/useVoice';
-import { supabase } from '../../services/supabase';
+import { getOrCreateGuestDeviceId } from '../../services/guestDeviceId';
+import { sendAssistantMessage } from '../../services/flowGuruTrpc';
 
 interface Message {
   id: string;
@@ -30,6 +33,7 @@ export const ChatScreen: React.FC = () => {
     { id: '1', role: 'assistant', content: "Hello! I'm Flow Guru. Your smart personal assistant. Tap the mic to talk to me." }
   ]);
   const [loading, setLoading] = useState(false);
+  const [threadId, setThreadId] = useState<number | undefined>(undefined);
   const { isListening, transcript, startListening, stopListening, speak } = useVoice();
   const flatListRef = useRef<FlatList>(null);
   const glowAnim = useRef(new Animated.Value(1)).current;
@@ -63,16 +67,50 @@ export const ChatScreen: React.FC = () => {
     setLoading(true);
 
     try {
-      const user = (await supabase.auth.getUser()).data.user;
-      const { data, error } = await supabase.functions.invoke('assistant', {
-        body: { message: text, userId: user?.id || 'anonymous' },
+      const guestDeviceId = await getOrCreateGuestDeviceId();
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      let deviceLatitude: number | undefined;
+      let deviceLongitude: number | undefined;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === Location.PermissionStatus.GRANTED) {
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          deviceLatitude = pos.coords.latitude;
+          deviceLongitude = pos.coords.longitude;
+        }
+      } catch {
+        /* directions still work if user names a start/end */
+      }
+
+      const data = await sendAssistantMessage({
+        message: text,
+        guestDeviceId,
+        threadId,
+        timeZone,
+        language: 'en',
+        deviceLatitude,
+        deviceLongitude,
       });
-      if (error) throw error;
-      const assistantMessage: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: data.reply, actionResult: data.actionResult };
+
+      setThreadId(data.threadId);
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.reply,
+        actionResult: data.actionResult ?? undefined,
+      };
       setMessages((prev) => [...prev, assistantMessage]);
       speak(data.reply);
-    } catch (error) {
-      console.error('Error:', error);
+    } catch (error: unknown) {
+      console.error('Chat send failed:', error);
+      const msg =
+        error instanceof Error
+          ? error.message
+          : 'Could not reach Flow Guru. Set EXPO_PUBLIC_FLOW_GURU_API_URL to your site URL (e.g. https://floguru.com) and try again.';
+      Alert.alert('Message failed', msg);
     } finally {
       setLoading(false);
     }

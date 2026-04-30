@@ -285,8 +285,46 @@ export async function getDb() {
 
 /**
  * Public assistant routes allow unauthenticated use; DB rows must still reference a real user.
- * Uses a stable synthetic openId so guest chat shares one logical profile (or upgrade later).
+ * Web guests without login share one synthetic anonymous profile; mobile can pass guestDeviceId for a per-install profile.
  */
+/** Stable openId prefix for Expo / mobile installs (scoped memory vs shared web anonymous). */
+const MOBILE_GUEST_OPEN_ID_PREFIX = "mobile:";
+
+export async function getOrCreateMobileGuestUser(deviceId: string): Promise<schema.User> {
+  const normalized = deviceId.trim().toLowerCase();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)
+  ) {
+    throw new Error("Invalid guest device id");
+  }
+  const openId = `${MOBILE_GUEST_OPEN_ID_PREFIX}${normalized}`;
+  const db = await getDb();
+  if (!db) {
+    throw new Error("DATABASE_URL is not configured");
+  }
+  await ensureTables(db);
+  const existing = await getUserByOpenId(openId);
+  if (existing) return existing;
+
+  try {
+    await db.insert(schema.users).values({
+      openId,
+      name: "Mobile",
+      email: null,
+      loginMethod: "mobile-guest",
+      lastSignedIn: new Date(),
+    });
+  } catch {
+    /* unique race: another request created the same openId */
+  }
+
+  const created = await getUserByOpenId(openId);
+  if (!created) {
+    throw new Error("Failed to create mobile guest user");
+  }
+  return created;
+}
+
 export async function getOrCreateAnonymousUser(): Promise<schema.User> {
   const db = await getDb();
   if (!db) {
@@ -310,8 +348,20 @@ export async function getOrCreateAnonymousUser(): Promise<schema.User> {
   return created;
 }
 
-export async function resolveAssistantUserId(user: schema.User | null): Promise<number> {
+export async function resolveAssistantUserId(
+  user: schema.User | null,
+  guestDeviceId?: string | null,
+): Promise<number> {
   if (user?.id != null) return user.id;
+  const trimmed = guestDeviceId?.trim();
+  if (trimmed) {
+    try {
+      const mobileUser = await getOrCreateMobileGuestUser(trimmed);
+      return mobileUser.id;
+    } catch (err) {
+      console.warn("[Flow Guru] guestDeviceId rejected; using shared anonymous user:", err);
+    }
+  }
   const anon = await getOrCreateAnonymousUser();
   return anon.id;
 }

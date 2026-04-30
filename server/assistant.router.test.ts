@@ -11,7 +11,7 @@ const dbMocks = vi.hoisted(() => ({
   listConversationMessages: vi.fn(),
   listProviderConnections: vi.fn(),
   listUserMemoryFacts: vi.fn(),
-  resolveAssistantUserId: vi.fn(async (user: { id: number } | null) => user?.id ?? 1),
+  resolveAssistantUserId: vi.fn(async (user: { id: number } | null, _guestDeviceId?: string | null) => user?.id ?? 1),
   touchConversationThread: vi.fn(),
   upsertUserMemoryProfile: vi.fn(),
 }));
