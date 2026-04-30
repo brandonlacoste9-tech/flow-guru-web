@@ -260,7 +260,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
                 value={promoCode}
                 onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                 className={leatherInput}
-                placeholder="GURU1976"
+                placeholder=""
                 autoComplete="off"
               />
             </div>
@@ -342,7 +342,7 @@ export function AuthModal({ onClose, onSuccess, resetToken }: AuthModalProps) {
                 Promo code <span className="text-[#5a3c18] normal-case tracking-normal font-normal">(optional)</span>
               </label>
               <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                className={leatherInput} placeholder="EARLYBIRD" />
+                className={leatherInput} placeholder="" />
             </div>
             <p className="text-[10px] text-[#6b5340] leading-snug text-center px-1">
               Already use Google? Same email + password here adds email login — you can sign in either way.
