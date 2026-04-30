@@ -1026,6 +1026,55 @@ function directionsFailureResult(
   };
 }
 
+/** Maps thrown errors from geocode/directions/network into user-facing summaries (no secrets). */
+function summarizeRouteExecutionError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  const lower = msg.toLowerCase();
+
+  if (
+    msg.includes("Maps not configured") ||
+    msg.includes("GOOGLE_MAPS_API_KEY") ||
+    msg.includes("BUILT_IN_FORGE_API_URL") ||
+    msg.includes("BUILT_IN_FORGE_API_KEY")
+  ) {
+    return "Maps isn't configured on the server yet. Add GOOGLE_MAPS_API_KEY (Geocoding + Directions APIs enabled), or Forge maps proxy env vars.";
+  }
+  if (msg.includes("Could not geocode address") || msg.includes("Could not reverse geocode")) {
+    return "Couldn't pin one of those places on the map. Try fuller addresses (city and region) or clearer landmark names.";
+  }
+  if (/google maps api request failed \(403/i.test(msg)) {
+    return "Google Maps rejected the request (403). Check API key restrictions, billing, and that Geocoding + Directions APIs are enabled.";
+  }
+  if (/google maps api request failed \(401/i.test(msg)) {
+    return "Google Maps authentication failed. Verify GOOGLE_MAPS_API_KEY or Forge maps credentials.";
+  }
+  if (/google maps api request failed \(429/i.test(msg) || lower.includes("too many requests")) {
+    return "Maps quota was exceeded. Wait a bit or raise Geocoding/Directions quotas in Google Cloud.";
+  }
+  if (
+    lower.includes("fetch failed") ||
+    lower.includes("econnrefused") ||
+    lower.includes("econnreset") ||
+    lower.includes("enotfound") ||
+    lower.includes("networkerror") ||
+    lower.includes("socket hang up") ||
+    lower.includes("timed out") ||
+    lower.includes("timeout")
+  ) {
+    return "The server couldn't reach Google Maps. Try again shortly or check hosting egress and firewall rules.";
+  }
+  if (error instanceof SyntaxError || lower.includes("unexpected token") || lower.includes("is not valid json")) {
+    return "Maps returned an unexpected response (often a proxy or HTML error page). Check your maps proxy URL and credentials.";
+  }
+  if (/google maps api request failed \(\d+/i.test(msg)) {
+    const m = msg.match(/Google Maps API request failed \(\d+[^)]*\)/i);
+    return m
+      ? `${m[0]}. Confirm APIs are enabled and billing is active.`
+      : "Google Maps returned an HTTP error. Confirm APIs are enabled and billing is active.";
+  }
+  return "Couldn't reach the maps service. Try again shortly.";
+}
+
 async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantActionResult> {
   const origin = normalizeText(plan.route?.origin);
   const destination = normalizeText(plan.route?.destination);
@@ -1069,13 +1118,15 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
       directions = await makeRequest<ExtendedDirectionsResult>("/maps/api/directions/json", retryParams);
     }
 
-    if (directions.status !== "OK" || !directions.routes[0]?.legs[0]) {
+    const routes = Array.isArray(directions?.routes) ? directions.routes : [];
+    const leg = routes[0]?.legs?.[0];
+
+    if (directions.status !== "OK" || !leg) {
       return directionsFailureResult(plan.action, directions as ExtendedDirectionsResult & { error_message?: string });
     }
 
-    const route = directions.routes[0];
-    const leg = route.legs[0];
-    const steps = leg.steps.slice(0, 4).map(step => stripHtml(step.html_instructions));
+    const route = routes[0];
+    const steps = (leg.steps ?? []).slice(0, 4).map(step => stripHtml(step.html_instructions));
     const originLabel = leg.start_address;
     const destinationLabel = leg.end_address;
     const { mapsUrlGoogle, mapsUrlApple } = buildDirectionsMapsUrls(originLabel, destinationLabel, mode);
@@ -1113,10 +1164,7 @@ async function executeRouteAction(plan: AssistantActionPlan): Promise<AssistantA
     };
   } catch (error) {
     console.warn("[Flow Guru] route.get failed:", error);
-    const msg = error instanceof Error ? error.message : String(error);
-    const summary = msg.includes("Maps not configured") || msg.includes("GOOGLE_MAPS_API_KEY")
-      ? "Maps isn't configured on the server yet."
-      : "Couldn't reach the maps service. Try again shortly.";
+    const summary = summarizeRouteExecutionError(error);
     return {
       action: plan.action,
       status: "failed",
@@ -1917,6 +1965,11 @@ export function buildActionFallbackReply(result: AssistantActionResult | null) {
 
   if (result.status === "needs_input") {
     return result.summary;
+  }
+
+  if (result.status === "failed") {
+    const s = result.summary?.trim();
+    return s || result.title;
   }
 
   return `${result.title}\n\n${result.summary}`;
