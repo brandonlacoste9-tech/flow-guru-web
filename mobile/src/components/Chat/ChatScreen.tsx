@@ -106,10 +106,13 @@ export const ChatScreen: React.FC = () => {
       speak(data.reply);
     } catch (error: unknown) {
       console.error('Chat send failed:', error);
-      const msg =
+      const raw =
         error instanceof Error
           ? error.message
           : 'Could not reach Flow Guru. Set EXPO_PUBLIC_FLOW_GURU_API_URL to your site URL (e.g. https://floguru.com) and try again.';
+      const msg = /unexpected token|not valid json/i.test(raw)
+        ? 'Flow Guru returned an invalid response format. Confirm EXPO_PUBLIC_FLOW_GURU_API_URL points to your deployed site origin.'
+        : raw;
       Alert.alert('Message failed', msg);
     } finally {
       setLoading(false);

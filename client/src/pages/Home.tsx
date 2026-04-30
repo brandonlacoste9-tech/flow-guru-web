@@ -326,9 +326,8 @@ export default function Home() {
     onError: (err) => toast.error("Failed to start new session")
   });
 
-  // Streaming endpoint replaced speakMutation
-  const playAudioStream = (url: string, cleanText: string) => {
-    const audio = new Audio(url);
+  const playAudioStream = (audioSrc: string, cleanText: string) => {
+    const audio = new Audio(audioSrc);
     audio.onended = () => setIsSpeaking(false);
     audio.onerror = () => {
       setIsSpeaking(false);
@@ -350,6 +349,8 @@ export default function Home() {
       window.speechSynthesis.speak(utt);
     });
   };
+
+  const speakMutation = trpc.assistant.speak.useMutation();
 
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
@@ -498,9 +499,24 @@ export default function Home() {
     
     const profileVoiceId = (profileQuery.data as any)?.voiceId;
     const finalVoiceId = profileVoiceId || VOICE_IDS[voiceGenderRef.current];
-    
-    const url = `/api/speak?text=${encodeURIComponent(clean)}&voiceId=${finalVoiceId}`;
-    playAudioStream(url, clean);
+
+    speakMutation.mutate(
+      { text: clean, voiceId: finalVoiceId },
+      {
+        onSuccess: (data) => {
+          playAudioStream(data.audioDataUri, clean);
+        },
+        onError: () => {
+          setIsSpeaking(false);
+          if (!('speechSynthesis' in window)) return;
+          window.speechSynthesis.cancel();
+          const utt = new SpeechSynthesisUtterance(clean);
+          utt.rate = 1.05;
+          utt.pitch = 1.0;
+          window.speechSynthesis.speak(utt);
+        },
+      },
+    );
   };
 
   const formatEventTime = (iso: string | null, allDay: boolean) => {

@@ -23,6 +23,17 @@ function getTrpcUrl(): string {
   return `${base}/api/trpc`;
 }
 
+function toFriendlyTransportError(rawMessage: string): string {
+  const msg = rawMessage.toLowerCase();
+  if (msg.includes("network request failed") || msg.includes("failed to fetch")) {
+    return "Could not reach Flow Guru. Check your internet connection and API URL.";
+  }
+  if (msg.includes("unexpected token") || msg.includes("non-json")) {
+    return "Flow Guru responded with an unexpected format. Verify EXPO_PUBLIC_FLOW_GURU_API_URL points to your deployed site origin.";
+  }
+  return rawMessage;
+}
+
 /** Lazy client so env vars are read after Expo loads `.env`. */
 let trpcSingleton: ReturnType<typeof createTRPCProxyClient<any>> | null = null;
 
@@ -33,6 +44,18 @@ function getTrpc(): ReturnType<typeof createTRPCProxyClient<any>> {
         httpBatchLink({
           url: getTrpcUrl(),
           transformer: superjson,
+          async fetch(input, init) {
+            const response = await fetch(input, init);
+            const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+            if (contentType.includes("application/json")) return response;
+            const body = await response.text();
+            const firstLine = body.trim().split("\n")[0]?.slice(0, 120) || "non-JSON response";
+            throw new Error(
+              toFriendlyTransportError(
+                `Flow Guru API returned non-JSON (${response.status}). ${firstLine}`,
+              ),
+            );
+          },
         }),
       ],
     });
