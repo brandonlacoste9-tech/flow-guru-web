@@ -120,7 +120,7 @@ describe("ActionResultCard", () => {
     });
 
     expect(html).toContain("I still need a start time.");
-    expect(html).toContain("has not run yet");
+    expect(html).not.toContain("has not run yet");
   });
 
   it("renders an audio player element for music.play with an audio data URI", () => {

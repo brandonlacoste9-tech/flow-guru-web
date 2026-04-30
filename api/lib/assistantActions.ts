@@ -865,6 +865,23 @@ export function sanitizePhoneForHref(raw: string): string | null {
   return digits.startsWith("+") ? digits : digits;
 }
 
+/** Prefer E.164 for tel:/sms: when the number is NANP without an explicit country code. */
+export function dialStringForTelSms(sanitizedDigits: string): string {
+  if (sanitizedDigits.startsWith("+")) return sanitizedDigits;
+  if (/^\d{10}$/.test(sanitizedDigits)) return `+1${sanitizedDigits}`;
+  if (/^\d{11}$/.test(sanitizedDigits) && sanitizedDigits.startsWith("1")) return `+${sanitizedDigits}`;
+  return sanitizedDigits;
+}
+
+/** When the user says "call 514-777-5427", dial digits directly instead of requiring contact_phone_* memory. */
+function phoneFromInlineDigits(targetRaw: string): string | null {
+  const trimmed = targetRaw.trim();
+  if (/[a-zA-ZÀ-ÿ]/.test(trimmed)) return null;
+  const digitsOnly = trimmed.replace(/\D/g, "");
+  if (digitsOnly.length < 10 || digitsOnly.length > 15) return null;
+  return sanitizePhoneForHref(trimmed);
+}
+
 async function executeContactOpenAction(
   plan: AssistantActionPlan,
   options: { userId: number; language?: "en" | "fr" },
@@ -912,9 +929,18 @@ async function executeContactOpenAction(
   }
 
   const slugCandidates = expandContactSlugCandidates(targetRaw);
-  const phone = findContactPhone(facts, slugCandidates);
+  let phone = findContactPhone(facts, slugCandidates);
   const email = findContactEmail(facts, slugCandidates);
   const channel = plan.contact?.channel ?? "call";
+
+  let inlinePhoneDisplay: string | undefined;
+  if (channel !== "email" && !phone) {
+    const inline = phoneFromInlineDigits(targetRaw);
+    if (inline) {
+      phone = inline;
+      inlinePhoneDisplay = targetRaw;
+    }
+  }
 
   if (channel === "email") {
     if (!email) {
@@ -948,11 +974,11 @@ async function executeContactOpenAction(
     return {
       action: "contact.open",
       status: "needs_input",
-      title: "No number saved",
+      title: lang === "fr" ? "Contact inconnu" : "Contact not saved",
       summary:
         lang === "fr"
-          ? `Je n’ai pas de numéro pour ${targetRaw}. Dis quelque chose comme « le numéro de ma femme est … » et je l’enregistrerai.`
-          : `I don't have a phone number saved for ${targetRaw}. Say something like “my wife's number is …” and I'll remember.`,
+          ? `Je n’ai pas de numéro enregistré pour « ${targetRaw} ». Dis par exemple « le numéro de ma femme est … » et je l’enregistrerai.`
+          : `I don't have a phone number saved for “${targetRaw}”. Say something like “my wife's number is …” and I'll remember.`,
     };
   }
 
@@ -969,8 +995,9 @@ async function executeContactOpenAction(
     };
   }
 
-  const hrefCall = `tel:${sanitized}`;
-  const hrefSms = `sms:${sanitized}`;
+  const dial = dialStringForTelSms(sanitized);
+  const hrefCall = `tel:${dial}`;
+  const hrefSms = `sms:${dial}`;
   const hrefMailto = email ? `mailto:${encodeURIComponent(email)}` : undefined;
 
   return {
@@ -988,7 +1015,7 @@ async function executeContactOpenAction(
     data: {
       targetName: targetRaw,
       channel,
-      phoneDisplay: phone,
+      phoneDisplay: inlinePhoneDisplay ?? phone,
       hrefCall,
       hrefSms,
       ...(hrefMailto ? { hrefMailto } : {}),

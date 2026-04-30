@@ -291,6 +291,33 @@ describe.sequential("assistantActions", () => {
     expect(result.data?.hrefSms).toBe("sms:+15555550199");
   });
 
+  it("contact.open dials inline digits without a saved contact_phone fact", async () => {
+    const { executeAssistantAction } = await import("./assistantActions");
+    dbMocks.listUserMemoryFacts.mockResolvedValueOnce([]);
+
+    const result = await executeAssistantAction(
+      {
+        action: "contact.open",
+        rationale: "Call number",
+        route: null,
+        weather: null,
+        news: null,
+        calendar: null,
+        music: null,
+        list: null,
+        knowledge: null,
+        ...NULL_EXTENSIONS,
+        contact: { channel: "call", targetName: "514 777 5427" },
+      },
+      { userId: 1, message: "call 514 777 5427", memoryContext: "", language: "en" },
+    );
+
+    expect(result.status).toBe("executed");
+    expect(result.data?.hrefCall).toBe("tel:+15147775427");
+    expect(result.data?.hrefSms).toBe("sms:+15147775427");
+    expect(result.data?.phoneDisplay).toBe("514 777 5427");
+  });
+
   it("planAssistantAction uses deterministic contact intent without calling the planner LLM", async () => {
     llmMocks.invokeLLM.mockRejectedValue(new Error("planner should not be called"));
     const { planAssistantAction } = await import("./assistantActions");
@@ -326,6 +353,13 @@ describe.sequential("assistantActions", () => {
     it("strips spaces and parentheses", async () => {
       const { sanitizePhoneForHref } = await import("./assistantActions");
       expect(sanitizePhoneForHref("+1 (555) 222-3333")).toBe("+15552223333");
+    });
+  });
+
+  describe("dialStringForTelSms", () => {
+    it("prefixes 10-digit NANP with +1", async () => {
+      const { dialStringForTelSms } = await import("./assistantActions");
+      expect(dialStringForTelSms("5147775427")).toBe("+15147775427");
     });
   });
 

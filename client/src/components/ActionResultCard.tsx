@@ -70,14 +70,7 @@ export function ActionResultCard({ result }: { result: AssistantActionResult }) 
       </div>
     );
   } else if (result.status !== "executed") {
-    body = (
-      <div className="space-y-2">
-        <p className="text-foreground text-[16px] leading-relaxed">{result.summary}</p>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Add what's missing above and try again — this step has not run yet.
-        </p>
-      </div>
-    );
+    body = <p className="text-foreground text-[16px] leading-relaxed">{result.summary}</p>;
   } else if (result.action === "music.play") {
     const audioDataUri = (data as { audioDataUri?: string }).audioDataUri;
     const query = (data as { query?: string }).query;
