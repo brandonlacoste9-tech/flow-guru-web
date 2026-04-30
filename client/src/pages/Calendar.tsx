@@ -1269,7 +1269,7 @@ export default function Calendar() {
 
   return (
     <div
-      className="h-screen flex flex-col font-['Outfit'] overflow-hidden"
+      className="min-h-[100dvh] min-h-screen flex flex-col font-['Outfit'] overflow-hidden"
       style={{ ...themeStyle, background: "var(--cal-bg)", color: "var(--cal-text)" }}
     >
       {/* ── Top Header ── */}

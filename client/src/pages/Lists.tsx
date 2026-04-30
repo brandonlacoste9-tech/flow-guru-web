@@ -136,7 +136,7 @@ export default function Lists() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30 overflow-hidden">
+    <div className="flex flex-col min-h-[100dvh] min-h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30 overflow-hidden">
       {/* Background Ambient Glow */}
       <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" aria-hidden="true">
         <div
@@ -203,7 +203,7 @@ export default function Lists() {
         )}
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 sm:px-6 pb-24 z-10 scrollbar-hide">
+      <main className="flex-1 overflow-y-auto px-4 sm:px-6 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] z-10 scrollbar-hide">
         <div className="max-w-2xl mx-auto py-6">
           <AnimatePresence mode="wait">
             {!selectedListId ? (

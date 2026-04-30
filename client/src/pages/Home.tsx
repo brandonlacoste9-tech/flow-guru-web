@@ -636,7 +636,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30 overflow-hidden">
+    <div className="flex flex-col min-h-[100dvh] min-h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30 overflow-hidden">
       {/* Background Ambient Glow */}
       <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" aria-hidden="true">
         <motion.div
@@ -768,7 +768,7 @@ export default function Home() {
 
       {/* Main */}
       <main className="flex-1 overflow-y-auto px-4 sm:px-5 scrollbar-hide z-10">
-        <div className="max-w-2xl mx-auto pb-36">
+        <div className="max-w-2xl mx-auto pb-[calc(9rem+env(safe-area-inset-bottom,0px))]">
 
           {/* Dashboard */}
           <AnimatePresence>
@@ -1166,7 +1166,7 @@ export default function Home() {
       </main>
 
       {/* Input bar */}
-      <footer className="p-4 sm:p-6 fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+      <footer className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none border-t border-border/40 bg-background/95 backdrop-blur-xl px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:px-6 sm:pt-4">
         <motion.div 
           className="max-w-2xl mx-auto flex items-end gap-2 sm:gap-3 pointer-events-auto"
           initial={{ y: 50, opacity: 0 }}
