@@ -1,5 +1,5 @@
 import { BaseAgent, AgentContext } from "./base";
-import { AssistantActionResult } from "../../api/lib/assistantActions";
+import { AssistantActionResult } from "../../../api/lib/assistantActions";
 import { Message, invokeLLM } from "../llm";
 import { sendPushNotification } from "../push";
 

@@ -1,6 +1,6 @@
 import { BaseAgent, AgentContext } from "./base";
-import { AssistantActionResult, planAssistantAction, executeAssistantAction } from "../../api/lib/assistantActions";
-import { Message } from "../_core/llm";
+import { AssistantActionResult, planAssistantAction, executeAssistantAction } from "../../../api/lib/assistantActions";
+import { Message } from "../llm";
 
 export class ResearchAgent extends BaseAgent {
   name = "Research Agent";

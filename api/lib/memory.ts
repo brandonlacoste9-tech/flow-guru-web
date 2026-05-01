@@ -36,7 +36,7 @@ export async function searchMemories(userId: number, query: string, limit: numbe
   .orderBy(sql`${embeddings.embedding} <=> ${JSON.stringify(queryEmbedding)}::vector`)
   .limit(limit);
 
-  return results.map(r => ({
+  return results.map((r: any) => ({
     content: r.content,
     metadata: r.metadata ? JSON.parse(r.metadata) : {},
     similarity: 1 - r.distance, // Convert distance to similarity

@@ -1,5 +1,5 @@
-import { Tool, AssistantActionResult } from "../../api/lib/assistantActions";
-import { invokeLLM, Message } from "../_core/llm";
+import { Tool, AssistantActionResult } from "../../../api/lib/assistantActions";
+import { invokeLLM, Message } from "../llm";
 
 export interface AgentContext {
   userId: number;
@@ -7,6 +7,8 @@ export interface AgentContext {
   memoryContext: string;
   timeZone?: string | null;
   language: 'en' | 'fr';
+  deviceLatitude?: number;
+  deviceLongitude?: number;
 }
 
 export abstract class BaseAgent {

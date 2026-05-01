@@ -1,6 +1,6 @@
 import { BaseAgent, AgentContext } from "./base";
-import { AssistantActionResult } from "../../api/lib/assistantActions";
-import { Message, invokeLLM } from "../_core/llm";
+import { AssistantActionResult } from "../../../../api/lib/assistantActions";
+import { Message, invokeLLM } from "../llm";
 
 export class EmailAgent extends BaseAgent {
   name = "Email Agent";

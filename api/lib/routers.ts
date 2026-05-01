@@ -249,6 +249,8 @@ function getAssistantName(facts: Array<{ factKey: string | null; factValue: stri
 
 // ─── Memory helpers ───────────────────────────────────────────────────────────
 
+
+
 function normalizeText(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -331,6 +333,8 @@ async function getOrCreateThreadId(userId: number, requestedThreadId?: number) {
 
   return threadId;
 }
+
+
 
 async function extractAndPersistMemory(params: {
   userId: number;
@@ -897,7 +901,7 @@ export const appRouter = router({
       // --- Semantic Memory Search (New Soul Phase) ---
       const semanticMemories = await searchMemories(userId, input.message, 5);
       const memoryRecallContext = semanticMemories.length > 0 
-        ? `\nRECALLED MEMORIES (based on user query):\n${semanticMemories.map(m => `- ${m.content}`).join("\n")}`
+        ? `\nRECALLED MEMORIES (based on user query):\n${semanticMemories.map((m: any) => `- ${m.content}`).join("\n")}`
         : "";
 
       let memoryContext = buildMemoryContext({
@@ -964,16 +968,6 @@ export const appRouter = router({
           deviceLatitude: input.deviceLatitude,
           deviceLongitude: input.deviceLongitude,
         }, history.slice(-10).map(m => ({ role: m.role as any, content: m.content })));
-
-      let assistantReply = buildActionFallbackReply(actionResult);
-
-      if (actionResult && actionResult.action !== "none") {
-        // Tool confirmations should be deterministic; the LLM can otherwise
-        // apologize for a tool that actually ran successfully.
-        assistantReply = buildActionFallbackReply(actionResult);
-      } else {
-        try {
-          const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
 
         for (const result of actionResults) {
           const resultJson = formatActionResultContext(result);
@@ -1056,9 +1050,8 @@ export const appRouter = router({
 
           assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
         }
-        } catch (error) {
-          console.error("[Flow Guru] Chat generation failed.", error);
-        }
+      } catch (error) {
+        console.error("[Flow Guru] Chat generation failed.", error);
       }
 
       await createConversationMessage({

@@ -4,8 +4,8 @@ import { CommunicationAgent } from "./communication.js";
 import { ResearchAgent } from "./research.js";
 import { EmailAgent } from "./email.js";
 import { BaseAgent, AgentContext } from "./base";
-import { invokeLLM, Message } from "../_core/llm";
-import { AssistantActionResult } from "../../api/lib/assistantActions";
+import { invokeLLM, Message } from "../llm";
+import { AssistantActionResult } from "../../../api/lib/assistantActions";
 
 export class MasterOrchestrator {
   private agents: Record<string, BaseAgent> = {
