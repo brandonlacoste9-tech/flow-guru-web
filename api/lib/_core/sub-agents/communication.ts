@@ -1,7 +1,7 @@
 import { BaseAgent, AgentContext } from "./base.js";
 import { AssistantActionResult } from "../../assistantActions.js";
 import { Message, invokeLLM } from "../llm.js";
-import { sendPushNotification } from "../push";
+import { sendPushNotification } from "../push.js";
 
 export class CommunicationAgent extends BaseAgent {
   name = "Communication Agent";

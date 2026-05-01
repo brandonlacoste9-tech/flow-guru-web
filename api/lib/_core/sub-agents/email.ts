@@ -1,5 +1,5 @@
 import { BaseAgent, AgentContext } from "./base.js";
-import { AssistantActionResult } from "../../../../api/lib/assistantActions";
+import { AssistantActionResult } from "../../assistantActions.js";
 import { Message, invokeLLM } from "../llm.js";
 
 export class EmailAgent extends BaseAgent {
