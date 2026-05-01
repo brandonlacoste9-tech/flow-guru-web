@@ -129,26 +129,6 @@ export const pushSubscriptions = pgTable("fg_push_subscriptions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export const subscriptions = pgTable("fg_subscriptions", {
-  id: serial("id").primaryKey(),
-  userId: integer("userId").notNull().unique(),
-  stripeCustomerId: text("stripeCustomerId"),
-  stripeSubscriptionId: text("stripeSubscriptionId").unique(),
-  stripePriceId: text("stripePriceId"),
-  status: text("status").default("free").notNull(),
-  currentPeriodEnd: timestamp("currentPeriodEnd"),
-  cancelAtPeriodEnd: integer("cancelAtPeriodEnd").default(0).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
-
-export const stripeEvents = pgTable("fg_stripe_events", {
-  id: serial("id").primaryKey(),
-  eventId: text("eventId").notNull().unique(),
-  type: text("type"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
 export const lists = pgTable("fg_lists", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
@@ -177,8 +157,6 @@ export type ConversationThread = typeof conversationThreads.$inferSelect;
 export type ConversationMessage = typeof conversationMessages.$inferSelect;
 export type ProviderConnection = typeof providerConnections.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
-export type Subscription = typeof subscriptions.$inferSelect;
-export type StripeEvent = typeof stripeEvents.$inferSelect;
 export type List = typeof lists.$inferSelect;
 export type ListItem = typeof listItems.$inferSelect;
 
@@ -219,8 +197,11 @@ export const subscriptions = pgTable("fg_subscriptions", {
   userId: integer("userId").notNull().unique(),
   stripeCustomerId: varchar("stripeCustomerId", { length: 255 }).unique(),
   stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }).unique(),
+  stripePriceId: text("stripePriceId"),
   status: varchar("status", { length: 64 }).notNull().default("inactive"),
   plan: varchar("plan", { length: 64 }).notNull().default("free"),
+  currentPeriodEnd: timestamp("currentPeriodEnd"),
+  cancelAtPeriodEnd: integer("cancelAtPeriodEnd").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -238,9 +219,10 @@ export const embeddings = pgTable("fg_embeddings", {
 
 export const stripeEvents = pgTable("fg_stripe_events", {
   id: serial("id").primaryKey(),
-  eventId: text("event_id").notNull().unique(),
+  eventId: text("eventId").notNull().unique(),
   type: text("type").notNull(),
-  processedAt: timestamp("processed_at").defaultNow(),
+  processedAt: timestamp("processedAt").defaultNow(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type Waitlist = typeof waitlist.$inferSelect;

@@ -1,6 +1,6 @@
 import { BaseAgent, AgentContext } from "./base";
 import { AssistantActionResult } from "../../api/lib/assistantActions";
-import { Message, invokeLLM } from "../_core/llm";
+import { Message, invokeLLM } from "../llm";
 import { sendPushNotification } from "../push";
 
 export class CommunicationAgent extends BaseAgent {

@@ -1839,20 +1839,6 @@ async function executeKnowledgeSearch(
         "Vertex AI Search isn't configured yet. Add VERTEX_SEARCH_PROJECT_ID, VERTEX_SEARCH_LOCATION, VERTEX_SEARCH_DATA_STORE_ID, and VERTEX_SEARCH_GOOGLE_CREDENTIALS_JSON (see docs/VERTEX_SEARCH.md).",
       provider: "vertex-ai-search",
     };
-<<<<<<< HEAD
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Spotify failed.";
-    const status = msg.includes("not connected") ? "needs_connection" : "failed";
-    
-    return {
-      action: "music.play",
-      status,
-      title: status === "needs_connection" ? "Spotify Connection Required" : "Spotify snag",
-      summary: status === "needs_connection" 
-        ? "You haven't linked your Spotify account yet. Please connect it in the Integrations settings to enable voice-controlled music."
-        : msg,
-      provider: "spotify",
-=======
   }
 
   const q = plan.knowledge?.query?.trim() || options.message.trim();
@@ -1874,7 +1860,6 @@ async function executeKnowledgeSearch(
       title: "Knowledge search failed",
       summary: "I couldn't query your knowledge base right now. Try again shortly.",
       provider: "vertex-ai-search",
->>>>>>> 58db94da6549a6fb3f6f048284f98b54c9bc5c19
     };
   }
 }
