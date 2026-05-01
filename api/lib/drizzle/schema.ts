@@ -1,4 +1,16 @@
-import { pgTable, serial, text, varchar, timestamp, pgEnum, integer, index, bigint } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, varchar, timestamp, pgEnum, integer, index, bigint, customType } from "drizzle-orm/pg-core";
+
+export const vector = customType<{ data: number[] }>({
+  dataType(config) {
+    return `vector(${config?.dimensions || 1536})`;
+  },
+  toDriver(value: number[]) {
+    return JSON.stringify(value);
+  },
+  fromDriver(value: string) {
+    return JSON.parse(value) as number[];
+  }
+});
 
 // Enums with unique names to avoid collisions in shared DB
 export const roleEnum = pgEnum("fg_role", ["user", "admin"]);
@@ -190,6 +202,17 @@ export const subscriptions = pgTable("fg_subscriptions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
+
+export const embeddings = pgTable("fg_embeddings", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  content: text("content").notNull(),
+  metadata: text("metadata"), // JSON string
+  embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("fg_embeddings_user_idx").on(table.userId),
+}));
 
 export const stripeEvents = pgTable("fg_stripe_events", {
   id: serial("id").primaryKey(),

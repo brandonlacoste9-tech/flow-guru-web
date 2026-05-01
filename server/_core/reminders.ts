@@ -25,14 +25,45 @@ export async function checkAllReminders() {
         const key = `wakeup-${profile.userId}-${todayKey}`;
         if (!firedReminders.has(key)) {
           firedReminders.add(key);
+          
           const user = await db.select().from(schema.users).where(eq(schema.users.id, profile.userId)).limit(1);
-          const name = user[0]?.name || 'Brandon';
+          const userName = user[0]?.name || 'Brandon';
+          
+          // Generate a more proactive briefing
+          let briefingBody = `It's ${profile.wakeUpTime} — time to rise and shine, ${userName}!`;
+          try {
+            const { buildBriefingData } = await import('./briefing');
+            const { listUserMemoryFacts } = await import('../db');
+            
+            const memoryFacts = await listUserMemoryFacts(profile.userId);
+            const locationFact = memoryFacts.find(
+              (f: any) => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
+            );
+            
+            const briefing = await buildBriefingData({
+              userId: profile.userId,
+              userName,
+              assistantName: 'Flow Guru',
+              location: locationFact?.factValue,
+              buddyPersonality: profile.buddyPersonality,
+            });
+            
+            if (briefing.script) {
+              briefingBody = briefing.script;
+            }
+          } catch (e) {
+            console.error('[Reminders] Briefing generation failed, using fallback:', e);
+          }
           
           await sendPushNotification(profile.userId, {
-            title: '☀️ Good Morning!',
-            body: `It's ${profile.wakeUpTime} — time to rise and shine, ${name}!`,
+            title: '☀️ Morning Briefing',
+            body: briefingBody,
             tag: key,
             alarmSound: profile.alarmSound || 'chime',
+            data: {
+              type: 'morning_briefing',
+              userId: profile.userId,
+            }
           });
         }
       }
@@ -107,8 +138,54 @@ export async function checkAllReminders() {
         });
       }
     }
+    // 4. Periodically check for proactive nudges (every 30 minutes)
+    if (mm % 30 === 0) {
+      await checkProactiveNudges(db);
+    }
   } catch (error) {
     console.error('[Reminders] Background check failed:', error);
+  }
+}
+
+async function checkProactiveNudges(db: any) {
+  try {
+    const { CommunicationAgent } = await import('./sub-agents/communication.js');
+    const { getUserMemoryProfile, listUserMemoryFacts, listLocalEvents, listUserLists, getListItems } = await import('../db.js');
+    
+    const commAgent = new CommunicationAgent();
+    const profiles = await db.select().from(schema.userMemoryProfiles);
+
+    for (const profile of profiles) {
+      const now = new Date();
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const [events, lists, memoryFacts, user] = await Promise.all([
+        listLocalEvents(profile.userId, now, endOfDay),
+        listUserLists(profile.userId),
+        listUserMemoryFacts(profile.userId),
+        db.select().from(schema.users).where(eq(schema.users.id, profile.userId)).limit(1)
+      ]);
+
+      const listState = await Promise.all(lists.map(async (l: any) => ({
+        name: l.name,
+        items: (await getListItems(profile.userId, l.id)).filter((i: any) => !i.completed).map((i: any) => i.content)
+      })));
+
+      const locationFact = memoryFacts.find((f: any) => f.factKey === "location" || f.factKey === "city");
+      
+      await commAgent.generateProactiveNudge({
+        userId: profile.userId,
+        userName: user[0]?.name || 'Brandon',
+        memoryContext: `Location: ${locationFact?.factValue || 'Unknown'}`,
+        language: 'en'
+      }, {
+        events: events.map((e: any) => ({ title: e.title, start: e.startAt, end: e.endAt })),
+        lists: listState
+      });
+    }
+  } catch (error) {
+    console.error('[Reminders] Proactive nudge check failed:', error);
   }
 }
 

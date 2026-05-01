@@ -1,9 +1,4 @@
-// Removed dotenv for Vercel stability, but re-enabled for Local Dev
-import dotenv from "dotenv";
-if (!process.env.VERCEL) {
-  dotenv.config();
-}
-
+import "./load-env";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -74,9 +69,12 @@ export async function createMainApp() {
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
+    console.log('>>> SETTING UP VITE...');
     const { setupVite } = await import("./vite");
     const server = createServer(app);
+    console.log('>>> CALLING setupVite...');
     await setupVite(app, server);
+    console.log('>>> VITE SETUP COMPLETE.');
     return { app, server };
   } else {
     // ---- PRODUCTION STATIC SERVING (INLINED FOR VERCEL STABILITY) ----

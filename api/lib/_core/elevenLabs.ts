@@ -22,6 +22,8 @@ const DEFAULT_VOICE_ID = "N2lVS1wzUvBXUvBCW9ng"; // Callum (Buddy-like, Energeti
 const DEFAULT_TTS_MODEL = "eleven_turbo_v2_5";
 const DEFAULT_STS_MODEL = "eleven_english_sts_v2";
 
+const ttsCache = new Map<string, Buffer>();
+
 /**
  * Convert text to speech using ElevenLabs
  */
@@ -32,6 +34,13 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
   }
 
   const voiceId = options.voiceId || DEFAULT_VOICE_ID;
+  const modelId = options.modelId || DEFAULT_TTS_MODEL;
+  
+  // Simple in-memory cache to save credits and reduce latency
+  const cacheKey = `${voiceId}:${modelId}:${options.text}`;
+  if (ttsCache.has(cacheKey)) {
+    return ttsCache.get(cacheKey)!;
+  }
   const url = ENV.useLocalAi ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
   const body: any = ENV.useLocalAi 
@@ -59,7 +68,9 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
     throw new Error(`ElevenLabs TTS failed: ${response.status} ${error}`);
   }
 
-  return Buffer.from(await response.arrayBuffer());
+  const buffer = Buffer.from(await response.arrayBuffer());
+  ttsCache.set(cacheKey, buffer);
+  return buffer;
 }
 
 /**

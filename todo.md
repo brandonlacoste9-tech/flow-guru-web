@@ -1,3 +1,5 @@
+
+
 # Project TODO
 
 - [x] Define the minimal chat-only product structure for authenticated users with no dashboard or sidebar

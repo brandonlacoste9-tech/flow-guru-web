@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { invokeLLM, type Tool, type ToolCall } from "./_core/llm.js";
 import { systemRouter } from "./_core/systemRouter.js";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc.js";
+import { protectedProcedure, publicProcedure, router, rateLimitedProcedure, protectedRateLimitedProcedure } from "./_core/trpc.js";
 import {
   buildActionFallbackReply,
   executeAssistantAction,
@@ -48,7 +48,9 @@ import {
 } from "./db.js";
 import { generateBriefing, generateQuickSound } from "./_core/briefing.js";
 import { textToSpeech, getVoices } from "./_core/elevenLabs.js";
-import { listGoogleCalendarEvents } from "./_core/googleCalendar.js";
+import { listGoogleCalendarEvents } from "./googleCalendar.js";
+import { MasterOrchestrator } from "../../server/_core/sub-agents/orchestrator.js";
+import { searchMemories, storeMemory } from "./memory.js";
 
 const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
@@ -486,6 +488,12 @@ async function extractAndPersistMemory(params: {
 
   await createUserMemoryFacts(params.userId, newFacts);
 
+  // Store the full exchange in semantic memory (Vector Soul)
+  await storeMemory(params.userId, `User: ${params.userMessage}\nAssistant: ${params.assistantReply}`, {
+    timestamp: new Date().toISOString(),
+    type: "conversation_exchange",
+  });
+
   return {
     profileUpdated: hasProfileContent,
     factsAdded: newFacts.length,
@@ -497,7 +505,7 @@ async function extractAndPersistMemory(params: {
 export const appRouter = router({
   system: systemRouter,
   calendar: router({
-    list: publicProcedure
+    list: rateLimitedProcedure
       .input(z.object({
         startAt: z.string(),
         endAt: z.string(),
@@ -506,7 +514,7 @@ export const appRouter = router({
         const userId = await resolveAssistantUserId(ctx.user);
         return await listLocalEvents(userId, new Date(input.startAt), new Date(input.endAt));
       }),
-    create: publicProcedure
+    create: rateLimitedProcedure
       .input(z.object({
         title: z.string().min(1).max(255),
         description: z.string().optional(),
@@ -532,7 +540,7 @@ export const appRouter = router({
         });
         return { id };
       }),
-    update: publicProcedure
+    update: rateLimitedProcedure
       .input(z.object({
         id: z.number(),
         title: z.string().min(1).max(255).optional(),
@@ -555,7 +563,7 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-    delete: publicProcedure
+    delete: rateLimitedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -574,7 +582,8 @@ export const appRouter = router({
     }),
   }),
   assistant: router({
-    bootstrap: publicProcedure.input(z.object({ language: z.enum(['en', 'fr']).optional() })).query(async ({ ctx, input }) => {
+    bootstrap: rateLimitedProcedure
+      .input(z.object({ language: z.enum(['en', 'fr']).optional() })).query(async ({ ctx, input }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const [profile, memoryFacts, thread, providerConnections, subscription] = await Promise.all([
         getUserMemoryProfile(userId),
@@ -695,7 +704,8 @@ export const appRouter = router({
         subscription,
       };
     }),
-    startFresh: publicProcedure.mutation(async ({ ctx }) => {
+    startFresh: rateLimitedProcedure
+      .mutation(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await createConversationThread({
         userId,
@@ -715,7 +725,65 @@ export const appRouter = router({
         providerConnections,
       };
     }),
-    history: publicProcedure.query(async ({ ctx }) => {
+    getUserContext: rateLimitedProcedure.query(async ({ ctx }) => {
+      const userId = await resolveAssistantUserId(ctx.user);
+      const [profile, memoryFacts, providerConnections, subscription] = await Promise.all([
+        getUserMemoryProfile(userId),
+        listUserMemoryFacts(userId),
+        listProviderConnections(userId),
+        getSubscription(userId),
+      ]);
+
+      const thread = await findLatestConversationThread(userId);
+      const messages = thread ? await listConversationMessages(thread.id) : [];
+
+      // Get current weather if location is known
+      const locationFact = memoryFacts.find(
+        (f: any) => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
+      );
+      const userLocation = locationFact?.factValue || null;
+      
+      let weather = null;
+      if (userLocation) {
+        try {
+          const plan = await planAssistantAction({ 
+            userName: ctx.user?.name, 
+            memoryContext: `Location: ${userLocation}`, 
+            message: "current weather", 
+            language: 'en' 
+          });
+          const result = await executeAssistantAction(plan, { 
+            userId, 
+            userName: ctx.user?.name, 
+            message: "current weather", 
+            memoryContext: `Location: ${userLocation}`, 
+            language: 'en' 
+          });
+          if (result.status === "executed" && result.data) {
+            weather = result.data;
+          }
+        } catch (e) {}
+      }
+
+      // Get today's events
+      const now = new Date();
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
+      const todayEvents = await listLocalEvents(userId, now, endOfDay);
+
+      return {
+        profile,
+        memoryFacts,
+        providerConnections,
+        subscription,
+        thread,
+        messages,
+        weather,
+        todayEvents,
+      };
+    }),
+    history: rateLimitedProcedure
+      .query(async ({ ctx }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const thread = await findLatestConversationThread(userId);
       if (!thread || thread.userId !== userId) {
@@ -731,7 +799,8 @@ export const appRouter = router({
         messages,
       };
     }),
-    send: publicProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
+    send: rateLimitedProcedure
+      .input(sendMessageInput).mutation(async ({ ctx, input }) => {
       const userId = await resolveAssistantUserId(ctx.user);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
 
@@ -777,11 +846,17 @@ export const appRouter = router({
       const assistantName = assistantNameFact?.factValue || "FLO GURU";
       const userName = ctx.user?.name || "Brandon";
 
+      // --- Semantic Memory Search (New Soul Phase) ---
+      const semanticMemories = await searchMemories(userId, input.message, 5);
+      const memoryRecallContext = semanticMemories.length > 0 
+        ? `\nRECALLED MEMORIES (based on user query):\n${semanticMemories.map(m => `- ${m.content}`).join("\n")}`
+        : "";
+
       const memoryContext = buildMemoryContext({
         userName,
         profile,
         facts: memoryFacts,
-      });
+      }) + memoryRecallContext;
 
       const systemPrompt = [
         `You are ${assistantName}, ${userName}'s personal assistant.`,
@@ -809,87 +884,72 @@ export const appRouter = router({
         memoryContext,
       ].join("\n");
 
-      let actionResult: AssistantActionResult | null = null;
+      let actionResults: AssistantActionResult[] = [];
+      const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
 
       try {
-        // PERF: Combined Planner + Action Execution
-        const plannedAction = await planAssistantAction({
+        const orchestrator = new MasterOrchestrator();
+        const currentMemoryContext = buildMemoryContext({
           userName,
-          memoryContext,
-          message: input.message,
-          language: input.language ?? 'en',
+          profile,
+          facts: memoryFacts,
         });
-        
-        actionResult = await executeAssistantAction(plannedAction, {
+
+        actionResults = await orchestrator.route(input.message, {
           userId,
           userName,
-          message: input.message,
-          memoryContext,
+          memoryContext: currentMemoryContext,
           timeZone: input.timeZone ?? null,
           language: input.language ?? 'en',
-        });
-      } catch (error) {
-        console.error("[Flow Guru] SYSTEM FAILURE IN SEND:", error);
-        actionResult = {
-          action: "none" as const,
-          status: "failed" as const,
-          title: "Action unavailable",
-          summary: "I hit a snag while trying to carry that out, so I'll respond conversationally instead.",
-        };
-      }
+        }, history.slice(-10).map(m => ({ role: m.role as any, content: m.content })));
 
-      let assistantReply = buildActionFallbackReply(actionResult);
-
-      try {
-        const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
-
-        if (actionResult && actionResult.action !== "none") {
-          const resultJson = formatActionResultContext(actionResult);
-          if (actionResult.status === "executed") {
+        for (const result of actionResults) {
+          const resultJson = formatActionResultContext(result);
+          if (result.status === "executed") {
             actionSystemMessages.push({
               role: "system" as const,
-              content: [
-                "TOOL RESULT — YOU MUST ACKNOWLEDGE THIS IN YOUR REPLY:",
-                resultJson,
-                "",
-                "INSTRUCTION: The tool ran successfully. Your reply MUST confirm what happened using the data above.",
-                "Keep it short (1-2 sentences), warm, and enthusiastic. DO NOT ignore the tool result.",
-              ].join("\n"),
-            });
-          } else if (actionResult.status === "needs_connection") {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — CONNECTION NEEDED:",
-                resultJson,
-                "",
-                "The user wants to do something that requires connecting an account first.",
-                "Warmly explain they need to connect the service.",
-              ].join("\n"),
-            });
-          } else if (actionResult.status === "needs_input") {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — MORE INFO NEEDED:",
-                resultJson,
-                "",
-                "The tool needs more information. Ask the user for the missing detail in a natural way.",
-              ].join("\n"),
+              content: `TOOL RESULT (${result.action}):\n${resultJson}`,
             });
           } else {
             actionSystemMessages.push({
               role: "system" as const,
-              content: [
-                "TOOL RESULT — FAILED:",
-                resultJson,
-                "",
-                "The tool didn't work. Briefly acknowledge the issue.",
-              ].join("\n"),
+              content: `TOOL NOTIFY (${result.action}): ${result.status === "needs_connection" ? "Connection required" : result.status === "needs_input" ? "More info needed" : "Failed"}\n${resultJson}`,
             });
           }
         }
+        
+        // If no specialized agents were called, fallback to the generic planner for basic chat actions (weather, news, etc.)
+        if (actionResults.length === 0) {
+          const plannedAction = await planAssistantAction({
+            userName,
+            memoryContext: currentMemoryContext,
+            message: input.message,
+            language: input.language ?? 'en',
+          });
+          
+          if (plannedAction.action !== "none") {
+            const result = await executeAssistantAction(plannedAction, {
+              userId,
+              userName,
+              message: input.message,
+              memoryContext: currentMemoryContext,
+              timeZone: input.timeZone ?? null,
+              language: input.language ?? 'en',
+            });
+            actionResults.push(result);
+            actionSystemMessages.push({
+              role: "system" as const,
+              content: `TOOL RESULT (${plannedAction.action}):\n${formatActionResultContext(result)}`,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("[Flow Guru] ORCHESTRATION ERROR:", error);
+      }
 
+      let assistantReply = buildActionFallbackReply(actionResults[0] || null);
+
+      try {
         // PERF: Final Chat Generation
         const llmResponse = await invokeLLM({
           messages: [
@@ -926,14 +986,14 @@ export const appRouter = router({
         assistantReply,
       }).catch(err => console.warn("[Flow Guru] Background memory extraction failed:", err));
 
-      const messages = await listConversationMessages(threadId);
+      const updatedMessages = await listConversationMessages(threadId);
 
       return {
         threadId,
         reply: assistantReply,
-        messages,
+        messages: updatedMessages,
         memoryUpdate: { profileUpdated: false, factsAdded: 0 }, // Backgrounded
-        actionResult,
+        actionResult: actionResults[0] || null, // Return first result for UI compatibility
       };
     }),
     briefing: publicProcedure.mutation(async ({ ctx }) => {

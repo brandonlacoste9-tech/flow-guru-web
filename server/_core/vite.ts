@@ -13,12 +13,14 @@ export async function setupVite(app: Express, server: Server) {
     allowedHosts: true as const,
   };
 
+  console.log('>>> VITE OPTIONS PREPARED. CALLING createViteServer...');
   const vite = await createViteServer({
     ...viteConfig,
     configFile: false,
     server: serverOptions,
     appType: "custom",
   });
+  console.log('>>> createViteServer COMPLETE.');
 
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {

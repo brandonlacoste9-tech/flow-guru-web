@@ -386,4 +386,40 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   return (await response.json()) as InvokeResult;
+}
+
+export async function generateEmbedding(text: string): Promise<number[]> {
+  const hasDeepSeek = process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY.trim().length > 0;
+  const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
+
+  if (!hasDeepSeek && !hasForge) {
+    // Return a mock 1536-dim vector for simulation mode
+    return new Array(1536).fill(0).map(() => Math.random());
+  }
+
+  const apiUrl = hasDeepSeek 
+    ? "https://api.deepseek.com/v1/embeddings" 
+    : `${ENV.forgeApiUrl?.replace(/\/$/, "") || "https://forge.manus.im"}/v1/embeddings`;
+    
+  const apiKey = process.env.DEEPSEEK_API_KEY || ENV.forgeApiKey;
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: hasDeepSeek ? "deepseek-embed" : "text-embedding-3-small",
+      input: text,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Embedding API failed (${response.status}): ${errorText}`);
+  }
+
+  const result = await response.json();
+  return result.data[0].embedding;
 }

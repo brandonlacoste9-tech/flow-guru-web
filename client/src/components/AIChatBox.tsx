@@ -2,9 +2,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, User, Sparkles } from "lucide-react";
+import { Loader2, Send, User, Sparkles, Command } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Streamdown } from "streamdown";
+import { Skeleton } from "./ui/skeleton";
 
 /**
  * Message type matching server-side LLM Message interface
@@ -199,23 +200,33 @@ export function AIChatBox({
       {/* Messages Area */}
       <div ref={scrollAreaRef} className="flex-1 overflow-hidden">
         {displayMessages.length === 0 ? (
-          <div className="flex h-full flex-col p-4">
-            <div className="flex flex-1 flex-col items-center justify-center gap-6 text-muted-foreground">
-              <div className="flex flex-col items-center gap-3">
-                <Sparkles className="size-12 opacity-20" />
-                <p className="text-sm">{emptyStateMessage}</p>
+          <div className="flex h-full flex-col p-8">
+            <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
+              <div className="relative">
+                <div className="absolute -inset-4 rounded-full bg-primary/10 blur-2xl animate-pulse" />
+                <div className="relative size-20 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
+                  <Command className="size-10 text-primary-foreground" />
+                </div>
+              </div>
+              
+              <div className="space-y-2 max-w-md">
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">Activate the Assistant</h2>
+                <p className="text-muted-foreground">
+                  Your sovereign digital companion is ready. Manage your schedule, check the weather, or just chat.
+                </p>
               </div>
 
               {suggestedPrompts && suggestedPrompts.length > 0 && (
-                <div className="flex max-w-2xl flex-wrap justify-center gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
                   {suggestedPrompts.map((prompt, index) => (
                     <button
                       key={index}
                       onClick={() => onSendMessage(prompt)}
                       disabled={isLoading}
-                      className="rounded-lg border border-border bg-card px-4 py-2 text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      className="group flex items-center gap-3 rounded-xl border border-border bg-card/50 p-4 text-left text-sm transition-all hover:bg-accent hover:border-primary/30 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {prompt}
+                      <Sparkles className="size-4 text-primary opacity-50 group-hover:opacity-100" />
+                      <span className="flex-1 truncate">{prompt}</span>
                     </button>
                   ))}
                 </div>
@@ -282,18 +293,20 @@ export function AIChatBox({
 
               {isLoading && (
                 <div
-                  className="flex items-start gap-3"
+                  className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300"
                   style={
                     minHeightForLastMessage > 0
                       ? { minHeight: `${minHeightForLastMessage}px` }
                       : undefined
                   }
                 >
-                  <div className="size-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
+                  <div className="size-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center animate-pulse">
                     <Sparkles className="size-4 text-primary" />
                   </div>
-                  <div className="rounded-lg bg-muted px-4 py-2.5">
-                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                  <div className="flex-1 space-y-2 max-w-[70%]">
+                    <Skeleton className="h-4 w-full rounded-lg" />
+                    <Skeleton className="h-4 w-[90%] rounded-lg" />
+                    <Skeleton className="h-4 w-[60%] rounded-lg" />
                   </div>
                 </div>
               )}
