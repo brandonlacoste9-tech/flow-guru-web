@@ -11,6 +11,22 @@ let _pg: ReturnType<typeof postgres> | null = null;
 let schemaReadyPromise: Promise<void> | null = null;
 
 const ANONYMOUS_OPEN_ID = "__flow_guru_anonymous__";
+const normalizeMemoryText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+
+const EXPECTED_TABLES = [
+  "fg_users",
+  "fg_threads",
+  "fg_messages",
+  "fg_profiles",
+  "fg_facts",
+  "fg_connections",
+  "fg_local_events",
+  "fg_lists",
+  "fg_list_items",
+  "fg_push_subscriptions",
+  "fg_subscriptions",
+  "fg_stripe_events",
+] as const;
 
 /**
  * Minimal Flow Guru DDL for empty / partial Neon databases.
@@ -47,6 +63,24 @@ CREATE TABLE IF NOT EXISTS fg_push_subscriptions (
     endpoint TEXT NOT NULL UNIQUE,
     p256dh TEXT NOT NULL,
     auth TEXT NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_subscriptions (
+    id SERIAL PRIMARY KEY,
+    "userId" INTEGER NOT NULL UNIQUE,
+    "stripeCustomerId" TEXT,
+    "stripeSubscriptionId" TEXT UNIQUE,
+    "stripePriceId" TEXT,
+    status TEXT DEFAULT 'free' NOT NULL,
+    "currentPeriodEnd" TIMESTAMP,
+    "cancelAtPeriodEnd" INTEGER DEFAULT 0 NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
+    "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fg_stripe_events (
+    id SERIAL PRIMARY KEY,
+    "eventId" TEXT NOT NULL UNIQUE,
+    type TEXT,
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
 CREATE TABLE IF NOT EXISTS fg_lists (
@@ -163,9 +197,9 @@ ALTER TABLE fg_users ADD COLUMN IF NOT EXISTS "personaStyle" VARCHAR(64);
 ALTER TABLE fg_threads ADD COLUMN IF NOT EXISTS "shareToken" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "voiceId" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "buddyPersonality" TEXT;
+ALTER TABLE fg_lists ADD COLUMN IF NOT EXISTS "icon" VARCHAR(64);
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "reminderAt" TIMESTAMP;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "locationTrigger" TEXT;
-
 DO $$ 
 BEGIN 
     IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'fg_provider_type') THEN
@@ -187,18 +221,28 @@ CREATE TABLE IF NOT EXISTS fg_subscriptions (
     "userId" INTEGER NOT NULL UNIQUE,
     "stripeCustomerId" VARCHAR(255) UNIQUE,
     "stripeSubscriptionId" VARCHAR(255) UNIQUE,
+    "stripePriceId" VARCHAR(255),
     status VARCHAR(64) DEFAULT 'inactive' NOT NULL,
     plan VARCHAR(64) DEFAULT 'free' NOT NULL,
+    "currentPeriodEnd" TIMESTAMP,
+    "cancelAtPeriodEnd" INTEGER DEFAULT 0 NOT NULL,
     "createdAt" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS fg_stripe_events (
     id SERIAL PRIMARY KEY,
-    event_id TEXT NOT NULL UNIQUE,
-    type TEXT NOT NULL,
-    processed_at TIMESTAMP DEFAULT NOW()
+    "eventId" TEXT NOT NULL UNIQUE,
+    type TEXT,
+    "processedAt" TIMESTAMP DEFAULT NOW()
 );
+
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "stripeCustomerId" TEXT;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "stripeSubscriptionId" TEXT;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "stripePriceId" TEXT;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'free' NOT NULL;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "currentPeriodEnd" TIMESTAMP;
+ALTER TABLE fg_subscriptions ADD COLUMN IF NOT EXISTS "cancelAtPeriodEnd" INTEGER DEFAULT 0 NOT NULL;
 `;
 
 async function ensureSchemaOnce(): Promise<void> {
@@ -212,15 +256,30 @@ async function ensureSchemaOnce(): Promise<void> {
         .map((s: string) => s.trim())
         .filter((s: string) => s.length > 0);
       for (const stmt of statements) {
+        const isCreate = /^CREATE\s+TABLE/i.test(stmt);
         try {
           await _pg!.unsafe(stmt + ';');
         } catch (err: any) {
-          // Log but don't throw on non-critical DDL errors (e.g. column already exists)
-          console.warn('[DB] DDL stmt warning:', err?.message?.slice(0, 120));
+          const msg = err?.message ?? String(err);
+          if (isCreate) {
+            console.error("[DB] CREATE TABLE failed - schema bootstrap aborted:", msg);
+            throw new Error(`Schema bootstrap failed on: ${stmt.slice(0, 80)}... - ${msg}`);
+          }
+          console.warn("[DB] DDL stmt warning (non-fatal):", msg.slice(0, 200));
         }
       }
+
+      for (const table of EXPECTED_TABLES) {
+        try {
+          await _pg!.unsafe(`SELECT 1 FROM ${table} LIMIT 0;`);
+        } catch (err: any) {
+          throw new Error(`Schema assertion failed: table ${table} not present after DDL - ${err?.message ?? String(err)}`);
+        }
+      }
+      console.log("[DB] Schema bootstrap OK - all", EXPECTED_TABLES.length, "fg_ tables verified");
     })().catch(err => {
       schemaReadyPromise = null;
+      console.error("[DB] ensureSchemaOnce failed; will retry on next request:", err?.message);
       throw err;
     });
   }
@@ -279,8 +338,46 @@ export async function getDb() {
 
 /**
  * Public assistant routes allow unauthenticated use; DB rows must still reference a real user.
- * Uses a stable synthetic openId so guest chat shares one logical profile (or upgrade later).
+ * Web guests without login share one synthetic anonymous profile; mobile can pass guestDeviceId for a per-install profile.
  */
+/** Stable openId prefix for Expo / mobile installs (scoped memory vs shared web anonymous). */
+const MOBILE_GUEST_OPEN_ID_PREFIX = "mobile:";
+
+export async function getOrCreateMobileGuestUser(deviceId: string): Promise<schema.User> {
+  const normalized = deviceId.trim().toLowerCase();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)
+  ) {
+    throw new Error("Invalid guest device id");
+  }
+  const openId = `${MOBILE_GUEST_OPEN_ID_PREFIX}${normalized}`;
+  const db = await getDb();
+  if (!db) {
+    throw new Error("DATABASE_URL is not configured");
+  }
+  await ensureTables(db);
+  const existing = await getUserByOpenId(openId);
+  if (existing) return existing;
+
+  try {
+    await db.insert(schema.users).values({
+      openId,
+      name: "Mobile",
+      email: null,
+      loginMethod: "mobile-guest",
+      lastSignedIn: new Date(),
+    });
+  } catch {
+    /* unique race: another request created the same openId */
+  }
+
+  const created = await getUserByOpenId(openId);
+  if (!created) {
+    throw new Error("Failed to create mobile guest user");
+  }
+  return created;
+}
+
 export async function getOrCreateAnonymousUser(): Promise<schema.User> {
   const db = await getDb();
   if (!db) {
@@ -304,8 +401,20 @@ export async function getOrCreateAnonymousUser(): Promise<schema.User> {
   return created;
 }
 
-export async function resolveAssistantUserId(user: schema.User | null): Promise<number> {
+export async function resolveAssistantUserId(
+  user: schema.User | null,
+  guestDeviceId?: string | null,
+): Promise<number> {
   if (user?.id != null) return user.id;
+  const trimmed = guestDeviceId?.trim();
+  if (trimmed) {
+    try {
+      const mobileUser = await getOrCreateMobileGuestUser(trimmed);
+      return mobileUser.id;
+    } catch (err) {
+      console.warn("[Flow Guru] guestDeviceId rejected; using shared anonymous user:", err);
+    }
+  }
   const anon = await getOrCreateAnonymousUser();
   return anon.id;
 }
@@ -333,12 +442,32 @@ export async function getUserByEmail(email: string): Promise<schema.User | null>
     const db = await getDb();
     if (!db) return null;
     await ensureTables(db);
+    const esc = email.replace(/'/g, "''");
+    // Prefer rows that have email/password login when several fg_users share one inbox (Google + email rows).
     const results = await (db as any).execute(
-      `SELECT * FROM fg_users WHERE lower(email) = lower('${email.replace(/'/g, "''")}') LIMIT 1`
+      `SELECT * FROM fg_users WHERE lower(email) = lower('${esc}') ` +
+        `ORDER BY CASE WHEN "passwordHash" IS NOT NULL AND length(trim(COALESCE("passwordHash", ''))) > 0 THEN 0 ELSE 1 END, id ASC LIMIT 1`
     );
     return (results.rows || results)[0] || null;
   } catch (err: any) {
     console.error("[DB] getUserByEmail failed:", err.message);
+    return null;
+  }
+}
+
+/** Same inbox, oldest row first — used by Google OAuth to merge into an existing account instead of inserting a duplicate. */
+export async function getUserByEmailOldest(email: string): Promise<schema.User | null> {
+  try {
+    const db = await getDb();
+    if (!db) return null;
+    await ensureTables(db);
+    const esc = email.replace(/'/g, "''");
+    const results = await (db as any).execute(
+      `SELECT * FROM fg_users WHERE lower(email) = lower('${esc}') ORDER BY id ASC LIMIT 1`
+    );
+    return (results.rows || results)[0] || null;
+  } catch (err: any) {
+    console.error("[DB] getUserByEmailOldest failed:", err.message);
     return null;
   }
 }
@@ -509,8 +638,54 @@ export async function createUserMemoryFacts(userId: number, facts: any[]): Promi
       const db = await getDb();
       if (!db) return;
       await ensureTables(db);
-      const values = facts.map(f => ({ ...f, userId }));
-      await db.insert(schema.userMemoryFacts).values(values);
+      for (const fact of facts) {
+        const cleanFactValue = typeof fact.factValue === "string" ? fact.factValue.trim() : "";
+        const cleanFactKey = typeof fact.factKey === "string" && fact.factKey.trim() ? fact.factKey.trim() : null;
+        const category = fact.category ?? "general";
+
+        if (!cleanFactValue) continue;
+
+        const existingRows = await db
+          .select({
+            id: schema.userMemoryFacts.id,
+            factValue: schema.userMemoryFacts.factValue,
+            factKey: schema.userMemoryFacts.factKey,
+          })
+          .from(schema.userMemoryFacts)
+          .where(
+            and(
+              eq(schema.userMemoryFacts.userId, userId),
+              eq(schema.userMemoryFacts.category, category)
+            )
+          )
+          .orderBy(desc(schema.userMemoryFacts.updatedAt))
+          .limit(100);
+
+        const normalizedIncoming = normalizeMemoryText(cleanFactValue);
+        const keyedMatch = cleanFactKey
+          ? existingRows.find((row: any) => (row.factKey ?? "").trim() === cleanFactKey)
+          : null;
+
+        if (keyedMatch) {
+          if (normalizeMemoryText(keyedMatch.factValue) === normalizedIncoming) continue;
+          await db
+            .update(schema.userMemoryFacts)
+            .set({ factValue: cleanFactValue, updatedAt: new Date() })
+            .where(eq(schema.userMemoryFacts.id, keyedMatch.id));
+          continue;
+        }
+
+        const duplicate = existingRows.find((row: any) => normalizeMemoryText(row.factValue) === normalizedIncoming);
+        if (duplicate) continue;
+
+        await db.insert(schema.userMemoryFacts).values({
+          ...fact,
+          userId,
+          category,
+          factValue: cleanFactValue,
+          factKey: cleanFactKey,
+        });
+      }
     } catch (err) {
       console.error("[DB] createUserMemoryFacts failed:", err);
     }
@@ -738,7 +913,8 @@ export async function listUserLists(userId: number): Promise<schema.List[]> {
     if (!db) return [];
     await ensureTables(db);
     return await db.select().from(schema.lists).where(eq(schema.lists.userId, userId)).orderBy(desc(schema.lists.createdAt));
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[DB] listUserLists failed:", err?.message ?? err);
     return [];
   }
 }
@@ -751,7 +927,8 @@ export async function getListItems(userId: number, listId: number): Promise<sche
     return await db.select().from(schema.listItems)
       .where(and(eq(schema.listItems.userId, userId), eq(schema.listItems.listId, listId)))
       .orderBy(schema.listItems.createdAt);
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[DB] getListItems failed:", err?.message ?? err);
     return [];
   }
 }
@@ -853,4 +1030,129 @@ export async function setListItemLocationTrigger(userId: number, itemId: number,
   await ensureTables(db);
   await db.update(schema.listItems).set({ locationTrigger, updatedAt: new Date() })
     .where(and(eq(schema.listItems.id, itemId), eq(schema.listItems.userId, userId)));
+}
+
+type SubscriptionStatus = {
+  userId: number;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripePriceId: string | null;
+  status: string;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+};
+
+function sqlString(value: string | null | undefined) {
+  return value == null ? "NULL" : `'${value.replace(/'/g, "''")}'`;
+}
+
+function sqlDate(value: Date | null | undefined) {
+  return value ? sqlString(value.toISOString()) : "NULL";
+}
+
+export async function getSubscriptionStatus(userId: number): Promise<SubscriptionStatus> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      userId,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+      status: "free",
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+    };
+  }
+  await ensureTables(db);
+  const rows = await (db as any).execute(
+    `SELECT * FROM fg_subscriptions WHERE "userId" = ${userId} LIMIT 1`,
+  );
+  const row = (rows.rows || rows)[0];
+  if (!row) {
+    return {
+      userId,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+      status: "free",
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+    };
+  }
+
+  return {
+    userId,
+    stripeCustomerId: row.stripeCustomerId ?? null,
+    stripeSubscriptionId: row.stripeSubscriptionId ?? null,
+    stripePriceId: row.stripePriceId ?? null,
+    status: row.status ?? "free",
+    currentPeriodEnd: row.currentPeriodEnd ? new Date(row.currentPeriodEnd) : null,
+    cancelAtPeriodEnd: Boolean(row.cancelAtPeriodEnd),
+  };
+}
+
+export async function countUserMessagesSince(userId: number, since: Date): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  await ensureTables(db);
+  const rows = await (db as any).execute(`
+    SELECT COUNT(*)::int AS count
+    FROM fg_messages
+    WHERE "userId" = ${userId}
+      AND role = 'user'
+      AND "createdAt" >= ${sqlDate(since)}
+  `);
+  const row = (rows.rows || rows)[0];
+  return Number(row?.count ?? 0);
+}
+
+export async function upsertSubscriptionStatus(input: {
+  userId: number;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripePriceId?: string | null;
+  status: string;
+  currentPeriodEnd?: Date | null;
+  cancelAtPeriodEnd?: boolean;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await ensureTables(db);
+  await (db as any).execute(`
+    INSERT INTO fg_subscriptions (
+      "userId", "stripeCustomerId", "stripeSubscriptionId", "stripePriceId",
+      status, "currentPeriodEnd", "cancelAtPeriodEnd", "updatedAt"
+    )
+    VALUES (
+      ${input.userId},
+      ${sqlString(input.stripeCustomerId)},
+      ${sqlString(input.stripeSubscriptionId)},
+      ${sqlString(input.stripePriceId)},
+      ${sqlString(input.status)},
+      ${sqlDate(input.currentPeriodEnd)},
+      ${input.cancelAtPeriodEnd ? 1 : 0},
+      NOW()
+    )
+    ON CONFLICT ("userId") DO UPDATE SET
+      "stripeCustomerId" = EXCLUDED."stripeCustomerId",
+      "stripeSubscriptionId" = EXCLUDED."stripeSubscriptionId",
+      "stripePriceId" = EXCLUDED."stripePriceId",
+      status = EXCLUDED.status,
+      "currentPeriodEnd" = EXCLUDED."currentPeriodEnd",
+      "cancelAtPeriodEnd" = EXCLUDED."cancelAtPeriodEnd",
+      "updatedAt" = NOW()
+  `);
+}
+
+export async function recordStripeEvent(eventId: string, type: string | null): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await ensureTables(db);
+  const rows = await (db as any).execute(`
+    INSERT INTO fg_stripe_events ("eventId", type)
+    VALUES (${sqlString(eventId)}, ${sqlString(type)})
+    ON CONFLICT ("eventId") DO NOTHING
+    RETURNING id
+  `);
+  return Boolean((rows.rows || rows)[0]);
 }

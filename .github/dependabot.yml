@@ -1,0 +1,68 @@
+# Dependabot configuration
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # Root web app (pnpm)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Toronto"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "area:web"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      production-deps:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-deps:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Mobile app (npm)
+  - package-ecosystem: "npm"
+    directory: "/mobile"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Toronto"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "area:mobile"
+    commit-message:
+      prefix: "chore(deps-mobile)"
+      include: "scope"
+    groups:
+      mobile-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Toronto"
+    labels:
+      - "dependencies"
+      - "area:ci"
+    commit-message:
+      prefix: "chore(actions)"
+      include: "scope"

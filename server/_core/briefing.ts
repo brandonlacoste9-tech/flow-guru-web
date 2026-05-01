@@ -191,7 +191,9 @@ export async function buildBriefingData(params: {
   ].join("\n");
 
   const userPrompt = [
-    `User: ${params.userName}`,
+    params.userName.trim()
+      ? `User first name: ${params.userName}`
+      : "The user's preferred first name is unknown — greet warmly without addressing them by a guessed name.",
     `Greeting: ${greeting}`,
     `Weather: ${weatherContext}`,
     `Calendar: ${calendarContext}`,
@@ -206,8 +208,10 @@ export async function buildBriefingData(params: {
   });
 
   const contentRaw = response.choices[0]?.message.content;
-  const script = (typeof contentRaw === "string" ? contentRaw.trim() : "") || 
-    `${greeting}, ${params.userName}. Weather is ${weather?.label || "clear"}. You have ${events.length} events and some list items. Have a great day!`;
+  const script = (typeof contentRaw === "string" ? contentRaw.trim() : "") ||
+    (params.userName.trim()
+      ? `${greeting}, ${params.userName}. Weather is ${weather?.label || "clear"}. You have ${events.length} events and some list items. Have a great day!`
+      : `${greeting}. Weather is ${weather?.label || "clear"}. You have ${events.length} events and some list items. Have a great day!`);
 
   return { script, weather, events, lists, greeting };
 }

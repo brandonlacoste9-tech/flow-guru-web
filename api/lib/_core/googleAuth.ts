@@ -13,16 +13,11 @@ import * as db from "../db.js";
 import { getSessionCookieOptions } from "./cookies.js";
 import { sdk } from "./sdk.js";
 import { ENV } from "./env.js";
+import { getGoogleAuthCallbackUrl } from "./googleAuthRedirect.js";
 
 function getQueryParam(req: VercelRequest, key: string): string | undefined {
   const value = req.query[key];
   return typeof value === "string" ? value : Array.isArray(value) ? value[0] : undefined;
-}
-
-function getCallbackUrl(req: VercelRequest): string {
-  const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() || "https";
-  const host = req.headers["x-forwarded-host"] as string || req.headers.host || "floguru.com";
-  return `${proto}://${host}/api/auth/google/callback`;
 }
 
 async function fetchGoogleProfile(accessToken: string) {
@@ -62,7 +57,7 @@ export function registerGoogleAuthRoutes(app: Express) {
       return;
     }
 
-    const redirectUri = getCallbackUrl(vReq);
+    const redirectUri = getGoogleAuthCallbackUrl(vReq);
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     url.searchParams.set("client_id", ENV.googleClientId);
     url.searchParams.set("redirect_uri", redirectUri);
@@ -88,7 +83,7 @@ export function registerGoogleAuthRoutes(app: Express) {
     }
 
     try {
-      const redirectUri = getCallbackUrl(vReq);
+      const redirectUri = getGoogleAuthCallbackUrl(vReq);
       const accessToken = await exchangeGoogleCode(code, redirectUri);
       const profile = await fetchGoogleProfile(accessToken);
 

@@ -18,18 +18,33 @@ export type SpeechToSpeechOptions = {
   modelId?: string;
 };
 
-const DEFAULT_VOICE_ID = "N2lVS1wzUvBXUvBCW9ng"; // Callum (Buddy-like, Energetic)
+const DEFAULT_VOICE_ID = "CwhRBWXzGAHq8TQ4Fs17"; // Roger - Laid-Back, Casual, Resonant (account voice, free-tier safe)
+
 const DEFAULT_TTS_MODEL = "eleven_turbo_v2_5";
 const DEFAULT_STS_MODEL = "eleven_english_sts_v2";
 
 const ttsCache = new Map<string, Buffer>();
+
+const FALLBACK_VOICES = [
+  { voice_id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger", labels: { gender: "Male", accent: "US" } },
+  { voice_id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", labels: { gender: "Female", accent: "US" } },
+  { voice_id: "AZnzlk1XvdvUeBnXmlld", name: "Domi", labels: { gender: "Female", accent: "US" } },
+  { voice_id: "EXAVITQu4vr4xnSDxMaL", name: "Bella", labels: { gender: "Female", accent: "US" } },
+  { voice_id: "ErXwobaYiN019PkySvjV", name: "Antoni", labels: { gender: "Male", accent: "US" } },
+  { voice_id: "MF3mGyEYCl7XYWbV9V6O", name: "Elli", labels: { gender: "Female", accent: "US" } },
+  { voice_id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", labels: { gender: "Male", accent: "US" } },
+  { voice_id: "VR6AewLTigWG4xSOukaG", name: "Arnold", labels: { gender: "Male", accent: "US" } },
+  { voice_id: "pNInz6obpgDQGcFmaJgB", name: "Adam", labels: { gender: "Male", accent: "US" } },
+  { voice_id: "yoZ06aMxZJJ28mfd3POQ", name: "Sam", labels: { gender: "Male", accent: "US" } },
+] as const;
 
 /**
  * Convert text to speech using ElevenLabs
  */
 export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
   const apiKey = ENV.elevenLabsApiKey;
-  if (!apiKey) {
+  const useLocalTts = ENV.useLocalAi && !options.voiceId;
+  if (!apiKey && !useLocalTts) {
     throw new Error("ElevenLabs API key is not configured.");
   }
 
@@ -41,9 +56,9 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
   if (ttsCache.has(cacheKey)) {
     return ttsCache.get(cacheKey)!;
   }
-  const url = ENV.useLocalAi ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+  const url = useLocalTts ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
-  const body: any = ENV.useLocalAi 
+  const body: any = useLocalTts 
     ? { model: "en-us-librispeech-low.onnx", input: options.text } // LocalAI TTS payload
     : {
         text: options.text,
@@ -78,14 +93,15 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
  */
 export async function textToSpeechStream(options: TtsOptions): Promise<ReadableStream<Uint8Array>> {
   const apiKey = ENV.elevenLabsApiKey;
-  if (!apiKey && !ENV.useLocalAi) {
+  const useLocalTts = ENV.useLocalAi && !options.voiceId;
+  if (!apiKey && !useLocalTts) {
     throw new Error("ElevenLabs API key is not configured.");
   }
 
   const voiceId = options.voiceId || DEFAULT_VOICE_ID;
-  const url = ENV.useLocalAi ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
+  const url = useLocalTts ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
 
-  const body: any = ENV.useLocalAi 
+  const body: any = useLocalTts 
     ? { model: "en-us-librispeech-low.onnx", input: options.text } // LocalAI TTS payload
     : {
         text: options.text,
@@ -162,24 +178,33 @@ export async function speechToSpeech(options: SpeechToSpeechOptions): Promise<Bu
 export async function getVoices(): Promise<any[]> {
   const apiKey = ENV.elevenLabsApiKey;
   if (!apiKey) {
-    throw new Error("ElevenLabs API key is not configured.");
+    console.warn("[ElevenLabs] API key missing for getVoices; using fallback voices.");
+    return [...FALLBACK_VOICES];
   }
 
-  const url = "https://api.elevenlabs.io/v1/voices";
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "xi-api-key": apiKey,
-    },
-  });
+  try {
+    const url = "https://api.elevenlabs.io/v1/voices";
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "xi-api-key": apiKey,
+      },
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`ElevenLabs Get Voices failed: ${response.status} ${error}`);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`ElevenLabs Get Voices failed: ${response.status} ${error}`);
+    }
+
+    const data = await response.json();
+    const voices = Array.isArray(data?.voices) ? data.voices : [];
+    if (voices.length > 0) return voices;
+    console.warn("[ElevenLabs] Empty voice list returned; using fallback voices.");
+    return [...FALLBACK_VOICES];
+  } catch (error) {
+    console.warn("[ElevenLabs] getVoices failed; using fallback voices.", error);
+    return [...FALLBACK_VOICES];
   }
-
-  const data = await response.json();
-  return data.voices;
 }
 
 export type SoundGenerationOptions = {

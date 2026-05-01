@@ -2,6 +2,7 @@ import { getDb } from '../db';
 import * as schema from '../../api/lib/drizzle/schema';
 import { and, eq, gte, lte } from 'drizzle-orm';
 import { sendPushNotification } from './push';
+import { displayFirstName } from "../../shared/userDisplay.js";
 
 const firedReminders = new Set<string>();
 
@@ -27,10 +28,10 @@ export async function checkAllReminders() {
           firedReminders.add(key);
           
           const user = await db.select().from(schema.users).where(eq(schema.users.id, profile.userId)).limit(1);
-          const userName = user[0]?.name || 'Brandon';
+          const name = displayFirstName(user[0]) || 'Brandon';
           
           // Generate a more proactive briefing
-          let briefingBody = `It's ${profile.wakeUpTime} — time to rise and shine, ${userName}!`;
+          let briefingBody = `It's ${profile.wakeUpTime} — time to rise and shine, ${name}!`;
           try {
             const { buildBriefingData } = await import('./briefing');
             const { listUserMemoryFacts } = await import('../db');
@@ -42,7 +43,7 @@ export async function checkAllReminders() {
             
             const briefing = await buildBriefingData({
               userId: profile.userId,
-              userName,
+              userName: name,
               assistantName: 'Flow Guru',
               location: locationFact?.factValue,
               buddyPersonality: profile.buddyPersonality,

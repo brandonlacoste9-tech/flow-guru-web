@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { BRAND_THEME_COLOR_HEX } from "@/lib/brandTheme";
 
 type Theme = "light" | "dark";
 
@@ -35,6 +36,13 @@ export function ThemeProvider({
       root.classList.add("dark");
     } else {
       root.classList.remove("dark");
+    }
+
+    root.style.colorScheme = theme === "dark" ? "dark" : "light";
+
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.setAttribute("content", BRAND_THEME_COLOR_HEX[theme]);
     }
 
     if (switchable) {

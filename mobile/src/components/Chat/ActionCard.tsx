@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { theme } from '../../theme';
 import { Calendar, CloudSun, MapPin, Newspaper, Music } from 'lucide-react-native';
 
@@ -11,7 +11,7 @@ interface ActionCardProps {
   data?: any;
 }
 
-export const ActionCard: React.FC<ActionCardProps> = ({ action, title, summary, data }) => {
+export const ActionCard: React.FC<ActionCardProps> = ({ action, status, title, summary, data }) => {
   const renderIcon = () => {
     switch (action) {
       case 'weather.get': return <CloudSun color={theme.colors.accent} size={28} />;
@@ -38,6 +38,26 @@ export const ActionCard: React.FC<ActionCardProps> = ({ action, title, summary, 
           ))}
         </View>
       );
+    }
+    if (action === 'route.get' && status === 'executed') {
+      const g = data?.mapsUrlGoogle as string | undefined;
+      const a = data?.mapsUrlApple as string | undefined;
+      if (g || a) {
+        return (
+          <View style={styles.linksRow}>
+            {g ? (
+              <TouchableOpacity onPress={() => Linking.openURL(g)} style={styles.linkBtn}>
+                <Text style={styles.linkText}>Google Maps</Text>
+              </TouchableOpacity>
+            ) : null}
+            {a ? (
+              <TouchableOpacity onPress={() => Linking.openURL(a)} style={styles.linkBtnOutline}>
+                <Text style={styles.linkTextOutline}>Apple Maps</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        );
+      }
     }
     return null;
   };
@@ -102,5 +122,34 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: 14,
     fontWeight: '600',
+  },
+  linksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  linkBtn: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.lg,
+  },
+  linkText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  linkBtnOutline: {
+    borderWidth: 1,
+    borderColor: theme.colors.accent,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.lg,
+  },
+  linkTextOutline: {
+    color: theme.colors.accent,
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

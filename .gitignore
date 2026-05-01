@@ -1,5 +1,11 @@
 # Dependencies
 **/node_modules
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 .pnpm-store/
 
 # Build outputs
@@ -17,6 +23,7 @@ build/
 # IDE and editor files
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~

@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "../shared/const.js";
+import { displayFirstName } from "../shared/userDisplay.js";
 import fs from "fs";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -42,11 +43,16 @@ import {
   updateListItem,
   setListItemReminder,
 } from "./db";
+import { detectDialogflowCxReply, isDialogflowCxConfigured } from "../api/lib/_core/dialogflowCx.js";
 
 const sendMessageInput = z.object({
   message: z.string().trim().min(1).max(5000),
   timeZone: z.string().trim().min(1).max(100).optional(),
   threadId: z.number().int().positive().optional(),
+  language: z.enum(["en", "fr"]).optional(),
+  deviceLatitude: z.number().finite().gte(-90).lte(90).optional(),
+  deviceLongitude: z.number().finite().gte(-180).lte(180).optional(),
+  guestDeviceId: z.string().uuid().optional(),
 });
 
 const MEMORY_FACT_CATEGORIES = [
@@ -319,7 +325,7 @@ async function extractAndPersistMemory(params: {
       {
         role: "system",
         content:
-          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.",
+          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.\n\nWhen the user shares a phone number or email for someone (e.g. \"my wife's number is …\", \"mom's email is …\"), save it as a memory fact with factKey contact_phone_wife or contact_email_mom using a short lowercase slug for the person (wife, jenny, mom). Prefer category preference or general.",
       },
       {
         role: "user",
@@ -566,8 +572,10 @@ export const appRouter = router({
     }),
   }),
   assistant: router({
-    bootstrap: publicProcedure.query(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+    bootstrap: publicProcedure
+      .input(z.object({ language: z.enum(["en", "fr"]).optional(), guestDeviceId: z.string().uuid().optional() }).default({}))
+      .query(async ({ ctx, input }) => {
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const [profile, memoryFacts, thread, providerConnections] = await Promise.all([
         getUserMemoryProfile(userId),
         listUserMemoryFacts(userId),
@@ -587,7 +595,14 @@ export const appRouter = router({
       );
       const userLocation = locationFact?.factValue || null;
 
-      type WeatherSnapshot = { tempC: number; feelsLikeC: number; label: string; locationName: string };
+      type WeatherSnapshot = {
+        tempC: number;
+        feelsLikeC: number;
+        label: string;
+        locationName: string;
+        lat?: number;
+        lon?: number;
+      };
       type CalendarItem = { title: string; start: string | null; allDay: boolean };
       let weather: WeatherSnapshot | null = null;
       let todayEvents: CalendarItem[] = [];
@@ -596,13 +611,37 @@ export const appRouter = router({
         if (!userLocation) return null;
         try {
           const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
-          const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather" });
-          const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
-          if (result.status === "executed" && result.data?.current) {
-            const c = result.data.current as any;
-            return { tempC: c.temperatureC, feelsLikeC: c.apparentTemperatureC, label: c.weatherLabel, locationName: result.data.location as string };
+          const lang = input.language ?? "en";
+          const plan = await planAssistantAction({
+            userName: displayFirstName(ctx.user) || undefined,
+            memoryContext: `Location: ${userLocation}`,
+            message: "current weather",
+            language: lang,
+          });
+          const result = await executeAssistantAction(plan, {
+            userId,
+            userName: displayFirstName(ctx.user) || undefined,
+            message: "current weather",
+            memoryContext: `Location: ${userLocation}`,
+            language: lang,
+          });
+          if (result.status === "executed" && result.data) {
+            const data = result.data as Record<string, any>;
+            const c = data.current as any;
+            if (c) {
+              return {
+                tempC: c.temperatureC,
+                feelsLikeC: c.apparentTemperatureC,
+                label: c.weatherLabel,
+                locationName: data.location as string,
+                lat: data.lat as number | undefined,
+                lon: data.lon as number | undefined,
+              };
+            }
           }
-        } catch { /* ignore */ }
+        } catch (e) {
+          console.error("[Flow Guru] Weather bootstrap failed:", e);
+        }
         return null;
       })();
 
@@ -636,19 +675,42 @@ export const appRouter = router({
 
       [weather, todayEvents] = await Promise.all([weatherPromise, calendarPromise]);
 
-      // --- Generate Proactive Greeting ---
       let proactiveGreeting: string | null = null;
       if (messages.length === 0) {
         try {
-          const userName = ctx.user?.name?.split(' ')[0] || "there";
+          const userName = displayFirstName(ctx.user) || (input.language === "fr" ? "toi" : "there");
+          const language = input.language ?? "en";
           const weatherContext = weather ? `${weather.tempC}°C and ${weather.label} in ${weather.locationName}` : "";
-          const eventsContext = todayEvents.length > 0 
-            ? `You have ${todayEvents.length} event${todayEvents.length > 1 ? 's' : ''} today.`
-            : "Your schedule is clear today.";
 
-          const timeGreeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening";
-          
-          proactiveGreeting = `${timeGreeting}, ${userName}. ${weatherContext ? `It's currently ${weatherContext}. ` : ''}${eventsContext}`;
+          const timeGreeting =
+            language === "en"
+              ? new Date().getHours() < 12
+                ? "Good morning"
+                : new Date().getHours() < 17
+                  ? "Good afternoon"
+                  : "Good evening"
+              : new Date().getHours() < 12
+                ? "Bonjour"
+                : new Date().getHours() < 17
+                  ? "Bon après-midi"
+                  : "Bonsoir";
+
+          if (language === "en") {
+            const eventsContext =
+              todayEvents.length > 0
+                ? `You have ${todayEvents.length} event${todayEvents.length > 1 ? "s" : ""} today.`
+                : "Your schedule is clear today.";
+            proactiveGreeting = `${timeGreeting}, ${userName}. ${weatherContext ? `It's currently ${weatherContext}. ` : ""}${eventsContext}`;
+          } else {
+            const weatherContextFr = weather
+              ? `${weather.tempC}°C et ${weather.label === "clear" ? "ciel dégagé" : weather.label} à ${weather.locationName}`
+              : "";
+            const eventsContextFr =
+              todayEvents.length > 0
+                ? `Vous avez ${todayEvents.length} événement${todayEvents.length > 1 ? "s" : ""} aujourd'hui.`
+                : "Votre emploi du temps est libre aujourd'hui.";
+            proactiveGreeting = `${timeGreeting}, ${userName}. ${weatherContextFr ? `Il fait actuellement ${weatherContextFr}. ` : ""}${eventsContextFr}`;
+          }
         } catch (e) {
           console.error("[Flow Guru] Failed to generate proactive greeting", e);
         }
@@ -666,8 +728,10 @@ export const appRouter = router({
         proactiveGreeting,
       };
     }),
-    startFresh: publicProcedure.mutation(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+    startFresh: publicProcedure
+      .input(z.object({ guestDeviceId: z.string().uuid().optional() }).default({}))
+      .mutation(async ({ ctx, input }) => {
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const threadId = await createConversationThread({
         userId,
         title: "FLO GURU Chat",
@@ -686,8 +750,10 @@ export const appRouter = router({
         providerConnections,
       };
     }),
-    history: publicProcedure.query(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+    history: publicProcedure
+      .input(z.object({ guestDeviceId: z.string().uuid().optional() }).default({}))
+      .query(async ({ ctx, input }) => {
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const thread = await findLatestConversationThread(userId);
       if (!thread || thread.userId !== userId) {
         return {
@@ -703,7 +769,7 @@ export const appRouter = router({
       };
     }),
     send: publicProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
 
       await createConversationMessage({
@@ -721,14 +787,17 @@ export const appRouter = router({
 
       // --- Name change detection (fast path, before planner) ---
       const nameChangeMatch = input.message.match(
-        /(?:call\s+(?:you|yourself)|your\s+name\s+is|rename\s+(?:you|yourself)\s+(?:to)?|I(?:'ll| will)\s+call\s+you)\s+["']?([A-Za-z][A-Za-z0-9 ]{0,29})["']?/i
+        /(?:call\s+(?:you|yourself)|your\s+name\s+is|rename\s+(?:you|yourself)\s+(?:to)?|I(?:'ll| will)\s+call\s+you|appelle-moi|ton\s+nom\s+est|nomme-toi|je\s+t'appellerai)\s+["']?([A-Za-z][A-Za-z0-9 ]{0,29})["']?/i
       );
       if (nameChangeMatch) {
         const newName = nameChangeMatch[1].trim();
         await createUserMemoryFacts(userId, [
           { category: "preference", factKey: "assistant_name", factValue: newName, confidence: 100 },
         ]);
-        const reply = `Got it! From now on I'm ${newName} 😊`;
+        const reply =
+          input.language === "fr"
+            ? `C'est noté ! Désormais, je m'appelle ${newName} 😊`
+            : `Got it! From now on I'm ${newName} 😊`;
         await createConversationMessage({ threadId, userId, role: "assistant", content: reply });
         await touchConversationThread(threadId);
         const messages = await listConversationMessages(threadId);
@@ -746,16 +815,27 @@ export const appRouter = router({
         f => f.factKey === "assistant_name" && f.category === "preference"
       );
       const assistantName = assistantNameFact?.factValue || "FLO GURU";
-      const userName = ctx.user?.name || "Brandon";
+      const userFirstName = displayFirstName(ctx.user);
+      const userName = userFirstName;
 
-      const memoryContext = buildMemoryContext({
-        userName,
+      let memoryContext = buildMemoryContext({
+        userName: userFirstName || "Unknown",
         profile,
         facts: memoryFacts,
       });
+      if (
+        input.deviceLatitude != null &&
+        input.deviceLongitude != null &&
+        Number.isFinite(input.deviceLatitude) &&
+        Number.isFinite(input.deviceLongitude)
+      ) {
+        memoryContext += `\n\nApproximate current device location (latitude, longitude): ${input.deviceLatitude}, ${input.deviceLongitude}. For route.get, if the user asks for directions or driving time without naming where they start (e.g. only 'to the airport', 'how far to X'), leave route.origin null so the route starts from this position.`;
+      }
 
       const systemPrompt = [
-        `You are ${assistantName}, ${userName}'s personal assistant.`,
+        userFirstName
+          ? `You are ${assistantName}, ${userFirstName}'s personal assistant.`
+          : `You are ${assistantName}, this user's personal assistant.`,
         profile?.buddyPersonality ? `Your personality profile: ${profile.buddyPersonality}` : "You sound like a close friend. Short, warm, direct. Never robotic.",
         "",
         "RULES:",
@@ -767,11 +847,14 @@ export const appRouter = router({
         "- Use the user's name and saved memory naturally. Reference their habits.",
         "- Sound human: contractions, casual tone, occasional emoji.",
         "",
+        `CRITICAL: You MUST reply in ${input.language === "fr" ? "FRENCH" : "ENGLISH"}. All confirmations and conversational text must be in this language.`,
+        "",
         "THINGS YOU CAN DO (but never mention these to the user):",
         "- Book events on Google Calendar",
         "- List upcoming calendar events",
         "- Check weather for any city",
         "- Get directions and travel times",
+        "- Call, text, or email saved contacts when their numbers or emails are stored in memory",
         "- Set reminders (via calendar)",
         "",
         `The user's saved memory:`,
@@ -786,6 +869,7 @@ export const appRouter = router({
           userName,
           memoryContext,
           message: input.message,
+          language: input.language ?? "en",
         });
         
         actionResult = await executeAssistantAction(plannedAction, {
@@ -794,6 +878,9 @@ export const appRouter = router({
           message: input.message,
           memoryContext,
           timeZone: input.timeZone ?? null,
+          language: input.language ?? "en",
+          deviceLatitude: input.deviceLatitude,
+          deviceLongitude: input.deviceLongitude,
         });
       } catch (error) {
         console.error("[Flow Guru] SYSTEM FAILURE IN SEND:", error);
@@ -807,8 +894,13 @@ export const appRouter = router({
 
       let assistantReply = buildActionFallbackReply(actionResult);
 
-      try {
-        const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
+      if (actionResult && actionResult.action !== "none") {
+        // Tool confirmations should be deterministic; the LLM can otherwise
+        // apologize for a tool that actually ran successfully.
+        assistantReply = buildActionFallbackReply(actionResult);
+      } else {
+        try {
+          const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
 
         if (actionResult && actionResult.action !== "none") {
           const resultJson = formatActionResultContext(actionResult);
@@ -857,24 +949,43 @@ export const appRouter = router({
           }
         }
 
-        // PERF: Final Chat Generation
-        const llmResponse = await invokeLLM({
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
-            ...actionSystemMessages,
-            ...history.slice(-15).map((m: any) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content as string,
-            })),
-          ],
-        });
+        // PERF: Dialogflow CX (optional) vs LLM for conversational replies
+        let usedDialogflowCx = false;
+        if (
+          isDialogflowCxConfigured() &&
+          (!actionResult || actionResult.action === "none")
+        ) {
+          const cxReply = await detectDialogflowCxReply({
+            threadId,
+            message: input.message,
+            language: input.language,
+          });
+          if (cxReply) {
+            assistantReply = cxReply;
+            usedDialogflowCx = true;
+          }
+        }
 
-        assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
-      } catch (error) {
-        console.error("[Flow Guru] Chat generation failed.", error);
+        if (!usedDialogflowCx) {
+          const llmResponse = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              ...actionSystemMessages,
+              ...history.slice(-15).map((m: any) => ({
+                role: m.role as "user" | "assistant",
+                content: m.content as string,
+              })),
+            ],
+          });
+
+          assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+        }
+        } catch (error) {
+          console.error("[Flow Guru] Chat generation failed.", error);
+        }
       }
 
       await createConversationMessage({
@@ -888,7 +999,7 @@ export const appRouter = router({
       // PERF: Fire-and-forget memory extraction to return response immediately
       extractAndPersistMemory({
         userId,
-        userName,
+        userName: userFirstName || null,
         userMessage: input.message,
         assistantReply,
       }).catch(err => console.warn("[Flow Guru] Background memory extraction failed:", err));
@@ -912,7 +1023,7 @@ export const appRouter = router({
         (f: any) => f.factKey === "assistant_name" && f.category === "preference"
       );
       const assistantName = assistantNameFact?.factValue || "FLO GURU";
-      const userName = ctx.user?.name || "Brandon";
+      const userName = displayFirstName(ctx.user);
 
       const locationFact = memoryFacts.find(
         (f: any) => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
@@ -990,8 +1101,18 @@ export const appRouter = router({
         if (userLocation) {
           try {
             const { planAssistantAction, executeAssistantAction } = await import("./assistantActions");
-            const plan = await planAssistantAction({ userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}` });
-            const result = await executeAssistantAction(plan, { userId, message: "current weather", memoryContext: `Location: ${userLocation}` });
+            const plan = await planAssistantAction({
+              userName: displayFirstName(ctx.user) || undefined,
+              message: "current weather",
+              memoryContext: `Location: ${userLocation}`,
+              language: "en",
+            });
+            const result = await executeAssistantAction(plan, {
+              userId,
+              userName: displayFirstName(ctx.user) || undefined,
+              message: "current weather",
+              memoryContext: `Location: ${userLocation}`,
+            });
             if (result.status === "executed") weather = result.data;
           } catch {}
         }
@@ -1014,7 +1135,7 @@ export const appRouter = router({
           calendar: calendar.map(e => ({ title: e.title, start: e.startAt })),
           lists: listSnapshots,
           assistantName: getAssistantName(memoryFacts),
-          userName: ctx.user?.name || "Brandon",
+          userName: displayFirstName(ctx.user),
         };
       }),
   }),

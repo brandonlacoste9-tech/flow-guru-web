@@ -1,37 +1,33 @@
 /**
- * Google Maps API Integration for Manus WebDev Templates
- * 
- * Main function: makeRequest<T>(endpoint, params) - Makes authenticated requests to Google Maps APIs
- * All credentials are automatically injected. Array parameters use | as separator.
- * 
- * See API examples below the type definitions for usage patterns.
+ * Google Maps APIs (Geocoding, Directions, …).
+ *
+ * - **GOOGLE_MAPS_API_KEY** — direct Google Cloud key (`maps.googleapis.com`).
+ * - **BUILT_IN_FORGE_API_URL** + **BUILT_IN_FORGE_API_KEY** — Forge maps proxy.
  */
 
 import { ENV } from "./env";
+
+const GOOGLE_MAPS_HTTP_BASE = "https://maps.googleapis.com";
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-type MapsConfig = {
+type ForgeMapsConfig = {
   baseUrl: string;
   apiKey: string;
 };
 
-function getMapsConfig(): MapsConfig {
-  const baseUrl = ENV.forgeApiUrl;
+function getForgeMapsConfig(): ForgeMapsConfig | null {
+  const baseUrl = ENV.forgeApiUrl?.replace(/\/+$/, "");
   const apiKey = ENV.forgeApiKey;
+  if (!baseUrl || !apiKey) return null;
+  return { baseUrl, apiKey };
+}
 
-  if (!baseUrl || !apiKey) {
-    throw new Error(
-      "Google Maps proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
-    );
-  }
-
-  return {
-    baseUrl: baseUrl.replace(/\/+$/, ""),
-    apiKey,
-  };
+function getDirectGoogleMapsApiKey(): string | undefined {
+  const k = ENV.googleMapsApiKey?.trim();
+  return k || undefined;
 }
 
 // ============================================================================
@@ -56,15 +52,22 @@ export async function makeRequest<T = unknown>(
   params: Record<string, unknown> = {},
   options: RequestOptions = {}
 ): Promise<T> {
-  const { baseUrl, apiKey } = getMapsConfig();
+  const directKey = getDirectGoogleMapsApiKey();
+  const forge = getForgeMapsConfig();
 
-  // Construct full URL: baseUrl + /v1/maps/proxy + endpoint
-  const url = new URL(`${baseUrl}/v1/maps/proxy${endpoint}`);
+  let url: URL;
+  if (directKey) {
+    url = new URL(`${GOOGLE_MAPS_HTTP_BASE}${endpoint}`);
+    url.searchParams.append("key", directKey);
+  } else if (forge) {
+    url = new URL(`${forge.baseUrl}/v1/maps/proxy${endpoint}`);
+    url.searchParams.append("key", forge.apiKey);
+  } else {
+    throw new Error(
+      "Maps not configured: set GOOGLE_MAPS_API_KEY (Geocoding + Directions APIs enabled in Google Cloud), or BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY."
+    );
+  }
 
-  // Add API key as query parameter (standard Google Maps API authentication)
-  url.searchParams.append("key", apiKey);
-
-  // Add other query parameters
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       url.searchParams.append(key, String(value));

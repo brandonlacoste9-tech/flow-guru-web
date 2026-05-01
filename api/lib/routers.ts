@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "./shared/const.js";
+import { displayFirstName } from "../../shared/userDisplay.js";
 import fs from "fs";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies.js";
@@ -44,11 +45,14 @@ import {
   deleteUserMemoryFact,
   updateUserPersona,
   upsertPushSubscription,
+  countUserMessagesSince,
+  getSubscriptionStatus,
   getSubscription,
 } from "./db.js";
 import { generateBriefing, generateQuickSound } from "./_core/briefing.js";
 import { textToSpeech, getVoices } from "./_core/elevenLabs.js";
-import { listGoogleCalendarEvents } from "./googleCalendar.js";
+import { listGoogleCalendarEvents } from "./_core/googleCalendar.js";
+import { detectDialogflowCxReply, isDialogflowCxConfigured } from "./_core/dialogflowCx.js";
 import { MasterOrchestrator } from "../../server/_core/sub-agents/orchestrator.js";
 import { searchMemories, storeMemory } from "./memory.js";
 
@@ -57,7 +61,20 @@ const sendMessageInput = z.object({
   timeZone: z.string().trim().min(1).max(100).optional(),
   threadId: z.number().int().positive().optional(),
   language: z.enum(['en', 'fr']).optional(),
+  /** Browser geolocation — used as route.get origin when the user omits a starting place. */
+  deviceLatitude: z.number().finite().gte(-90).lte(90).optional(),
+  deviceLongitude: z.number().finite().gte(-180).lte(180).optional(),
+  /** Per-install ID from the Expo app — maps to fg_users.openId mobile:<uuid>. */
+  guestDeviceId: z.string().uuid().optional(),
 });
+
+const FREE_DAILY_ASSISTANT_MESSAGES = 10;
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+
+function startOfUtcDay() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
 
 const MEMORY_FACT_CATEGORIES = [
   "wake_up_time",
@@ -329,7 +346,7 @@ async function extractAndPersistMemory(params: {
       {
         role: "system",
         content:
-          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.",
+          "You extract durable user memory from conversations. Only capture facts about the user that are likely to remain useful in future conversations. Do not invent details. If nothing new appears, return nulls and an empty facts array.\n\nWhen the user shares a phone number or email for someone (e.g. \"my wife's number is …\", \"mom's email is …\"), save it as a memory fact with factKey contact_phone_wife or contact_email_mom using a short lowercase slug for the person (wife, jenny, mom). Prefer category preference or general.",
       },
       {
         role: "user",
@@ -583,8 +600,9 @@ export const appRouter = router({
   }),
   assistant: router({
     bootstrap: rateLimitedProcedure
-      .input(z.object({ language: z.enum(['en', 'fr']).optional() })).query(async ({ ctx, input }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+      .input(z.object({ language: z.enum(["en", "fr"]).optional(), guestDeviceId: z.string().uuid().optional() }).default({}))
+      .query(async ({ ctx, input }) => {
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const [profile, memoryFacts, thread, providerConnections, subscription] = await Promise.all([
         getUserMemoryProfile(userId),
         listUserMemoryFacts(userId),
@@ -613,8 +631,8 @@ export const appRouter = router({
       const weatherPromise = (async () => {
         if (!userLocation) return null;
         try {
-          const plan = await planAssistantAction({ userName: ctx.user?.name, memoryContext: `Location: ${userLocation}`, message: "current weather", language: input.language ?? 'en' });
-          const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: input.language ?? 'en' });
+          const plan = await planAssistantAction({ userName: displayFirstName(ctx.user) || undefined, memoryContext: `Location: ${userLocation}`, message: "current weather", language: input.language ?? 'en' });
+          const result = await executeAssistantAction(plan, { userId, userName: displayFirstName(ctx.user) || undefined, message: "current weather", memoryContext: `Location: ${userLocation}`, language: input.language ?? 'en' });
           if (result.status === "executed" && result.data) {
             const data = result.data as Record<string, any>;
             const c = data.current as any;
@@ -666,7 +684,7 @@ export const appRouter = router({
       let proactiveGreeting: string | null = null;
       if (messages.length === 0) {
         try {
-          const userName = ctx.user?.name?.split(' ')[0] || (input.language === 'fr' ? "toi" : "there");
+          const userName = displayFirstName(ctx.user) || (input.language === 'fr' ? "toi" : "there");
           const language = input.language ?? 'en';
           const weatherContext = weather ? `${weather.tempC}°C and ${weather.label} in ${weather.locationName}` : "";
           
@@ -705,8 +723,9 @@ export const appRouter = router({
       };
     }),
     startFresh: rateLimitedProcedure
-      .mutation(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+      .input(z.object({ guestDeviceId: z.string().uuid().optional() }).default({}))
+      .mutation(async ({ ctx, input }) => {
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const threadId = await createConversationThread({
         userId,
         title: "FLO GURU Chat",
@@ -783,8 +802,9 @@ export const appRouter = router({
       };
     }),
     history: rateLimitedProcedure
-      .query(async ({ ctx }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+      .input(z.object({ guestDeviceId: z.string().uuid().optional() }).default({}))
+      .query(async ({ ctx, input }) => {
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const thread = await findLatestConversationThread(userId);
       if (!thread || thread.userId !== userId) {
         return {
@@ -801,8 +821,35 @@ export const appRouter = router({
     }),
     send: rateLimitedProcedure
       .input(sendMessageInput).mutation(async ({ ctx, input }) => {
-      const userId = await resolveAssistantUserId(ctx.user);
+      const userId = await resolveAssistantUserId(ctx.user, input.guestDeviceId);
       const threadId = await getOrCreateThreadId(userId, input.threadId);
+
+      const subscription = await getSubscriptionStatus(userId);
+      const isPro = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status);
+      if (!isPro) {
+        const dailyMessages = await countUserMessagesSince(userId, startOfUtcDay());
+        if (dailyMessages >= FREE_DAILY_ASSISTANT_MESSAGES) {
+          const reply = input.language === 'fr'
+            ? "Ton palier gratuit est termine pour aujourd'hui. Passe a Flow Guru Monthly pour continuer sans attendre."
+            : "Your free tier is over for today. Upgrade to Flow Guru Monthly to keep chatting without waiting.";
+          await createConversationMessage({ threadId, userId, role: "assistant", content: reply });
+          await touchConversationThread(threadId);
+          const messages = await listConversationMessages(threadId);
+          return {
+            threadId,
+            reply,
+            messages,
+            memoryUpdate: { profileUpdated: false, factsAdded: 0 },
+            actionResult: null,
+            billing: {
+              plan: "free",
+              limit: FREE_DAILY_ASSISTANT_MESSAGES,
+              used: dailyMessages,
+              limitReached: true,
+            },
+          };
+        }
+      }
 
       await createConversationMessage({
         threadId,
@@ -844,7 +891,8 @@ export const appRouter = router({
         f => f.factKey === "assistant_name" && f.category === "preference"
       );
       const assistantName = assistantNameFact?.factValue || "FLO GURU";
-      const userName = ctx.user?.name || "Brandon";
+      const userFirstName = displayFirstName(ctx.user);
+      const userName = userFirstName || "Unknown";
 
       // --- Semantic Memory Search (New Soul Phase) ---
       const semanticMemories = await searchMemories(userId, input.message, 5);
@@ -852,14 +900,25 @@ export const appRouter = router({
         ? `\nRECALLED MEMORIES (based on user query):\n${semanticMemories.map(m => `- ${m.content}`).join("\n")}`
         : "";
 
-      const memoryContext = buildMemoryContext({
+      let memoryContext = buildMemoryContext({
         userName,
         profile,
         facts: memoryFacts,
       }) + memoryRecallContext;
 
+      if (
+        input.deviceLatitude != null &&
+        input.deviceLongitude != null &&
+        Number.isFinite(input.deviceLatitude) &&
+        Number.isFinite(input.deviceLongitude)
+      ) {
+        memoryContext += `\n\nApproximate current device location (latitude, longitude): ${input.deviceLatitude}, ${input.deviceLongitude}. For route.get, if the user asks for directions or driving time without naming where they start (e.g. only 'to the airport', 'how far to X'), leave route.origin null so the route starts from this position.`;
+      }
+
       const systemPrompt = [
-        `You are ${assistantName}, ${userName}'s personal assistant.`,
+        userFirstName
+          ? `You are ${assistantName}, ${userFirstName}'s personal assistant.`
+          : `You are ${assistantName}, this user's personal assistant.`,
         profile?.buddyPersonality ? `Your personality profile: ${profile.buddyPersonality}` : "You sound like a close friend. Short, warm, direct. Never robotic.",
         "",
         "RULES:",
@@ -878,6 +937,7 @@ export const appRouter = router({
         "- List upcoming calendar events",
         "- Check weather for any city",
         "- Get directions and travel times",
+        "- Call, text, or email saved contacts when their numbers or emails are stored in memory",
         "- Set reminders (via calendar)",
         "",
         `The user's saved memory:`,
@@ -901,7 +961,19 @@ export const appRouter = router({
           memoryContext: currentMemoryContext,
           timeZone: input.timeZone ?? null,
           language: input.language ?? 'en',
+          deviceLatitude: input.deviceLatitude,
+          deviceLongitude: input.deviceLongitude,
         }, history.slice(-10).map(m => ({ role: m.role as any, content: m.content })));
+
+      let assistantReply = buildActionFallbackReply(actionResult);
+
+      if (actionResult && actionResult.action !== "none") {
+        // Tool confirmations should be deterministic; the LLM can otherwise
+        // apologize for a tool that actually ran successfully.
+        assistantReply = buildActionFallbackReply(actionResult);
+      } else {
+        try {
+          const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
 
         for (const result of actionResults) {
           const resultJson = formatActionResultContext(result);
@@ -950,24 +1022,43 @@ export const appRouter = router({
       let assistantReply = buildActionFallbackReply(actionResults[0] || null);
 
       try {
-        // PERF: Final Chat Generation
-        const llmResponse = await invokeLLM({
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
-            ...actionSystemMessages,
-            ...history.slice(-15).map((m: any) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content as string,
-            })),
-          ],
-        });
+        // PERF: Dialogflow CX (optional) vs LLM for conversational replies
+        let usedDialogflowCx = false;
+        if (
+          isDialogflowCxConfigured() &&
+          actionResults.length === 0
+        ) {
+          const cxReply = await detectDialogflowCxReply({
+            threadId,
+            message: input.message,
+            language: input.language,
+          });
+          if (cxReply) {
+            assistantReply = cxReply;
+            usedDialogflowCx = true;
+          }
+        }
 
-        assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
-      } catch (error) {
-        console.error("[Flow Guru] Chat generation failed.", error);
+        if (!usedDialogflowCx) {
+          const llmResponse = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              ...actionSystemMessages,
+              ...history.slice(-15).map((m: any) => ({
+                role: m.role as "user" | "assistant",
+                content: m.content as string,
+              })),
+            ],
+          });
+
+          assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+        }
+        } catch (error) {
+          console.error("[Flow Guru] Chat generation failed.", error);
+        }
       }
 
       await createConversationMessage({
@@ -981,7 +1072,7 @@ export const appRouter = router({
       // PERF: Fire-and-forget memory extraction to return response immediately
       extractAndPersistMemory({
         userId,
-        userName,
+        userName: userFirstName || null,
         userMessage: input.message,
         assistantReply,
       }).catch(err => console.warn("[Flow Guru] Background memory extraction failed:", err));
@@ -1005,7 +1096,7 @@ export const appRouter = router({
         (f: any) => f.factKey === "assistant_name" && f.category === "preference"
       );
       const assistantName = assistantNameFact?.factValue || "FLO GURU";
-      const userName = ctx.user?.name || "Brandon";
+      const userName = displayFirstName(ctx.user);
 
       const locationFact = memoryFacts.find(
         (f: any) => f.factKey === "location" || f.factKey === "city" || f.factKey === "home_location"
@@ -1068,8 +1159,8 @@ export const appRouter = router({
         if (userLocation) {
           try {
             const { planAssistantAction, executeAssistantAction } = await import("./assistantActions.js");
-            const plan = await planAssistantAction({ userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
-            const result = await executeAssistantAction(plan, { userId, userName: ctx.user?.name, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
+            const plan = await planAssistantAction({ userName: displayFirstName(ctx.user) || undefined, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
+            const result = await executeAssistantAction(plan, { userId, userName: displayFirstName(ctx.user) || undefined, message: "current weather", memoryContext: `Location: ${userLocation}`, language: 'en' });
             if (result.status === "executed") weather = result.data;
           } catch {}
         }
@@ -1092,7 +1183,7 @@ export const appRouter = router({
           calendar: calendar.map(e => ({ title: e.title, start: e.startAt })),
           lists: listSnapshots,
           assistantName: getAssistantName(memoryFacts),
-          userName: ctx.user?.name || "Brandon",
+          userName: displayFirstName(ctx.user),
         };
       }),
   }),

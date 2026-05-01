@@ -11,7 +11,7 @@ const dbMocks = vi.hoisted(() => ({
   listConversationMessages: vi.fn(),
   listProviderConnections: vi.fn(),
   listUserMemoryFacts: vi.fn(),
-  resolveAssistantUserId: vi.fn(async (user: { id: number } | null) => user?.id ?? 1),
+  resolveAssistantUserId: vi.fn(async (user: { id: number } | null, _guestDeviceId?: string | null) => user?.id ?? 1),
   touchConversationThread: vi.fn(),
   upsertUserMemoryProfile: vi.fn(),
 }));
@@ -22,6 +22,10 @@ const llmMocks = vi.hoisted(() => ({
 
 vi.mock("./db", () => dbMocks);
 vi.mock("./_core/llm", () => llmMocks);
+vi.mock("../api/lib/_core/dialogflowCx.js", () => ({
+  isDialogflowCxConfigured: () => false,
+  detectDialogflowCxReply: vi.fn(async () => null),
+}));
 
 import { appRouter } from "./routers";
 
@@ -271,8 +275,12 @@ describe("assistant router", () => {
     expect(result.reply).toContain("steady start");
     expect(result.threadId).toBe(10);
     expect(result.memoryUpdate).toEqual({
-      profileUpdated: true,
-      factsAdded: 1,
+      profileUpdated: false,
+      factsAdded: 0,
+    });
+
+    await vi.waitFor(() => {
+      expect(llmMocks.invokeLLM).toHaveBeenCalledTimes(3);
     });
 
     expect(dbMocks.createConversationMessage).toHaveBeenCalledTimes(2);
@@ -307,7 +315,6 @@ describe("assistant router", () => {
       },
     ]);
     expect(dbMocks.touchConversationThread).toHaveBeenCalledWith(10);
-    expect(llmMocks.invokeLLM).toHaveBeenCalledTimes(3);
   });
 
   it("falls back gracefully when the chat model fails", async () => {
@@ -380,13 +387,13 @@ describe("assistant router", () => {
 
     const result = await caller.assistant.send({ message: "Help me plan tomorrow." });
 
-    expect(result.reply).toBe("I’m here with you. Tell me a little more, and I’ll help from there.");
+    expect(result.reply).toBe("Chatting\n\nI'm just chatting with you.");
     expect(result.memoryUpdate).toEqual({ profileUpdated: false, factsAdded: 0 });
     expect(dbMocks.createConversationMessage).toHaveBeenNthCalledWith(2, {
       threadId: 12,
       userId: ctx.user!.id,
       role: "assistant",
-      content: "I’m here with you. Tell me a little more, and I’ll help from there.",
+      content: "Chatting\n\nI'm just chatting with you.",
     });
   });
 
@@ -427,7 +434,7 @@ describe("assistant router", () => {
 
     expect(dbMocks.createConversationThread).toHaveBeenCalledWith({
       userId: ctx.user!.id,
-      title: "Flow Guru Chat",
+      title: "FLO GURU Chat",
     });
     expect(dbMocks.getConversationThreadById).toHaveBeenCalledWith(thread.id);
     expect(result.thread).toEqual(thread);
@@ -550,7 +557,7 @@ describe("assistant router", () => {
     expect(result.threadId).toBe(56);
     expect(dbMocks.createConversationThread).toHaveBeenCalledWith({
       userId: 55,
-      title: "Flow Guru Chat",
+      title: "FLO GURU Chat",
     });
     expect(dbMocks.createConversationMessage).toHaveBeenNthCalledWith(1, {
       threadId: 56,

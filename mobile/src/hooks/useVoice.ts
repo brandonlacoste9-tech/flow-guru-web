@@ -1,57 +1,91 @@
-import { useState, useCallback, useEffect } from 'react';
-import * as Speech from 'expo-speech';
-import ExpoSpeechRecognition from 'expo-speech-recognition';
+import { useState, useCallback, useEffect, useRef } from "react";
+import * as Speech from "expo-speech";
+import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 
 export const useVoice = () => {
   const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
+  const [transcript, setTranscript] = useState("");
+  const subsRef = useRef<Array<{ remove: () => void }>>([]);
+
+  const clearSubs = useCallback(() => {
+    for (const s of subsRef.current) {
+      try {
+        s.remove();
+      } catch {
+        /* ignore */
+      }
+    }
+    subsRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearSubs();
+      try {
+        ExpoSpeechRecognitionModule.abort();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [clearSubs]);
 
   const startListening = useCallback(async () => {
     try {
       setIsListening(true);
-      setTranscript('');
-      
-      // Request permissions
-      const { status } = await ExpoSpeechRecognition.requestPermissionsAsync();
-      if (status !== 'granted') {
-          console.warn('Speech recognition permission not granted');
-          setIsListening(false);
-          return;
+      setTranscript("");
+      clearSubs();
+
+      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!perm.granted) {
+        console.warn("Speech recognition permission not granted");
+        setIsListening(false);
+        return;
       }
 
-      await ExpoSpeechRecognition.startAsync({
-        lang: 'en-US',
-        onResult: (event) => {
-          if (event.results?.[0]?.transcript) {
-            setTranscript(event.results[0].transcript);
-          }
-        },
-        onEnd: () => {
+      subsRef.current.push(
+        ExpoSpeechRecognitionModule.addListener("result", event => {
+          const t = event.results?.[0]?.transcript;
+          if (t) setTranscript(t);
+        }),
+      );
+      subsRef.current.push(
+        ExpoSpeechRecognitionModule.addListener("error", () => {
           setIsListening(false);
-        },
-        onError: (err) => {
-          console.error('Speech recognition error:', err);
+          clearSubs();
+        }),
+      );
+      subsRef.current.push(
+        ExpoSpeechRecognitionModule.addListener("end", () => {
           setIsListening(false);
-        }
+          clearSubs();
+        }),
+      );
+
+      ExpoSpeechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true,
       });
     } catch (error) {
-      console.error('Failed to start listening:', error);
+      console.error("Failed to start listening:", error);
       setIsListening(false);
+      clearSubs();
     }
-  }, []);
+  }, [clearSubs]);
 
   const stopListening = useCallback(async () => {
     try {
-      await ExpoSpeechRecognition.stopAsync();
+      clearSubs();
+      ExpoSpeechRecognitionModule.stop();
       setIsListening(false);
     } catch (error) {
-      console.error('Failed to stop listening:', error);
+      console.error("Failed to stop listening:", error);
+      setIsListening(false);
     }
-  }, []);
+  }, [clearSubs]);
 
   const speak = useCallback((text: string) => {
     Speech.speak(text, {
-      language: 'en',
+      language: "en",
       pitch: 1.0,
       rate: 1.0,
     });

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Plus, Trash2, CheckCircle2, Circle, ListTodo, X, Sparkles, Edit2, Check, MapPin } from 'lucide-react';
 import { useLocation } from 'wouter';
@@ -6,6 +6,21 @@ import { trpc } from '@/lib/trpc-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { Button } from '@/components/ui/button';
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import { Input } from '@/components/ui/input';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group';
 
 export default function Lists() {
   const [, navigate] = useLocation();
@@ -130,7 +145,7 @@ export default function Lists() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30 overflow-hidden">
+    <div className="flex flex-col min-h-[100dvh] min-h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30 overflow-hidden">
       {/* Background Ambient Glow */}
       <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" aria-hidden="true">
         <div
@@ -143,51 +158,61 @@ export default function Lists() {
 
       {/* Header */}
       <header className="px-4 sm:px-6 pt-5 pb-3 flex items-center gap-4 z-50">
-        <button 
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-lg"
           onClick={() => selectedListId ? setSelectedListId(null) : navigate("/")}
-          className="w-10 h-10 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm"
+          className="rounded-full bg-card backdrop-blur-md shadow-sm"
         >
-          <ChevronLeft size={20} />
-        </button>
+          <ChevronLeft />
+        </Button>
         <div className="flex-1">
           {selectedListId && editingListId === selectedListId ? (
             <form onSubmit={handleUpdateList} className="flex items-center gap-2">
-              <input 
+              <Input
                 autoFocus
                 value={editingListName}
                 onChange={(e) => setEditingListName(e.target.value)}
                 onBlur={() => setEditingListId(null)}
-                className="bg-transparent text-xl font-bold tracking-tight focus:outline-none border-b border-primary/30 w-full"
+                className="h-9 border-0 border-b border-primary/30 bg-transparent px-0 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0"
               />
-              <button type="submit" className="p-2 text-primary"><Check size={18} /></button>
+              <Button type="submit" variant="ghost" size="icon-sm" className="text-primary">
+                <Check />
+              </Button>
             </form>
           ) : (
             <h1 className="text-xl font-bold tracking-tight flex items-center gap-2 group">
               {selectedListId ? selectedList?.name : t('lists_main_title')}
               {selectedListId && (
-                <button 
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={(e) => startEditingList(e, selectedList)}
-                  className="p-1.5 rounded-full hover:bg-primary/10 text-primary/60 transition-all flex items-center justify-center"
+                  className="rounded-full text-primary/60 hover:bg-primary/10"
                   title="Rename list"
                 >
-                  <Edit2 size={14} />
-                </button>
+                  <Edit2 />
+                </Button>
               )}
             </h1>
           )}
           {!selectedListId && <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">{t('lists_collections')}</p>}
         </div>
         {!selectedListId && (
-          <button 
+          <Button
+            type="button"
+            size="icon-lg"
             onClick={() => setIsAddingList(true)}
-            className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+            className="rounded-full shadow-lg shadow-primary/20 hover:scale-105 active:scale-95"
           >
-            <Plus size={20} />
-          </button>
+            <Plus />
+          </Button>
         )}
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 sm:px-6 pb-24 z-10 scrollbar-hide">
+      <main className="flex-1 overflow-y-auto px-4 sm:px-6 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] z-10 scrollbar-hide">
         <div className="max-w-2xl mx-auto py-6">
           <AnimatePresence mode="wait">
             {!selectedListId ? (
@@ -204,27 +229,29 @@ export default function Lists() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="bg-card border-2 border-dashed border-primary/30 rounded-3xl p-6 flex flex-col items-center justify-center gap-4 shadow-xl"
                   >
-                    <form onSubmit={handleAddList} className="w-full space-y-4">
-                      <input 
+                    <form onSubmit={handleAddList} className="flex w-full flex-col gap-4">
+                      <Input
                         autoFocus
                         value={newListName}
                         onChange={(e) => setNewListName(e.target.value)}
                         placeholder={t('lists_placeholder_name')}
-                        className="w-full bg-transparent text-center text-lg font-bold placeholder:text-muted-foreground/40 focus:outline-none"
+                        className="h-11 border-0 bg-transparent text-center text-lg font-bold shadow-none placeholder:text-muted-foreground/40 focus-visible:ring-0"
                       />
                       <div className="flex gap-2 justify-center">
-                        <button                           type="button"
+                        <Button
+                          type="button"
+                          variant="ghost"
                           onClick={() => setIsAddingList(false)}
-                          className="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest text-muted-foreground hover:bg-accent/10"
+                          className="rounded-full text-xs font-bold uppercase tracking-widest text-muted-foreground"
                         >
                           {t('lists_cancel')}
-                        </button>
-                        <button 
+                        </Button>
+                        <Button
                           type="submit"
-                          className="px-6 py-2 rounded-full bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest shadow-lg shadow-primary/10"
+                          className="rounded-full text-xs font-bold uppercase tracking-widest shadow-lg shadow-primary/10"
                         >
                           {t('lists_create')}
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </motion.div>
@@ -242,29 +269,32 @@ export default function Lists() {
                   >
                     <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/20 transition-all" />
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                        <ListTodo size={20} />
+                      <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <ListTodo className="size-5" />
                       </div>
                       <div className="flex-1 overflow-hidden">
                         {editingListId === list.id ? (
                           <form onSubmit={handleUpdateList} onClick={(e) => e.stopPropagation()}>
-                            <input 
+                            <Input
                               autoFocus
                               value={editingListName}
                               onChange={(e) => setEditingListName(e.target.value)}
-                              className="bg-transparent font-bold text-lg focus:outline-none border-b border-primary w-full"
+                              className="h-9 border-0 border-b border-primary bg-transparent px-0 text-lg font-bold shadow-none focus-visible:ring-0"
                               onBlur={() => setEditingListId(null)}
                             />
                           </form>
                         ) : (
                           <div className="flex items-center gap-2">
                             <h3 className="font-bold text-lg truncate">{list.name}</h3>
-                            <button 
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
                               onClick={(e) => startEditingList(e, list)}
-                              className="opacity-40 group-hover:opacity-100 p-1.5 rounded-full hover:bg-primary/10 text-primary/40 hover:text-primary transition-all flex items-center justify-center"
+                              className="rounded-full text-primary/40 opacity-40 hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
                             >
-                              <Edit2 size={12} />
-                            </button>
+                              <Edit2 />
+                            </Button>
                           </div>
                         )}
                         <p className="text-xs text-muted-foreground font-medium">{new Date(list.createdAt).toLocaleDateString()}</p>
@@ -275,13 +305,15 @@ export default function Lists() {
                 ))}
 
                 {allLists.data?.length === 0 && !isAddingList && (
-                  <div className="col-span-full py-20 text-center">
-                    <div className="w-20 h-20 rounded-full bg-accent/5 flex items-center justify-center mx-auto mb-4">
-                      <ListTodo size={32} className="text-muted-foreground/30" />
-                    </div>
-                    <h3 className="text-lg font-bold text-muted-foreground/60">{t('lists_empty_title')}</h3>
-                    <p className="text-sm text-muted-foreground/40 mt-1">{t('lists_empty_desc')}</p>
-                  </div>
+                  <Empty className="col-span-full py-20">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon" className="size-20 rounded-full bg-accent/5 text-muted-foreground/30">
+                        <ListTodo />
+                      </EmptyMedia>
+                      <EmptyTitle className="text-muted-foreground/60">{t('lists_empty_title')}</EmptyTitle>
+                      <EmptyDescription className="text-muted-foreground/40">{t('lists_empty_desc')}</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 )}
               </motion.div>
             ) : (
@@ -290,7 +322,7 @@ export default function Lists() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6"
+                className="flex flex-col gap-6"
               >
                 {/* List Control Header */}
                 <div className="flex items-center justify-between px-2">
@@ -298,41 +330,48 @@ export default function Lists() {
                     <Sparkles size={14} className="text-primary" />
                     <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t('lists_manage')}</span>
                   </div>
-                  <button 
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
                     onClick={() => {
                       if (confirm(t('lists_delete_confirm').replace('{name}', selectedList?.name || ''))) {
                         deleteListMutation.mutate({ listId: selectedListId });
                       }
                     }}
-                    className="p-2 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                    className="rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   >
-                    <Trash2 size={16} />
-                  </button>
+                    <Trash2 />
+                  </Button>
                 </div>
 
                 {/* Add Item Form */}
                 <form onSubmit={handleAddItem} className="relative group">
                   <div className="absolute -inset-1 bg-primary/10 rounded-2xl blur-xl opacity-0 group-focus-within:opacity-100 transition duration-700"></div>
-                  <div className="relative flex items-center gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-xl">
-                    <input 
+                  <InputGroup className="relative h-14 rounded-2xl bg-card px-2 shadow-xl">
+                    <InputGroupInput
                       autoFocus
                       value={newItemContent}
                       onChange={(e) => setNewItemContent(e.target.value)}
                       placeholder={t('lists_placeholder_item')}
-                      className="flex-1 bg-transparent text-[15px] focus:outline-none placeholder:text-muted-foreground/40"
+                      className="text-[15px] placeholder:text-muted-foreground/40"
                     />
-                    <button 
-                      type="submit"
-                      disabled={!newItemContent.trim()}
-                      className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/20 disabled:opacity-50 disabled:scale-95 transition-all"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton
+                        type="submit"
+                        variant="default"
+                        size="icon-sm"
+                        disabled={!newItemContent.trim()}
+                        className="rounded-full shadow-lg shadow-primary/20 disabled:scale-95"
+                      >
+                        <Plus />
+                      </InputGroupButton>
+                    </InputGroupAddon>
+                  </InputGroup>
                 </form>
 
                 {/* Items List */}
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   {listItems.data?.map((item, idx) => (
                     <motion.div
                       key={item.id}
@@ -344,27 +383,32 @@ export default function Lists() {
                         item.completed ? "opacity-50" : "shadow-sm hover:border-primary/20"
                       )}
                     >
-                      <button 
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={() => toggleItemMutation.mutate({ itemId: item.id, completed: !item.completed })}
                         className={cn(
-                          "shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all",
+                          "size-6 shrink-0 rounded-full",
                           item.completed ? "text-primary bg-primary/10" : "text-muted-foreground/30 hover:text-primary hover:bg-primary/5"
                         )}
                       >
-                        {item.completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
-                      </button>
+                        {item.completed ? <CheckCircle2 /> : <Circle />}
+                      </Button>
                       
                       <div className="flex-1 min-w-0">
                         {editingItemId === item.id ? (
                           <form onSubmit={handleUpdateItem} className="flex items-center gap-2">
-                            <input 
+                            <Input
                               autoFocus
                               value={editingItemContent}
                               onChange={(e) => setEditingItemContent(e.target.value)}
-                              className="flex-1 bg-transparent text-[15px] font-medium focus:outline-none border-b border-primary"
+                              className="h-8 flex-1 border-0 border-b border-primary bg-transparent px-0 text-[15px] font-medium shadow-none focus-visible:ring-0"
                               onBlur={() => setEditingItemId(null)}
                             />
-                            <button type="submit" className="text-primary"><Check size={16} /></button>
+                            <Button type="submit" variant="ghost" size="icon-sm" className="text-primary">
+                              <Check />
+                            </Button>
                           </form>
                         ) : (
                           <div className="flex items-center gap-2">
@@ -391,30 +435,41 @@ export default function Lists() {
                               )}
                             </div>
                             {!item.completed && (
-                              <button 
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
                                 onClick={(e) => startEditingItem(e, item)}
-                                className="opacity-40 group-hover:opacity-100 p-1.5 rounded-full hover:bg-primary/10 text-primary/40 hover:text-primary transition-all flex items-center justify-center shrink-0"
+                                className="shrink-0 rounded-full text-primary/40 opacity-40 hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
                               >
-                                <Edit2 size={12} />
-                              </button>
+                                <Edit2 />
+                              </Button>
                             )}
                           </div>
                         )}
                       </div>
 
-                      <button 
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={() => deleteItemMutation.mutate({ itemId: item.id })}
-                        className="opacity-0 group-hover:opacity-100 p-2 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                        className="rounded-full text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                       >
-                        <X size={14} />
-                      </button>
+                        <X />
+                      </Button>
                     </motion.div>
                   ))}
                   
                   {listItems.data?.length === 0 && (
-                    <div className="py-12 text-center">
-                      <p className="text-sm text-muted-foreground/40 italic">{t('lists_item_empty')}</p>
-                    </div>
+                    <Empty className="py-12">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon" className="bg-accent/5 text-muted-foreground/30">
+                          <ListTodo />
+                        </EmptyMedia>
+                        <EmptyDescription className="italic text-muted-foreground/40">{t('lists_item_empty')}</EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
                   )}
                 </div>
               </motion.div>

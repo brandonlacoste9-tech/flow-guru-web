@@ -19,6 +19,9 @@ import { prewarmAudio } from "@/hooks/useAlarmSound";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import Waitlist from "@/components/Waitlist";
 import PricingCard from "@/components/PricingCard";
+import { trackConversion } from "@/lib/telemetry";
+import type { TranslationKeys } from "@/lib/translations";
+import { displayFirstName, displayFirstNameOrNeutral } from "@shared/userDisplay";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -33,6 +36,86 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   actionResult?: any;
+}
+
+/** DB messages omit actionResult; the send mutation returns it separately — attach for inline cards. */
+function mergeLatestAssistantActionResult(
+  messages: Message[],
+  actionResult: unknown,
+): Message[] {
+  if (
+    !actionResult ||
+    typeof actionResult !== "object" ||
+    (actionResult as { action?: string }).action === "none"
+  ) {
+    return messages;
+  }
+  const next = messages.map(m => ({ ...m }));
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].role === "assistant") {
+      next[i] = { ...next[i], actionResult };
+      break;
+    }
+  }
+  return next;
+}
+
+/** Bootstrap refetches (invalidate, refocus) replace messages from DB without actionResult — reattach from prior client state. */
+function mergePreservedActionResults(incoming: Message[], prev: Message[]): Message[] {
+  const prevById = new Map(prev.map(m => [String(m.id), m]));
+  return incoming.map(m => {
+    const old = prevById.get(String(m.id));
+    if (old?.actionResult) {
+      return { ...m, actionResult: old.actionResult };
+    }
+    return { ...m };
+  });
+}
+
+type BillingLimit = {
+  limitReached?: boolean;
+  limit?: number;
+  used?: number;
+};
+
+const FREE_TIER_OVER_DAY_KEY = "fg_free_tier_over_utc_day";
+
+/** Cached device position for directions — survives refresh and avoids racing the async geolocation effect. */
+const DEVICE_COORDS_STORAGE_KEY = "fg_device_coords_v1";
+const DEVICE_COORDS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function readStoredDeviceCoords(): { lat: number; lon: number } | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(DEVICE_COORDS_STORAGE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as { lat?: number; lon?: number; t?: number };
+    if (
+      typeof p.lat !== "number" ||
+      typeof p.lon !== "number" ||
+      typeof p.t !== "number" ||
+      !Number.isFinite(p.lat) ||
+      !Number.isFinite(p.lon)
+    ) {
+      return null;
+    }
+    if (Date.now() - p.t > DEVICE_COORDS_MAX_AGE_MS) return null;
+    return { lat: p.lat, lon: p.lon };
+  } catch {
+    return null;
+  }
+}
+
+function persistDeviceCoords(lat: number, lon: number) {
+  try {
+    sessionStorage.setItem(DEVICE_COORDS_STORAGE_KEY, JSON.stringify({ lat, lon, t: Date.now() }));
+  } catch {
+    /* ignore private mode / quota */
+  }
+}
+
+function currentUtcDayKey() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 const SUGGESTIONS: TranslationKeys[] = [
@@ -64,7 +147,9 @@ export default function Home() {
   const [currentStation, setCurrentStation] = useState('');
   const [showForecast, setShowForecast] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
-  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(() =>
+    typeof window === "undefined" ? null : readStoredDeviceCoords(),
+  );
   const [showNews, setShowNews] = useState(false);
   const [countryCode, setCountryCode] = useState<string>('us');
   // Guest mode: track how many messages sent without an account
@@ -72,11 +157,12 @@ export default function Home() {
     return parseInt(localStorage.getItem('guest_msg_count') || '0', 10);
   });
   const [showSignInBanner, setShowSignInBanner] = useState(false);
+  const [billingLimit, setBillingLimit] = useState<BillingLimit | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     return !localStorage.getItem('floguru_onboarded');
   });
-  const [wakeUpTime, setWakeUpTime] = useState<string | null>(null);
-  const [alarmDays, setAlarmDays] = useState<string>('0,1,2,3,4,5,6');
+  const [wakeUpTime, setWakeUpTime] = useState<string | null>(() => localStorage.getItem('wakeUpTime'));
+  const [alarmDays, setAlarmDays] = useState<string>(() => localStorage.getItem('alarmDays') || '0,1,2,3,4,5,6');
   const [alarmSound, setAlarmSound] = useState<import('@/hooks/useAlarmSound').AlarmSoundType>(() => {
     return (localStorage.getItem('alarmSound') as import('@/hooks/useAlarmSound').AlarmSoundType) || 'chime';
   });
@@ -104,12 +190,18 @@ export default function Home() {
   useEffect(() => {
     const data = profileQuery.data as any;
     if (!data) return;
-    if (data.wakeUpTime) setWakeUpTime(data.wakeUpTime);
+    if (data.wakeUpTime !== undefined) {
+      setWakeUpTime(data.wakeUpTime || null);
+      localStorage.setItem('wakeUpTime', data.wakeUpTime || '');
+    }
     if (data.alarmSound) {
       setAlarmSound(data.alarmSound as import('@/hooks/useAlarmSound').AlarmSoundType);
       localStorage.setItem('alarmSound', data.alarmSound);
     }
-    if (data.alarmDays) setAlarmDays(data.alarmDays);
+    if (data.alarmDays) {
+      setAlarmDays(data.alarmDays);
+      localStorage.setItem('alarmDays', data.alarmDays);
+    }
   }, [profileQuery.data]);
 
   useEffect(() => {
@@ -122,6 +214,31 @@ export default function Home() {
   }, []);
 
   const bootstrap = trpc.assistant.bootstrap.useQuery({ language }, { enabled: true });
+  const uniqueMemoryCount = (() => {
+    const facts = ((bootstrap.data as any)?.memoryFacts ?? []) as Array<any>;
+    const seen = new Set<string>();
+    for (const fact of facts) {
+      const normalizedValue = String(fact?.factValue ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizedKey = String(fact?.factKey ?? '').trim().toLowerCase();
+      const normalizedCategory = String(fact?.category ?? '').trim().toLowerCase();
+      seen.add(`${normalizedCategory}::${normalizedKey}::${normalizedValue}`);
+    }
+    return seen.size;
+  })();
+  const activeAlarmLabel = typeof window !== 'undefined' ? localStorage.getItem('fg_alarm_active_label') : null;
+  const snoozedUntilIso = typeof window !== 'undefined' ? localStorage.getItem('fg_alarm_snoozed_until') : null;
+  const snoozedUntilDate = snoozedUntilIso ? new Date(snoozedUntilIso) : null;
+  const snoozedActive = Boolean(snoozedUntilDate && !Number.isNaN(snoozedUntilDate.getTime()) && snoozedUntilDate.getTime() > Date.now());
+  const nextWakeHint = wakeUpTime
+    ? (language === 'en' ? `Wake alarm at ${wakeUpTime}` : `Alarme de reveil a ${wakeUpTime}`)
+    : (language === 'en' ? 'Wake alarm not set' : 'Alarme de reveil non definie');
+  const alarmStatusHint = activeAlarmLabel
+    ? activeAlarmLabel
+    : snoozedActive && snoozedUntilDate
+      ? (language === 'en'
+        ? `Alarm snoozed until ${snoozedUntilDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+        : `Alarme reportee jusqu'a ${snoozedUntilDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`)
+      : nextWakeHint;
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -139,17 +256,20 @@ export default function Home() {
 
   const addMemoryFactMutation = trpc.settings.addMemoryFact.useMutation();
 
-  // Auto-geolocation: fetch weather client-side if bootstrap didn't return any
+  // Browser geolocation: always capture lat/lon for assistant directions when permitted.
+  // Client-side weather fetch only runs if bootstrap did not already supply weather.
   useEffect(() => {
     if (bootstrap.isLoading) return;
-    if (weather !== null) return;
+    if (coords != null) return;
     if (geoFetchedRef.current) return;
     if (!('geolocation' in navigator)) return;
     
     geoFetchedRef.current = true;
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
+      persistDeviceCoords(latitude, longitude);
       setCoords({ lat: latitude, lon: longitude });
+      if (weather !== null) return;
       try {
         const [cityRes, wxRes] = await Promise.all([
           fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`),
@@ -183,12 +303,14 @@ export default function Home() {
       console.warn("Geolocation failed", err);
       // We don't reset geoFetchedRef here to avoid infinite loops if it's permanently denied
     });
-  }, [bootstrap.isLoading, weather, user]);
+  }, [bootstrap.isLoading, weather, user, coords]);
 
   useEffect(() => {
     const data = bootstrap.data;
     if (!data) return;
-    if (data.messages) setMessages(data.messages as Message[]);
+    if (data.messages) {
+      setMessages(prev => mergePreservedActionResults(data.messages as Message[], prev));
+    }
     if (data.thread) setCurrentThreadId(data.thread.id);
     if (data.assistantName) setAssistantName(data.assistantName);
     if (data.weather) {
@@ -217,9 +339,8 @@ export default function Home() {
     onError: (err) => toast.error("Failed to start new session")
   });
 
-  // Streaming endpoint replaced speakMutation
-  const playAudioStream = (url: string, cleanText: string) => {
-    const audio = new Audio(url);
+  const playAudioStream = (audioSrc: string, cleanText: string) => {
+    const audio = new Audio(audioSrc);
     audio.onended = () => setIsSpeaking(false);
     audio.onerror = () => {
       setIsSpeaking(false);
@@ -242,10 +363,51 @@ export default function Home() {
     });
   };
 
+  const speakMutation = trpc.assistant.speak.useMutation();
+
   const sendMutation = trpc.assistant.send.useMutation({
     onSuccess: (result) => {
-      setMessages(result.messages as Message[]);
+      const withCard = mergeLatestAssistantActionResult(
+        result.messages as Message[],
+        result.actionResult,
+      );
+      setMessages(withCard);
       if (result.threadId) setCurrentThreadId(result.threadId);
+      const limit = (result as any).billing as BillingLimit | undefined;
+      if (limit?.limitReached) {
+        setBillingLimit(limit);
+        localStorage.setItem(FREE_TIER_OVER_DAY_KEY, currentUtcDayKey());
+        trackConversion("free_limit_reached", {
+          authenticated: Boolean(user),
+          language,
+          limit: limit.limit ?? 10,
+          used: limit.used ?? limit.limit ?? 10,
+        });
+        trackConversion("upgrade_cta_shown", {
+          surface: "chat_limit_toast",
+          authenticated: Boolean(user),
+        });
+        toast.info("Free tier over", {
+          description: "Your free tier is over for today. Upgrade to Flow Guru Monthly to keep chatting.",
+          action: {
+            label: "Upgrade",
+            onClick: () => {
+              trackConversion("upgrade_cta_clicked", {
+                surface: "chat_limit_toast",
+                authenticated: Boolean(user),
+              });
+              navigate('/settings?tab=billing');
+            },
+          },
+        });
+      } else {
+        setBillingLimit(null);
+      }
+      if (result.actionResult?.action === 'list.manage' && result.actionResult.status === 'executed') {
+        void utils.list.all.invalidate();
+        void utils.list.items.invalidate();
+        void utils.assistant.bootstrap.invalidate({ language });
+      }
       if (speechEnabled && result.reply) speakText(result.reply);
     },
     onError: (err) => {
@@ -280,8 +442,31 @@ export default function Home() {
     else { setIsListening(true); recognitionRef.current.start(); }
   };
 
-  const handleSend = (text: string) => {
+  const handleSend = async (text: string) => {
     if (!text.trim() || sendMutation.isPending) return;
+
+    let sendCoords = coords;
+    if (sendCoords == null) {
+      const cached = readStoredDeviceCoords();
+      if (cached) {
+        sendCoords = cached;
+        setCoords(cached);
+      }
+    }
+    if (sendCoords == null && typeof navigator !== "undefined" && "geolocation" in navigator) {
+      sendCoords = await new Promise<{ lat: number; lon: number } | null>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const next = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+            persistDeviceCoords(next.lat, next.lon);
+            resolve(next);
+          },
+          () => resolve(null),
+          { enableHighAccuracy: false, maximumAge: 300000, timeout: 8000 },
+        );
+      });
+      if (sendCoords) setCoords(sendCoords);
+    }
 
     // Track guest usage and show sign-in nudge after 5 messages
     if (!user) {
@@ -307,7 +492,10 @@ export default function Home() {
       message: text,
       threadId: startsFresh ? undefined : currentThreadId,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      language
+      language,
+      ...(sendCoords != null
+        ? { deviceLatitude: sendCoords.lat, deviceLongitude: sendCoords.lon }
+        : {}),
     });
   };
 
@@ -324,9 +512,24 @@ export default function Home() {
     
     const profileVoiceId = (profileQuery.data as any)?.voiceId;
     const finalVoiceId = profileVoiceId || VOICE_IDS[voiceGenderRef.current];
-    
-    const url = `/api/speak?text=${encodeURIComponent(clean)}&voiceId=${finalVoiceId}`;
-    playAudioStream(url, clean);
+
+    speakMutation.mutate(
+      { text: clean, voiceId: finalVoiceId },
+      {
+        onSuccess: (data) => {
+          playAudioStream(data.audioDataUri, clean);
+        },
+        onError: () => {
+          setIsSpeaking(false);
+          if (!('speechSynthesis' in window)) return;
+          window.speechSynthesis.cancel();
+          const utt = new SpeechSynthesisUtterance(clean);
+          utt.rate = 1.05;
+          utt.pitch = 1.0;
+          window.speechSynthesis.speak(utt);
+        },
+      },
+    );
   };
 
   const formatEventTime = (iso: string | null, allDay: boolean) => {
@@ -402,7 +605,8 @@ export default function Home() {
   const greeting = language === 'en'
     ? (currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening")
     : (currentTime.getHours() < 12 ? "Bonjour" : currentTime.getHours() < 17 ? "Bon après-midi" : "Bonsoir");
-  const userName = user?.name?.split(' ')[0] || "Brandon";
+  const userFirstName = displayFirstName(user);
+  const userName = displayFirstNameOrNeutral(user);
 
   // AI reminders — checks calendar events and wake-up time every minute
   const handleBriefing = async () => {
@@ -412,8 +616,16 @@ export default function Home() {
         const calCount = data.calendar.length;
         const listCount = data.lists.reduce((acc, l) => acc + l.items.length, 0);
         const w = data.weather;
-        
-        let prompt = (language === 'en' ? `Good morning, ${data.userName}! I'm ${data.assistantName}, and I've got your briefing ready. ` : `Bonjour, ${data.userName} ! Je suis ${data.assistantName}, et j'ai préparé votre briefing. `);
+
+        const bn = data.userName?.trim();
+        let prompt =
+          language === "en"
+            ? bn
+              ? `Good morning, ${bn}! I'm ${data.assistantName}, and I've got your briefing ready. `
+              : `Good morning! I'm ${data.assistantName}, and I've got your briefing ready. `
+            : bn
+              ? `Bonjour, ${bn} ! Je suis ${data.assistantName}, et j'ai préparé votre briefing. `
+              : `Bonjour ! Je suis ${data.assistantName}, et j'ai préparé votre briefing. `;
         
         if (w) {
           const weatherAny = w as any;
@@ -444,13 +656,17 @@ export default function Home() {
   };
 
   const { alarmState, dismissAlarm, snoozeAlarm } = useReminders({
-    enabled: speechEnabled,
+    // Keep alarms active even when voice playback is muted.
+    // The speaker toggle controls TTS, not reminder scheduling.
+    enabled: true,
     userName,
     wakeUpTime,
     speakText,
     voiceGender,
     alarmSound,
     alarmDays,
+    waterBreakEnabled: localStorage.getItem('fg_water_break_enabled') === '1',
+    waterBreakIntervalMinutes: Number(localStorage.getItem('fg_water_break_interval_minutes') || '60'),
     onWakeUp: handleBriefing,
   });
 
@@ -459,7 +675,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30 overflow-hidden">
+    <div className="flex flex-col min-h-[100dvh] min-h-screen bg-background text-foreground font-['Outfit'] selection:bg-primary/30 overflow-hidden">
       {/* Background Ambient Glow */}
       <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" aria-hidden="true">
         <motion.div
@@ -483,7 +699,15 @@ export default function Home() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <img src="/floguru-logo.png" alt="FLO GURU" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shadow-sm" />
+          <img
+            src="/floguru-logo.png"
+            alt="FLO GURU"
+            width={36}
+            height={36}
+            fetchPriority="high"
+            decoding="async"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shadow-sm"
+          />
           <h1 className="text-base sm:text-lg font-bold tracking-tighter uppercase">
             FLO GURU
             <span className="sr-only"> - Your Autonomous AI Lifestyle Companion</span>
@@ -553,7 +777,14 @@ export default function Home() {
             <Settings size={14} />
           </button>
 
-          <button onClick={() => setSpeechEnabled(!speechEnabled)}
+          <button onClick={() => {
+              const next = !speechEnabled;
+              setSpeechEnabled(next);
+              toast.info(next ? "Voice replies on" : "Voice replies muted", {
+                description: "Alarms and reminders stay active.",
+              });
+            }}
+            title="Toggle voice replies (alarms stay active)"
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-border flex items-center justify-center bg-card backdrop-blur-md hover:bg-accent/10 transition-all shadow-sm">
             {speechEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
           </button>
@@ -576,7 +807,7 @@ export default function Home() {
 
       {/* Main */}
       <main className="flex-1 overflow-y-auto px-4 sm:px-5 scrollbar-hide z-10">
-        <div className="max-w-2xl mx-auto pb-36">
+        <div className="max-w-2xl mx-auto pb-[calc(9rem+env(safe-area-inset-bottom,0px))]">
 
           {/* Dashboard */}
           <AnimatePresence>
@@ -665,7 +896,13 @@ export default function Home() {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.3 }}
                   >
-                    {greeting}, <span className="text-foreground">{userName}</span>
+                    {userFirstName ? (
+                      <>
+                        {greeting}, <span className="text-foreground">{userFirstName}</span>
+                      </>
+                    ) : (
+                      greeting
+                    )}
                   </motion.h2>
                 </div>
 
@@ -729,17 +966,28 @@ export default function Home() {
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('card_calendar_today')}</span>
                       </div>
-                      <button
-                        className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[9px] sm:text-[10px] uppercase font-bold tracking-wider hover:bg-primary/20 transition-colors"
-                        onClick={(e) => {
-                          if (isGoogleConnected) {
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[9px] sm:text-[10px] uppercase font-bold tracking-wider hover:bg-primary/20 transition-colors"
+                          onClick={(e) => {
                             e.stopPropagation();
-                            window.open('https://calendar.google.com/calendar/u/0/r', '_blank');
-                          }
-                        }}
-                      >
-                        {isGoogleConnected ? t('card_calendar_open_google') : t('card_calendar_open')}
-                      </button>
+                            navigate('/settings?tab=alarms');
+                          }}
+                        >
+                          {language === 'en' ? 'Alarms' : 'Alarmes'}
+                        </button>
+                        <button
+                          className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[9px] sm:text-[10px] uppercase font-bold tracking-wider hover:bg-primary/20 transition-colors"
+                          onClick={(e) => {
+                            if (isGoogleConnected) {
+                              e.stopPropagation();
+                              window.open('https://calendar.google.com/calendar/u/0/r', '_blank');
+                            }
+                          }}
+                        >
+                          {isGoogleConnected ? t('card_calendar_open_google') : t('card_calendar_open')}
+                        </button>
+                      </div>
                     </div>
                     
                     {allTodayEvents.length > 0 ? (
@@ -763,6 +1011,9 @@ export default function Home() {
                         <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{t('card_calendar_no_events')}</p>
                       </div>
                     )}
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3 truncate">
+                      {alarmStatusHint}
+                    </p>
                   </motion.div>
 
                   {/* News Card */}
@@ -832,8 +1083,8 @@ export default function Home() {
                     <p className="text-sm font-semibold text-foreground">{language === 'en' ? 'AI Knowledge' : 'Connaissance IA'}</p>
                     <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                       {language === 'en' 
-                        ? <>Flow Guru has learned <span className="text-primary font-bold">{bootstrap.data?.memoryFacts?.length || 0}</span> facts about you.</>
-                        : <>Flow Guru a appris <span className="text-primary font-bold">{bootstrap.data?.memoryFacts?.length || 0}</span> faits sur vous.</>}
+                        ? <>Flow Guru has learned <span className="text-primary font-bold">{uniqueMemoryCount}</span> facts about you.</>
+                        : <>Flow Guru a appris <span className="text-primary font-bold">{uniqueMemoryCount}</span> faits sur vous.</>}
                     </p>
                     <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-primary mt-3">{language === 'en' ? 'Manage Memories' : 'Gérer les mémoires'} →</p>
                   </motion.div>
@@ -965,6 +1216,34 @@ export default function Home() {
                   </motion.div>
                 ))}
               </AnimatePresence>
+              {billingLimit?.limitReached && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full max-w-[95%] sm:max-w-[90%] rounded-3xl border border-primary/30 bg-primary/10 p-4 shadow-xl"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-foreground">Keep Flow Guru going</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Your free tier is over for today ({billingLimit.used ?? billingLimit.limit} of {billingLimit.limit ?? 10} messages used). Upgrade for CA$4.99/mo to continue.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        trackConversion("upgrade_cta_clicked", {
+                          surface: "chat_limit_banner",
+                          authenticated: Boolean(user),
+                        });
+                        navigate('/settings?tab=billing');
+                      }}
+                      className="shrink-0 rounded-2xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:opacity-90"
+                    >
+                      Upgrade now
+                    </button>
+                  </div>
+                </motion.div>
+              )}
               <div ref={messagesEndRef} className="h-32" />
             </div>
           )}
@@ -972,7 +1251,7 @@ export default function Home() {
       </main>
 
       {/* Input bar */}
-      <footer className="p-4 sm:p-6 fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+      <footer className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none border-t border-border/40 bg-background/95 backdrop-blur-xl px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:px-6 sm:pt-4">
         <motion.div 
           className="max-w-2xl mx-auto flex items-end gap-2 sm:gap-3 pointer-events-auto"
           initial={{ y: 50, opacity: 0 }}
@@ -1102,7 +1381,7 @@ export default function Home() {
       {showOnboarding && (
         <OnboardingFlow
           onComplete={() => setShowOnboarding(false)}
-          userName={user?.name?.split(' ')[0]}
+          userName={userFirstName || undefined}
         />
       )}
       {(showAuthModal || resetToken) && (
@@ -1122,6 +1401,25 @@ export default function Home() {
       )}
 
       {/* ── Alarm Overlay ── */}
+      {alarmState.firing && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
+          <div className="pointer-events-auto flex w-full max-w-sm gap-2 rounded-2xl border border-border bg-card/95 p-2 shadow-2xl backdrop-blur">
+            <button
+              onClick={snoozeAlarm}
+              className="flex-1 rounded-xl bg-muted py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80"
+            >
+              Snooze
+            </button>
+            <button
+              onClick={dismissAlarm}
+              className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Turn Off Alarm
+            </button>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence>
         {alarmState.firing && (
           <motion.div

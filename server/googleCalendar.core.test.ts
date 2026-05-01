@@ -11,13 +11,21 @@ vi.mock("./db", () => ({
 }));
 
 describe("googleCalendar core", () => {
+  const prevJwtSecret = process.env.JWT_SECRET;
+
   beforeEach(() => {
+    process.env.JWT_SECRET = "test-jwt-secret-min-16-chars";
     dbMocks.getProviderConnection.mockReset();
     dbMocks.upsertProviderConnection.mockReset();
     vi.restoreAllMocks();
   });
 
   afterEach(() => {
+    if (prevJwtSecret === undefined) {
+      delete process.env.JWT_SECRET;
+    } else {
+      process.env.JWT_SECRET = prevJwtSecret;
+    }
     vi.useRealTimers();
   });
 
@@ -100,8 +108,9 @@ describe("googleCalendar core", () => {
         status: "connected",
         externalAccountId: "google-user-1",
         externalAccountLabel: "flow@example.com",
-        accessToken: "access-token",
-        refreshToken: "refresh-token",
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        expiresAtUnixMs: expect.any(Number),
         scope:
           "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events",
         tokenType: "Bearer",
@@ -111,6 +120,7 @@ describe("googleCalendar core", () => {
   });
 
   it("refreshes an expiring Google Calendar access token and persists the new token", async () => {
+    const { encryptToken } = await import("./_core/crypto");
     const { getGoogleCalendarAccessToken } = await import("./_core/googleCalendar");
 
     dbMocks.getProviderConnection.mockResolvedValueOnce({
@@ -119,8 +129,8 @@ describe("googleCalendar core", () => {
       status: "connected",
       externalAccountId: "google-user-1",
       externalAccountLabel: "flow@example.com",
-      accessToken: "stale-token",
-      refreshToken: "refresh-token",
+      accessToken: encryptToken("stale-token"),
+      refreshToken: encryptToken("refresh-token"),
       scope: "https://www.googleapis.com/auth/calendar.readonly",
       tokenType: "Bearer",
       expiresAtUnixMs: Date.now() + 30_000,
@@ -142,8 +152,11 @@ describe("googleCalendar core", () => {
         userId: 7,
         provider: "google-calendar",
         status: "connected",
-        accessToken: "fresh-token",
-        refreshToken: "refresh-token",
+        externalAccountId: "google-user-1",
+        externalAccountLabel: "flow@example.com",
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        expiresAtUnixMs: expect.any(Number),
         scope: "https://www.googleapis.com/auth/calendar.readonly",
         tokenType: "Bearer",
         lastError: null,

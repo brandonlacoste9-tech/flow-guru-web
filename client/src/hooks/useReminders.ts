@@ -12,12 +12,15 @@ interface UseRemindersOptions {
   voiceGender: 'male' | 'female';
   alarmSound?: AlarmSoundType;
   alarmDays?: string | null;
+  waterBreakEnabled?: boolean;
+  waterBreakIntervalMinutes?: number;
   onWakeUp?: () => void;
 }
 
 export interface AlarmState {
   firing: boolean;
   label: string; // e.g. "Wake-up alarm — 7:00 AM"
+  isRepeating: boolean;
 }
 
 // Track which reminders have already fired today to avoid repeats
@@ -28,12 +31,59 @@ const scheduledPushes = new Set<string>();
 const MAX_ALARM_MS = 10 * 60 * 1000;
 // Snooze duration: 9 minutes
 const SNOOZE_MS = 9 * 60 * 1000;
+// Non-wake reminders ring for 1 minute before pausing.
+const EVENT_ALARM_RING_MS = 60 * 1000;
+// Non-wake reminders repeat every 5 minutes until dismissed.
+const EVENT_ALARM_REPEAT_MS = 5 * 60 * 1000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
+type AlarmKind = 'wake' | 'event';
 
-export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGender, alarmSound = 'chime', alarmDays, onWakeUp }: UseRemindersOptions) {
+function parseAlarmDays(alarmDays: string | null | undefined): Set<number> {
+  if (!alarmDays) return new Set([0, 1, 2, 3, 4, 5, 6]);
+  const parsed = alarmDays
+    .split(',')
+    .map((d) => Number(d))
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return parsed.length ? new Set(parsed) : new Set([0, 1, 2, 3, 4, 5, 6]);
+}
+
+function getNextWakeDate(now: Date, wakeUpTime: string, alarmDays: string | null | undefined): Date | null {
+  const [hRaw, mRaw] = wakeUpTime.split(':');
+  const hh = Number(hRaw);
+  const mm = Number(mRaw);
+  if (!Number.isInteger(hh) || !Number.isInteger(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+
+  const allowedDays = parseAlarmDays(alarmDays);
+  for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
+    const candidate = new Date(now);
+    candidate.setDate(now.getDate() + dayOffset);
+    candidate.setHours(hh, mm, 0, 0);
+    if (!allowedDays.has(candidate.getDay())) continue;
+    if (candidate.getTime() <= now.getTime()) continue;
+    return candidate;
+  }
+  return null;
+}
+
+export function useReminders({
+  enabled,
+  userName,
+  wakeUpTime,
+  speakText,
+  voiceGender,
+  alarmSound = 'chime',
+  alarmDays,
+  waterBreakEnabled = false,
+  waterBreakIntervalMinutes = 60,
+  onWakeUp,
+}: UseRemindersOptions) {
   // Use refs so the interval callback always reads the latest values (no stale closures)
   const wakeUpTimeRef = useRef(wakeUpTime);
   const alarmSoundRef = useRef(alarmSound);
   const alarmDaysRef = useRef(alarmDays);
+  const waterBreakEnabledRef = useRef(false);
+  const waterBreakIntervalRef = useRef(60);
   const speakRef = useRef(speakText);
   const userNameRef = useRef(userName);
   const enabledRef = useRef(enabled);
@@ -42,72 +92,124 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
   wakeUpTimeRef.current = wakeUpTime ?? null;
   alarmSoundRef.current = alarmSound;
   alarmDaysRef.current = alarmDays;
+  waterBreakEnabledRef.current = waterBreakEnabled;
+  waterBreakIntervalRef.current = waterBreakIntervalMinutes;
   speakRef.current = speakText;
   userNameRef.current = userName;
   enabledRef.current = enabled;
   const onWakeUpRef = useRef(onWakeUp);
   onWakeUpRef.current = onWakeUp;
+  const waterBreakTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerHaptics = useCallback((pattern: number | number[]) => {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(pattern);
+    }
+  }, []);
 
   // ── Alarm overlay state ──────────────────────────────────────────────────────
-  const [alarmState, setAlarmState] = useState<AlarmState>({ firing: false, label: '' });
+  const [alarmState, setAlarmState] = useState<AlarmState>({ firing: false, label: '', isRepeating: false });
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const repeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeAlarmRef = useRef<{ label: string; sound: AlarmSoundType; spokenMsg: string; kind: AlarmKind } | null>(null);
 
   /** Start the alarm: play sound, show overlay, set 10-min auto-stop */
-  const fireAlarm = useCallback((label: string, sound: AlarmSoundType, spokenMsg: string) => {
+  const fireAlarm = useCallback((label: string, sound: AlarmSoundType, spokenMsg: string, kind: AlarmKind = 'event') => {
     // Clear any pending snooze
     if (snoozeTimerRef.current) { clearTimeout(snoozeTimerRef.current); snoozeTimerRef.current = null; }
+    if (repeatTimerRef.current) { clearTimeout(repeatTimerRef.current); repeatTimerRef.current = null; }
     // Clear any previous auto-stop
     if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
 
-    // Play sound continuously (we loop by re-calling every 30s until stopped)
-    const startLooping = (s: AlarmSoundType) => {
-      playAlarmSound(s, MAX_ALARM_MS); // pass full 10 min — stopAlarmSound will cut it
-    };
-    startLooping(sound);
+    activeAlarmRef.current = { label, sound, spokenMsg, kind };
+    try {
+      localStorage.setItem('fg_alarm_active_label', label);
+      localStorage.removeItem('fg_alarm_snoozed_until');
+    } catch {
+      // ignore storage errors
+    }
+    const ringDuration = kind === 'wake' ? MAX_ALARM_MS : EVENT_ALARM_RING_MS;
+    playAlarmSound(sound, ringDuration);
+    triggerHaptics(kind === 'wake' ? [200, 120, 200, 120, 240] : [120, 80, 120]);
 
-    setAlarmState({ firing: true, label });
+    setAlarmState({ firing: true, label, isRepeating: kind === 'event' });
     setTimeout(() => speakRef.current(spokenMsg), sound === 'chime' ? 3500 : 1000);
 
-    // Auto-stop after 10 minutes
+    // Wake alarms keep ringing up to MAX_ALARM_MS. Event alarms ring for 1 minute,
+    // then re-trigger every 5 minutes until the user turns them off.
     autoStopTimerRef.current = setTimeout(() => {
       stopAlarmSound();
-      setAlarmState({ firing: false, label: '' });
-    }, MAX_ALARM_MS);
-  }, []);
+      if (kind === 'event') {
+        // Keep controls visible between event repeats so the user can always stop/snooze.
+        setAlarmState((prev) => ({ ...prev, firing: true, isRepeating: true }));
+        repeatTimerRef.current = setTimeout(() => {
+          const current = activeAlarmRef.current;
+          if (!current) return;
+          fireAlarm(current.label, current.sound, current.spokenMsg, current.kind);
+        }, EVENT_ALARM_REPEAT_MS);
+        return;
+      }
+      setAlarmState({ firing: false, label: '', isRepeating: false });
+    }, ringDuration);
+  }, [triggerHaptics]);
 
   /** Dismiss the alarm entirely */
   const dismissAlarm = useCallback(() => {
     stopAlarmSound();
     if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
     if (snoozeTimerRef.current) { clearTimeout(snoozeTimerRef.current); snoozeTimerRef.current = null; }
+    if (repeatTimerRef.current) { clearTimeout(repeatTimerRef.current); repeatTimerRef.current = null; }
     
     // If it was a wake-up alarm, trigger briefing
-    if (alarmState.label.toLowerCase().includes('wake-up')) {
+    if (activeAlarmRef.current?.kind === 'wake') {
       onWakeUpRef.current?.();
     }
     
-    setAlarmState({ firing: false, label: '' });
-  }, [alarmState.label]);
+    activeAlarmRef.current = null;
+    try {
+      localStorage.removeItem('fg_alarm_active_label');
+      localStorage.removeItem('fg_alarm_snoozed_until');
+    } catch {
+      // ignore storage errors
+    }
+    triggerHaptics(50);
+    setAlarmState({ firing: false, label: '', isRepeating: false });
+  }, [triggerHaptics]);
 
   /** Snooze the alarm for 9 minutes */
   const snoozeAlarm = useCallback(() => {
     stopAlarmSound();
     if (autoStopTimerRef.current) { clearTimeout(autoStopTimerRef.current); autoStopTimerRef.current = null; }
-    const currentLabel = alarmState.label;
-    const currentSound = alarmSoundRef.current;
+    if (repeatTimerRef.current) { clearTimeout(repeatTimerRef.current); repeatTimerRef.current = null; }
+    const current = activeAlarmRef.current;
+    const currentLabel = current?.label || alarmState.label;
+    const currentSound = current?.sound || alarmSoundRef.current;
+    const currentKind = current?.kind || (currentLabel.toLowerCase().includes('wake-up') ? 'wake' : 'event');
     const currentUser = userNameRef.current;
-    setAlarmState({ firing: false, label: '' });
+    const snoozedUntil = new Date(Date.now() + SNOOZE_MS);
+    try {
+      localStorage.removeItem('fg_alarm_active_label');
+      localStorage.setItem('fg_alarm_snoozed_until', snoozedUntil.toISOString());
+    } catch {
+      // ignore storage errors
+    }
+    triggerHaptics([60, 50, 60]);
+    setAlarmState({ firing: false, label: '', isRepeating: false });
     snoozeTimerRef.current = setTimeout(() => {
-      fireAlarm(currentLabel, currentSound, `Hey ${currentUser}, your snoozed alarm is going off now!`);
+      fireAlarm(currentLabel, currentSound, `Hey ${currentUser}, your snoozed alarm is going off now!`, currentKind);
     }, SNOOZE_MS);
-  }, [alarmState.label, fireAlarm]);
+  }, [alarmState.label, fireAlarm, triggerHaptics]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
       if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current);
+      if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+      if (waterBreakTimerRef.current) clearTimeout(waterBreakTimerRef.current);
       stopAlarmSound();
     };
   }, []);
@@ -128,10 +230,16 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
     if (!enabled) return;
     const handleSwMessage = (event: MessageEvent) => {
       if (event.data?.type === 'PLAY_ALARM') {
+        try {
+          localStorage.setItem('fg_last_alarm_signal_at', new Date().toISOString());
+        } catch {
+          // ignore storage errors
+        }
         const sound = (event.data.alarmSound as AlarmSoundType) || alarmSoundRef.current;
         const label = event.data.label || 'Alarm';
         const msg = event.data.spokenMsg || `Hey ${userNameRef.current}, your alarm is going off!`;
-        fireAlarm(label, sound, msg);
+        const inferredKind: AlarmKind = label.toLowerCase().includes('wake-up') ? 'wake' : 'event';
+        fireAlarm(label, sound, msg, inferredKind);
       }
     };
     navigator.serviceWorker?.addEventListener('message', handleSwMessage);
@@ -162,15 +270,20 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
       const parts = currentWakeUpTime.split(':');
       const wh = parseInt(parts[0], 10);
       const wm = parseInt(parts[1], 10);
-      if (!isNaN(wh) && !isNaN(wm) && hh === wh && mm === wm) {
-        const key = `wakeup-${todayKey}`;
-        if (!firedReminders.has(key)) {
-          firedReminders.add(key);
-          const timeLabel = new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-          const label = `Wake-up alarm — ${timeLabel}`;
-          const msg = `Good morning, ${currentUserName}! It's ${currentWakeUpTime} — time to rise and shine. Let's make today incredible!`;
-          toast.success('Good morning! ☀️', { description: label });
-          fireAlarm(label, currentAlarmSound, msg);
+      if (!isNaN(wh) && !isNaN(wm)) {
+        const wakeDate = new Date(now);
+        wakeDate.setHours(wh, wm, 0, 0);
+        const diffMins = Math.round((wakeDate.getTime() - now.getTime()) / 60000);
+        if (diffMins >= -1 && diffMins <= 1) {
+            const key = `wakeup-${currentWakeUpTime}-${todayKey}`;
+          if (!firedReminders.has(key)) {
+            firedReminders.add(key);
+            const timeLabel = wakeDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            const label = `Wake-up alarm — ${timeLabel}`;
+            const msg = `Good morning, ${currentUserName}! It's ${currentWakeUpTime} — time to rise and shine. Let's make today incredible!`;
+            toast.success('Good morning! ☀️', { description: label });
+            fireAlarm(label, currentAlarmSound, msg, 'wake');
+          }
         }
       }
     }
@@ -225,7 +338,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
                 msg = `${currentUserName}, ${event.title} is starting in just ${mins} minutes. You're on!`;
                 toast.warning(`🔔 ${event.title}`, { description: `Starting in ${mins} minutes!` });
               }
-              fireAlarm(label, currentAlarmSound, msg);
+              fireAlarm(label, currentAlarmSound, msg, 'event');
             }
           }
         }
@@ -237,7 +350,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             firedReminders.add(key);
             const msg = `${currentUserName}, it's time — ${event.title} is starting right now. Go get it!`;
             toast.error(`🚀 ${event.title}`, { description: `Starting now!` });
-            fireAlarm(`${event.title} — starting now!`, currentAlarmSound, msg);
+            fireAlarm(`${event.title} — starting now!`, currentAlarmSound, msg, 'event');
           }
         }
       }
@@ -262,7 +375,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
               const label = `List: ${list.name}`;
               const msg = `Heads up! You wanted to be reminded about '${item.content}' on your ${list.name} list.`;
               toast.info(`📝 ${item.content}`, { description: `Reminder from ${list.name}` });
-              fireAlarm(label, currentAlarmSound, msg);
+              fireAlarm(label, currentAlarmSound, msg, 'event');
             }
           }
         }
@@ -291,6 +404,97 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
       if (interval) clearInterval(interval);
     };
   }, [enabled, checkReminders]);
+
+  // Dedicated wake-up scheduler: more reliable than minute polling.
+  useEffect(() => {
+    if (!enabled) return;
+
+    const scheduleNextWake = () => {
+      if (wakeTimerRef.current) {
+        clearTimeout(wakeTimerRef.current);
+        wakeTimerRef.current = null;
+      }
+
+      const now = new Date();
+      const wt = wakeUpTimeRef.current;
+      if (!wt) return;
+
+      const nextWake = getNextWakeDate(now, wt, alarmDaysRef.current);
+      if (!nextWake) return;
+
+      const delay = nextWake.getTime() - now.getTime();
+      if (delay <= 0) return;
+
+      wakeTimerRef.current = setTimeout(() => {
+        const todayKey = new Date().toDateString();
+        const key = `wakeup-${wt}-${todayKey}`;
+        if (!firedReminders.has(key)) {
+          firedReminders.add(key);
+          const currentUserName = userNameRef.current;
+          const currentAlarmSound = alarmSoundRef.current;
+          const timeLabel = nextWake.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+          const label = `Wake-up alarm — ${timeLabel}`;
+          const msg = `Good morning, ${currentUserName}! It's ${wt} — time to rise and shine. Let's make today incredible!`;
+          toast.success('Good morning! ☀️', { description: label });
+          fireAlarm(label, currentAlarmSound, msg, 'wake');
+        }
+        scheduleNextWake();
+      }, Math.min(delay, MAX_TIMEOUT_MS));
+    };
+
+    scheduleNextWake();
+    return () => {
+      if (wakeTimerRef.current) {
+        clearTimeout(wakeTimerRef.current);
+        wakeTimerRef.current = null;
+      }
+    };
+  }, [enabled, wakeUpTime, alarmDays, fireAlarm]);
+
+  // Water break scheduler (local, repeats by interval while enabled)
+  useEffect(() => {
+    if (!enabled) return;
+    const readWaterSettings = () => {
+      try {
+        waterBreakEnabledRef.current = localStorage.getItem('fg_water_break_enabled') === '1';
+        const raw = Number(localStorage.getItem('fg_water_break_interval_minutes') || '60');
+        waterBreakIntervalRef.current = Number.isFinite(raw) && raw >= 15 ? raw : 60;
+      } catch {
+        waterBreakEnabledRef.current = false;
+        waterBreakIntervalRef.current = 60;
+      }
+    };
+
+    const scheduleNextWaterBreak = () => {
+      readWaterSettings();
+      if (waterBreakTimerRef.current) {
+        clearTimeout(waterBreakTimerRef.current);
+        waterBreakTimerRef.current = null;
+      }
+      if (!waterBreakEnabledRef.current) return;
+      const intervalMs = waterBreakIntervalRef.current * 60 * 1000;
+      waterBreakTimerRef.current = setTimeout(() => {
+        const now = new Date();
+        const key = `water-break-${now.toDateString()}-${now.getHours()}-${Math.floor(now.getMinutes() / 5)}`;
+        if (!firedReminders.has(key)) {
+          firedReminders.add(key);
+          const label = `Water break — every ${waterBreakIntervalRef.current} minutes`;
+          const msg = `Hey ${userNameRef.current}, quick water break time. Take a sip and reset.`;
+          toast.info('Hydration reminder', { description: 'Take a quick water break.' });
+          fireAlarm(label, alarmSoundRef.current, msg, 'event');
+        }
+        scheduleNextWaterBreak();
+      }, Math.min(intervalMs, MAX_TIMEOUT_MS));
+    };
+
+    scheduleNextWaterBreak();
+    return () => {
+      if (waterBreakTimerRef.current) {
+        clearTimeout(waterBreakTimerRef.current);
+        waterBreakTimerRef.current = null;
+      }
+    };
+  }, [enabled, fireAlarm]);
 
   // Pre-schedule push notifications for today's events (runs once when permission granted)
   useEffect(() => {
@@ -343,7 +547,7 @@ export function useReminders({ enabled, userName, wakeUpTime, speakText, voiceGe
             const wakeDate = new Date(now);
             wakeDate.setHours(wh, wm, 0, 0);
             if (wakeDate <= now) wakeDate.setDate(wakeDate.getDate() + 1);
-            const wakeKey = `push-wakeup-${wakeDate.toDateString()}`;
+            const wakeKey = `push-wakeup-${wt}-${wakeDate.toDateString()}`;
             if (!scheduledPushes.has(wakeKey)) {
               scheduledPushes.add(wakeKey);
               scheduleReminder({ title: '☀️ Good Morning!', body: `It's ${wt} — time to rise and shine!`, fireAt: wakeDate, tag: wakeKey, alarmSound: alarmSoundRef.current });

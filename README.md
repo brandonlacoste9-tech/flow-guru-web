@@ -29,15 +29,15 @@ pnpm start
 
 ## 🏗️ Architecture
 
-Flow Guru uses a modern, type-safe monorepo structure:
+Flow Guru follows a modern, full-stack architecture with a clear separation of concerns, unified within a single repository structure:
 
-- **`/client`**: Vite + React + Tailwind CSS. A high-performance, responsive frontend with "Tan Leather" premium aesthetics.
-- **`/server` & `/api`**: Node.js + tRPC. 
+- **`/client`**: Vite + React 19 + Tailwind CSS + Framer Motion. A high-performance, responsive frontend with "Tan Leather" premium aesthetics.
+- **`/server` & `/api`**: Node.js + Express + tRPC. 
     - `/api` serves as the Vercel serverless entry point.
     - `/server` contains core logic and standalone server entry.
 - **`/shared`**: Shared TypeScript types and constants.
 - **`/mobile`**: Expo-based mobile integration.
-- **`/db`**: Drizzle ORM for database management.
+- **`/db`**: Drizzle ORM for database management with a relational schema (Postgres).
 
 ## 🛡️ Security Model
 
@@ -49,11 +49,12 @@ Flow Guru uses a modern, type-safe monorepo structure:
 
 ## 💎 Features
 
-- **Conversational AI**: Context-aware assistant with a custom "Buddy" personality.
+- **Conversational AI**: Context-aware assistant ("FLO GURU") with a custom "Buddy" personality and vector-based semantic memory.
 - **Tool Integration**:
     - **Google Calendar**: Real-time event syncing and scheduling.
     - **Weather**: Proactive weather updates based on user location.
-    - **Music**: Integrated station playback.
+    - **Music**: Integrated station playback (Spotify integration supported).
+    - **Lists**: Smart collection management (Grocery, Todo, etc.).
 - **Speech**: ElevenLabs integration for high-quality voice synthesis.
 - **Push Notifications**: WebPush support for reminders and proactive briefings.
 
@@ -61,13 +62,13 @@ Flow Guru uses a modern, type-safe monorepo structure:
 
 - **Vite**: Fast HMR and optimized production bundles.
 - **tRPC**: Type-safe, efficient data fetching with minimal overhead.
-- **Monitoring**: Integrated with Vercel Analytics for usage tracking.
+- **Monitoring**: Integrated with Vercel Analytics and Speed Insights for usage tracking.
 
 ## 🛠️ Governance
 
 - **Linting**: ESLint with TypeScript and React Hooks plugins.
 - **Formatting**: Prettier for consistent code style.
-- **Testing**: Vitest for unit and integration testing of routers and assistant actions.
+- **Testing**: Vitest for unit and integration testing.
 
 ---
 

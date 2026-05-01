@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["api/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "build",
+    "dist",
+    "**/*.test.ts",
+    "api/chat.ts"
+  ]
+}
