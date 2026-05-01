@@ -53,7 +53,7 @@ import { generateBriefing, generateQuickSound } from "./_core/briefing.js";
 import { textToSpeech, getVoices } from "./_core/elevenLabs.js";
 import { listGoogleCalendarEvents } from "./_core/googleCalendar.js";
 import { detectDialogflowCxReply, isDialogflowCxConfigured } from "./_core/dialogflowCx.js";
-import { MasterOrchestrator } from "../../server/_core/sub-agents/orchestrator.js";
+import { MasterOrchestrator } from "./_core/sub-agents/orchestrator.js";
 import { searchMemories, storeMemory } from "./memory.js";
 
 const sendMessageInput = z.object({
