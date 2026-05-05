@@ -215,14 +215,14 @@ const normalizeToolChoice = (
 };
 
 const resolveApiUrl = () => {
-  if (process.env.DEEPSEEK_API_KEY) return "https://api.deepseek.com/v1/chat/completions";
+  if (ENV.deepSeekApiKey) return "https://api.deepseek.com/v1/chat/completions";
   return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
 };
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey && !process.env.DEEPSEEK_API_KEY) {
+  if (!ENV.forgeApiKey && !ENV.deepSeekApiKey) {
     throw new Error("API Key is not configured. Please set BUILT_IN_FORGE_API_KEY or DEEPSEEK_API_KEY.");
   }
 };
@@ -273,7 +273,7 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  const hasDeepSeek = process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY.trim().length > 0;
+  const hasDeepSeek = ENV.deepSeekApiKey && ENV.deepSeekApiKey.trim().length > 0;
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   // --- Creative Mock Fallback ---
@@ -345,7 +345,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   const apiUrl = resolveApiUrl();
-  const apiKey = process.env.DEEPSEEK_API_KEY || ENV.forgeApiKey;
+  const apiKey = ENV.deepSeekApiKey || ENV.forgeApiKey;
 
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -389,19 +389,16 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const hasDeepSeek = process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY.trim().length > 0;
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
-  if (!hasDeepSeek && !hasForge) {
-    // Return a mock 1536-dim vector for simulation mode
+  if (!hasForge) {
+    // DeepSeek doesn't support embeddings, and we have no other provider.
+    // Fall back to simulation mode (mock) for embeddings.
     return new Array(1536).fill(0).map(() => Math.random());
   }
 
-  const apiUrl = hasDeepSeek 
-    ? "https://api.deepseek.com/v1/embeddings" 
-    : `${ENV.forgeApiUrl?.replace(/\/$/, "") || "https://forge.manus.im"}/v1/embeddings`;
-    
-  const apiKey = process.env.DEEPSEEK_API_KEY || ENV.forgeApiKey;
+  const apiUrl = `${ENV.forgeApiUrl?.replace(/\/$/, "") || "https://forge.manus.im"}/v1/embeddings`;
+  const apiKey = ENV.forgeApiKey;
 
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -410,7 +407,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: hasDeepSeek ? "deepseek-embed" : "text-embedding-3-small",
+      model: "text-embedding-3-small",
       input: text,
     }),
   });
