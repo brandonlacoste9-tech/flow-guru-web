@@ -49,11 +49,10 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
     return ttsCache.get(cacheKey)!;
   }
 
-  // --- Fallback to free Google TTS if no ElevenLabs key ---
-  if (!apiKey && !useLocalTts) {
-    console.warn("[Flow Guru] ElevenLabs API key missing. Falling back to basic Google TTS.");
+  // Helper to fallback to Google TTS
+  const fallbackToGoogleTTS = async (reason: string) => {
+    console.warn(`[Flow Guru] Falling back to basic Google TTS. Reason: ${reason}`);
     try {
-      // Chunk text if it's too long for Google TTS (limit is usually ~200 chars per request, but we'll try a single request first)
       const encodedText = encodeURIComponent(options.text.slice(0, 200)); 
       const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodedText}`;
       const response = await fetch(url);
@@ -66,13 +65,17 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
     } catch (e) {
       console.warn("[Flow Guru] Google TTS fallback also failed", e);
     }
-    throw new Error("ElevenLabs API key is not configured and fallback failed.");
+    throw new Error("Voice synthesis failed entirely.");
+  };
+
+  if (!apiKey && !useLocalTts) {
+    return fallbackToGoogleTTS("ElevenLabs API key is missing");
   }
 
   const url = useLocalTts ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
   const body: any = useLocalTts 
-    ? { model: "en-us-librispeech-low.onnx", input: options.text } // LocalAI TTS payload
+    ? { model: "en-us-librispeech-low.onnx", input: options.text }
     : {
         text: options.text,
         model_id: options.modelId || DEFAULT_TTS_MODEL,
@@ -82,23 +85,29 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
         },
       };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      ...(ENV.useLocalAi ? {} : { "xi-api-key": apiKey }),
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...(ENV.useLocalAi ? {} : { "xi-api-key": apiKey }),
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`ElevenLabs TTS failed: ${response.status} ${error}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Flow Guru] ElevenLabs API Error (${response.status}):`, errorText);
+      return fallbackToGoogleTTS(`ElevenLabs API rejected the request (${response.status}) - Check Vercel logs for exact reason.`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    ttsCache.set(cacheKey, buffer);
+    return buffer;
+  } catch (err: any) {
+    console.error("[Flow Guru] ElevenLabs Network Exception:", err);
+    return fallbackToGoogleTTS("Network error communicating with ElevenLabs");
   }
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  ttsCache.set(cacheKey, buffer);
-  return buffer;
 }
 
 /**
