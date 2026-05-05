@@ -86,7 +86,7 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
       };
 
   try {
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       method: "POST",
       headers: {
         ...(ENV.useLocalAi ? {} : { "xi-api-key": apiKey }),
@@ -94,6 +94,23 @@ export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
       },
       body: JSON.stringify(body),
     });
+
+    // If the API rejects the request (likely because the user's profile voice requires a premium plan)
+    // we should try one more time with the default free-tier voice before giving up.
+    if (!response.ok && voiceId !== DEFAULT_VOICE_ID) {
+      const errorText = await response.text();
+      console.warn(`[Flow Guru] ElevenLabs rejected voice ${voiceId} (${response.status}): ${errorText}. Retrying with default voice.`);
+      
+      const retryUrl = useLocalTts ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${DEFAULT_VOICE_ID}`;
+      response = await fetch(retryUrl, {
+        method: "POST",
+        headers: {
+          ...(ENV.useLocalAi ? {} : { "xi-api-key": apiKey }),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
