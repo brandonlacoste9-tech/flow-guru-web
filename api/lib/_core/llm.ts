@@ -214,16 +214,24 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () => {
-  if (ENV.deepSeekApiKey) return "https://api.deepseek.com/v1/chat/completions";
-  return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+const resolveApiUrl = (type: "chat" | "embeddings") => {
+  if (ENV.deepSeekApiKey && type === "chat") return "https://api.deepseek.com/v1/chat/completions";
+  if (ENV.moonshotApiKey && type === "chat") return "https://api.moonshot.cn/v1/chat/completions";
+
+  const base = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+    ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
+    : "https://forge.manus.im";
+  
+  const suffix = type === "chat" ? "/chat/completions" : "/embeddings";
+  
+  // Avoid double /v1 if already present in base URL
+  const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
+  return `${base}${versionPrefix}${suffix}`;
 };
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey && !ENV.deepSeekApiKey) {
-    throw new Error("API Key is not configured. Please set BUILT_IN_FORGE_API_KEY or DEEPSEEK_API_KEY.");
+  if (!ENV.forgeApiKey && !ENV.deepSeekApiKey && !ENV.moonshotApiKey) {
+    throw new Error("API Key is not configured. Please set BUILT_IN_FORGE_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY.");
   }
 };
 
@@ -274,10 +282,11 @@ const normalizeResponseFormat = ({
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const hasDeepSeek = ENV.deepSeekApiKey && ENV.deepSeekApiKey.trim().length > 0;
+  const hasMoonshot = ENV.moonshotApiKey && ENV.moonshotApiKey.trim().length > 0;
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   // --- Creative Mock Fallback ---
-  if (!hasDeepSeek && !hasForge) {
+  if (!hasDeepSeek && !hasMoonshot && !hasForge) {
     console.warn("[Flow Guru] Operating in Simulation Mode (No API keys found)");
     return {
       id: "mock-" + Date.now(),
@@ -287,7 +296,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         index: 0,
         message: {
           role: "assistant",
-          content: "I'm awake! I'm currently running in **Simulation Mode** because my DeepSeek API key hasn't been added to Vercel yet. Once you add it, I'll be able to use my full intelligence to help you with your routines!",
+          content: "I'm awake! I'm currently running in **Simulation Mode** because no AI API keys (DeepSeek, Moonshot, or Forge) have been detected yet. Once you add one, I'll be able to use my full intelligence to help you!",
         },
         finish_reason: "stop",
       }],
@@ -307,7 +316,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: hasDeepSeek ? "deepseek-chat" : "gemini-1.5-flash",
+    model: hasDeepSeek ? "deepseek-chat" : (hasMoonshot ? "moonshot-v1-8k" : "gemini-1.5-flash"),
     messages: messages.map(normalizeMessage),
   };
 
@@ -344,8 +353,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     }
   }
 
-  const apiUrl = resolveApiUrl();
-  const apiKey = ENV.deepSeekApiKey || ENV.forgeApiKey;
+  const apiUrl = resolveApiUrl("chat");
+  const apiKey = ENV.deepSeekApiKey || ENV.moonshotApiKey || ENV.forgeApiKey;
 
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -397,7 +406,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     return new Array(1536).fill(0).map(() => Math.random());
   }
 
-  const apiUrl = `${ENV.forgeApiUrl?.replace(/\/$/, "") || "https://forge.manus.im"}/v1/embeddings`;
+  const apiUrl = resolveApiUrl("embeddings");
   const apiKey = ENV.forgeApiKey;
 
   const response = await fetch(apiUrl, {
