@@ -401,31 +401,39 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   if (!hasForge) {
-    // DeepSeek doesn't support embeddings, and we have no other provider.
-    // Fall back to simulation mode (mock) for embeddings.
+    // No embedding-capable provider found. Fall back to simulation mode.
     return new Array(1536).fill(0).map(() => Math.random());
   }
 
   const apiUrl = resolveApiUrl("embeddings");
   const apiKey = ENV.forgeApiKey;
 
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: text,
-    }),
-  });
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: text,
+      }),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Embedding API failed (${response.status}): ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`[Flow Guru] Embedding API failed (${response.status}) at ${apiUrl}. Falling back to simulation mode.`, errorText);
+      return new Array(1536).fill(0).map(() => Math.random());
+    }
+
+    const result = await response.json();
+    if (!result.data || !result.data[0] || !result.data[0].embedding) {
+        throw new Error("Unexpected embedding response format");
+    }
+    return result.data[0].embedding;
+  } catch (error) {
+    console.error(`[Flow Guru] Embedding API exception at ${apiUrl}:`, error);
+    return new Array(1536).fill(0).map(() => Math.random());
   }
-
-  const result = await response.json();
-  return result.data[0].embedding;
-}
+}
