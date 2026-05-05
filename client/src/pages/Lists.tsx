@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Plus, Trash2, CheckCircle2, Circle, ListTodo, X, Sparkles, Edit2, Check, MapPin } from 'lucide-react';
 import { useLocation } from 'wouter';

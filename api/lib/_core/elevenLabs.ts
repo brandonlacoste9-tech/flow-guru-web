@@ -38,24 +38,37 @@ const FALLBACK_VOICES = [
   { voice_id: "yoZ06aMxZJJ28mfd3POQ", name: "Sam", labels: { gender: "Male", accent: "US" } },
 ] as const;
 
-/**
- * Convert text to speech using ElevenLabs
- */
 export async function textToSpeech(options: TtsOptions): Promise<Buffer> {
   const apiKey = ENV.elevenLabsApiKey;
   const useLocalTts = ENV.useLocalAi && !options.voiceId;
-  if (!apiKey && !useLocalTts) {
-    throw new Error("ElevenLabs API key is not configured.");
-  }
-
   const voiceId = options.voiceId || DEFAULT_VOICE_ID;
   const modelId = options.modelId || DEFAULT_TTS_MODEL;
   
-  // Simple in-memory cache to save credits and reduce latency
   const cacheKey = `${voiceId}:${modelId}:${options.text}`;
   if (ttsCache.has(cacheKey)) {
     return ttsCache.get(cacheKey)!;
   }
+
+  // --- Fallback to free Google TTS if no ElevenLabs key ---
+  if (!apiKey && !useLocalTts) {
+    console.warn("[Flow Guru] ElevenLabs API key missing. Falling back to basic Google TTS.");
+    try {
+      // Chunk text if it's too long for Google TTS (limit is usually ~200 chars per request, but we'll try a single request first)
+      const encodedText = encodeURIComponent(options.text.slice(0, 200)); 
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodedText}`;
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const buffer = Buffer.from(await response.arrayBuffer());
+        ttsCache.set(cacheKey, buffer);
+        return buffer;
+      }
+    } catch (e) {
+      console.warn("[Flow Guru] Google TTS fallback also failed", e);
+    }
+    throw new Error("ElevenLabs API key is not configured and fallback failed.");
+  }
+
   const url = useLocalTts ? `${ENV.localAiUrl}/tts` : `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
   const body: any = useLocalTts 
