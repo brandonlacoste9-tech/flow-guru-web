@@ -356,45 +356,65 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const apiUrl = resolveApiUrl("chat");
   const apiKey = ENV.deepSeekApiKey || ENV.moonshotApiKey || ENV.forgeApiKey;
 
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[Flow Guru] LLM API failed (${response.status}):`, errorText.slice(0, 300));
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Flow Guru] LLM API failed (${response.status}) at ${apiUrl}:`, errorText.slice(0, 300));
 
-    // If json_schema was rejected, retry WITHOUT response_format
-    if (normalizedResponseFormat && response.status === 400) {
-      console.warn("[Flow Guru] Retrying LLM call without response_format...");
-      delete payload.response_format;
-      
-      const retryResponse = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      // If json_schema was rejected, retry WITHOUT response_format
+      if (normalizedResponseFormat && response.status === 400) {
+        console.warn("[Flow Guru] Retrying LLM call without response_format...");
+        const retryPayload = { ...payload };
+        delete retryPayload.response_format;
+        
+        const retryResponse = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(retryPayload),
+        });
 
-      if (retryResponse.ok) {
-        return (await retryResponse.json()) as InvokeResult;
+        if (retryResponse.ok) {
+          return (await retryResponse.json()) as InvokeResult;
+        }
+        
+        const retryError = await retryResponse.text();
+        console.error(`[Flow Guru] LLM API retry also failed (${retryResponse.status}):`, retryError.slice(0, 200));
       }
-      
-      const retryError = await retryResponse.text();
-      throw new Error(`LLM API retry also failed (${retryResponse.status}): ${retryError.slice(0, 200)}`);
+
+      throw new Error(`LLM API failed (${response.status})`);
     }
 
-    throw new Error(`LLM API failed (${response.status}): ${errorText.slice(0, 200)}`);
+    return (await response.json()) as InvokeResult;
+  } catch (error) {
+    console.error(`[Flow Guru] LLM API Exception at ${apiUrl}:`, error);
+    // Return a graceful mock response instead of crashing
+    return {
+      id: "error-fallback-" + Date.now(),
+      created: Math.floor(Date.now() / 1000),
+      model: "fallback-guru-1.0",
+      choices: [{
+        index: 0,
+        message: {
+          role: "assistant",
+          content: "I'm having a bit of trouble connecting to my brain right now. I'll be back in a second!",
+        },
+        finish_reason: "stop",
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
   }
-
-  return (await response.json()) as InvokeResult;
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
