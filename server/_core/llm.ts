@@ -437,4 +437,3 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     return new Array(1536).fill(0).map(() => Math.random());
   }
 }
-}
