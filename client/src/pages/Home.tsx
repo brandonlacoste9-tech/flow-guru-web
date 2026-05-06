@@ -140,6 +140,7 @@ export default function Home() {
   const [weather, setWeather] = useState<any>(null);
   const [todayEvents, setTodayEvents] = useState<any[]>([]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+  const [isMicrosoftConnected, setIsMicrosoftConnected] = useState(false);
   const [memoryFacts, setMemoryFacts] = useState<any[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
@@ -315,6 +316,8 @@ export default function Home() {
     if (data.providerConnections) {
       const gcal = (data.providerConnections as any[]).find(c => c.provider === "google-calendar" && c.status === "connected");
       setIsGoogleConnected(!!gcal);
+      const mcal = (data.providerConnections as any[]).find(c => c.provider === "microsoft-calendar" && c.status === "connected");
+      setIsMicrosoftConnected(!!mcal);
     }
     if (data.proactiveGreeting && (!data.messages || data.messages.length === 0) && messages.length === 0) {
       const greetingMsg: Message = { id: 'proactive', role: 'assistant', content: data.proactiveGreeting };
@@ -562,6 +565,33 @@ export default function Home() {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
+  // Fetch real Microsoft Calendar events via API
+  const [microsoftCalEvents, setMicrosoftCalEvents] = useState<any[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchMcal = async () => {
+      try {
+        const resp = await fetch('/api/integrations/microsoft-calendar/events', { credentials: 'include' });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (!cancelled && data.connected && data.events) {
+            setMicrosoftCalEvents(data.events.map((e: any) => ({
+              title: e.summary,
+              start: e.startISO,
+              allDay: e.allDay,
+              color: 'amber',
+              source: 'outlook',
+            })));
+            setIsMicrosoftConnected(true);
+          }
+        }
+      } catch { /* silent */ }
+    };
+    fetchMcal();
+    const interval = setInterval(fetchMcal, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
   // Merge local events + Google Calendar events
   const liveLocalEvents = (todayLocalEventsQuery.data ?? []).map((e: any) => ({
     title: e.title,
@@ -570,11 +600,18 @@ export default function Home() {
     color: e.color ?? 'blue',
     source: 'local',
   }));
-  // Combine: live local events + Google Calendar events (real API), deduplicate by title+start
-  const bootstrapGoogleEvents = todayEvents.filter((e: any) => !liveLocalEvents.some((l: any) => l.title === e.title && l.start === e.start));
-  const mergedGoogleEvents = googleCalEvents.length > 0 ? googleCalEvents : bootstrapGoogleEvents;
-  const dedupedGoogle = mergedGoogleEvents.filter((e: any) => !liveLocalEvents.some((l: any) => l.title === e.title && l.start === e.start));
-  const allTodayEvents = [...liveLocalEvents, ...dedupedGoogle].sort((a: any, b: any) => {
+  // Combine: live local events + Google + Microsoft events (real API)
+  const bootstrapExternalEvents = todayEvents.filter((e: any) => 
+    !liveLocalEvents.some((l: any) => l.title === e.title && l.start === e.start)
+  );
+  const externalEvents = (googleCalEvents.length > 0 || microsoftCalEvents.length > 0) 
+    ? [...googleCalEvents, ...microsoftCalEvents] 
+    : bootstrapExternalEvents;
+
+  const dedupedExternal = externalEvents.filter((e: any) => 
+    !liveLocalEvents.some((l: any) => l.title === e.title && l.start === e.start)
+  );
+  const allTodayEvents = [...liveLocalEvents, ...dedupedExternal].sort((a: any, b: any) => {
     if (!a.start) return 1; if (!b.start) return -1;
     return new Date(a.start).getTime() - new Date(b.start).getTime();
   });
@@ -710,6 +747,7 @@ export default function Home() {
         >
           <div className="hidden md:flex gap-1.5 mr-2">
             {isGoogleConnected && <Calendar className="w-3.5 h-3.5 text-primary/60" />}
+            {isMicrosoftConnected && <Globe className="w-3.5 h-3.5 text-primary/60" />}
           </div>
 
           {view === 'chat' && (
@@ -970,10 +1008,16 @@ export default function Home() {
                             if (isGoogleConnected) {
                               e.stopPropagation();
                               window.open('https://calendar.google.com/calendar/u/0/r', '_blank');
+                            } else if (isMicrosoftConnected) {
+                              e.stopPropagation();
+                              window.open('https://outlook.live.com/calendar/0/view/day', '_blank');
+                            } else {
+                              e.stopPropagation();
+                              navigate('/settings');
                             }
                           }}
                         >
-                          {isGoogleConnected ? t('card_calendar_open_google') : t('card_calendar_open')}
+                          {isGoogleConnected ? t('card_calendar_open_google') : isMicrosoftConnected ? (language === 'en' ? 'Open Outlook' : 'Ouvrir Outlook') : t('card_calendar_open')}
                         </button>
                       </div>
                     </div>
