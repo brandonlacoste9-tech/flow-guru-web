@@ -52,6 +52,7 @@ import {
 import { generateBriefing, generateQuickSound } from "./_core/briefing.js";
 import { textToSpeech, getVoices } from "./_core/elevenLabs.js";
 import { listGoogleCalendarEvents } from "./_core/googleCalendar.js";
+import { listMicrosoftCalendarEvents } from "./_core/microsoftCalendar.js";
 import { detectDialogflowCxReply, isDialogflowCxConfigured } from "./_core/dialogflowCx.js";
 import { MasterOrchestrator } from "./_core/sub-agents/orchestrator.js";
 import { searchMemories, storeMemory } from "./memory.js";
@@ -674,6 +675,16 @@ export const appRouter = router({
             const result = await listGoogleCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
             for (const e of result?.items ?? []) {
               results.push({ title: (e as any).summary || "Untitled event", start: (e as any).start?.dateTime || (e as any).start?.date || null, allDay: !(e as any).start?.dateTime });
+            }
+          }
+        } catch { /* ignore */ }
+
+        try {
+          const mConn = providerConnections.find((c: any) => c.provider === "microsoft-calendar" && c.status === "connected");
+          if (mConn) {
+            const result = await listMicrosoftCalendarEvents({ userId, timeMinIso: now.toISOString(), timeMaxIso: endOfDay.toISOString(), maxResults: 5 });
+            for (const e of result?.value ?? []) {
+              results.push({ title: e.subject || "Untitled event", start: e.start?.dateTime || null, allDay: false });
             }
           }
         } catch { /* ignore */ }

@@ -9,15 +9,21 @@ import {
   parseGoogleOAuthState,
 } from "./googleCalendar";
 import {
+  buildMicrosoftOAuthState,
+  connectMicrosoftCalendar,
+  getMicrosoftCalendarCallbackUrl,
+  parseMicrosoftOAuthState,
+} from "./microsoftCalendar";
+import {
   buildSpotifyOAuthState,
   connectSpotify,
   getSpotifyCallbackUrl,
   parseSpotifyOAuthState,
 } from "./spotify";
 
-type SupportedProvider = "google-calendar" | "spotify";
+type SupportedProvider = "google-calendar" | "microsoft-calendar" | "spotify";
 
-const PROVIDERS: SupportedProvider[] = ["google-calendar", "spotify"];
+const PROVIDERS: SupportedProvider[] = ["google-calendar", "microsoft-calendar", "spotify"];
 
 function isSupportedProvider(value: string): value is SupportedProvider {
   return PROVIDERS.includes(value as SupportedProvider);
@@ -32,6 +38,21 @@ function getProviderConfig(provider: SupportedProvider) {
         "https://www.googleapis.com/auth/calendar.events",
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/userinfo.email",
+      ],
+    };
+  }
+
+  if (provider === "microsoft-calendar") {
+    return {
+      configured: Boolean(ENV.microsoftClientId && ENV.microsoftClientSecret),
+      label: "Outlook Calendar",
+      scopes: [
+        "openid",
+        "profile",
+        "email",
+        "offline_access",
+        "Calendars.Read",
+        "Calendars.ReadWrite",
       ],
     };
   }
@@ -69,24 +90,29 @@ export function registerProviderConnectionRoutes(app: Express) {
       if (!user) {
         return res.json({
           googleCalendar: false,
+          microsoftCalendar: false,
           spotify: false,
         });
       }
 
-      const [gcal, spotify] = await Promise.all([
+      const [gcal, mcal, spotify] = await Promise.all([
         getProviderConnection(user.id, "google-calendar"),
+        getProviderConnection(user.id, "microsoft-calendar"),
         getProviderConnection(user.id, "spotify"),
       ]);
 
       res.json({
         googleCalendar: gcal?.status === "connected",
         googleCalendarLabel: gcal?.externalAccountLabel,
+        microsoftCalendar: mcal?.status === "connected",
+        microsoftCalendarLabel: mcal?.externalAccountLabel,
         spotify: spotify?.status === "connected",
         spotifyLabel: spotify?.externalAccountLabel,
       });
     } catch {
       res.json({
         googleCalendar: false,
+        microsoftCalendar: false,
         spotify: false,
       });
     }
@@ -172,6 +198,27 @@ export function registerProviderConnectionRoutes(app: Express) {
       return;
     }
 
+    if (providerParam === "microsoft-calendar") {
+      await upsertProviderConnection({
+        userId: user.id,
+        provider: providerParam,
+        status: "pending",
+        lastError: null,
+      });
+
+      const redirectUri = getMicrosoftCalendarCallbackUrl(req);
+      const authUrl = new URL("https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
+      authUrl.searchParams.set("client_id", ENV.microsoftClientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", config.scopes.join(" "));
+      authUrl.searchParams.set("response_mode", "query");
+      authUrl.searchParams.set("state", buildMicrosoftOAuthState(user.id));
+
+      res.redirect(302, authUrl.toString());
+      return;
+    }
+
     if (providerParam === "spotify") {
       await upsertProviderConnection({
         userId: user.id,
@@ -242,6 +289,41 @@ export function registerProviderConnectionRoutes(app: Express) {
           lastError: message,
         });
         res.redirect(302, `/?integration=google-calendar&status=error&message=${encodeURIComponent(message)}`);
+        return;
+      }
+    }
+
+    if (providerParam === "microsoft-calendar") {
+      const code = typeof req.query.code === "string" ? req.query.code : null;
+      const state = typeof req.query.state === "string" ? req.query.state : null;
+      if (!code || !state) {
+        res.status(400).json({ error: "Microsoft callback requires code and state." });
+        return;
+      }
+
+      try {
+        const parsedState = parseMicrosoftOAuthState(state);
+        if (parsedState.userId !== user.id) {
+          throw new Error("Microsoft OAuth state did not match the authenticated user.");
+        }
+
+        const result = await connectMicrosoftCalendar({
+          userId: user.id,
+          code,
+          redirectUri: getMicrosoftCalendarCallbackUrl(req),
+        });
+
+        res.redirect(302, `/?integration=microsoft-calendar&status=connected&account=${encodeURIComponent(result.accountLabel)}`);
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Outlook Calendar connection failed.";
+        await upsertProviderConnection({
+          userId: user.id,
+          provider: "microsoft-calendar",
+          status: "error",
+          lastError: message,
+        });
+        res.redirect(302, `/?integration=microsoft-calendar&status=error&message=${encodeURIComponent(message)}`);
         return;
       }
     }

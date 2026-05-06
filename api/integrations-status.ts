@@ -9,14 +9,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ googleCalendar: false });
     }
 
-    const gcal = await getProviderConnection(user.id, "google-calendar");
+    const [gcal, mcal] = await Promise.all([
+      getProviderConnection(user.id, "google-calendar"),
+      getProviderConnection(user.id, "microsoft-calendar"),
+    ]);
 
     return res.json({
       googleCalendar: gcal?.status === "connected",
       googleCalendarLabel: gcal?.status === "connected" ? (gcal as any).externalAccountLabel ?? null : null,
+      microsoftCalendar: mcal?.status === "connected",
+      microsoftCalendarLabel: mcal?.status === "connected" ? (mcal as any).externalAccountLabel ?? null : null,
     });
   } catch (err: any) {
     console.error("[Integrations Status]", err.message);
-    return res.status(500).json({ googleCalendar: false });
+    return res.status(500).json({ googleCalendar: false, microsoftCalendar: false });
   }
 }

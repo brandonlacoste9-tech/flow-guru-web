@@ -1172,6 +1172,40 @@ function IntegrationsPanel() {
           )}
         </div>
 
+        {/* Microsoft Outlook Calendar */}
+        <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between p-4 bg-background border border-border rounded-2xl gap-3">
+          <div className="flex items-center gap-3 min-w-0 w-full">
+            <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-orange-500" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M21 7.28V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2.28c.55-.29.9-.85.9-1.5V8.78c0-.65-.35-1.21-.9-1.5zM19 19H5V5h14v14zm-9-7h5v5h-5v-5z"/>
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold">Outlook Calendar</p>
+              {(status as any).microsoftCalendar ? (
+                <p className="text-[10px] text-orange-500 uppercase tracking-wider font-semibold break-words">Connected as {(status as any).microsoftCalendarLabel ?? 'User'}</p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Microsoft Graph Events</p>
+              )}
+            </div>
+          </div>
+          {(status as any).microsoftCalendar ? (
+            <button
+              onClick={() => disconnect('microsoft-calendar')}
+              className="w-full xs:w-auto px-6 py-3 rounded-2xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
+            >
+              Disconnect
+            </button>
+          ) : (
+            <button
+              onClick={() => window.location.href = '/api/integrations/microsoft-calendar/start'}
+              className="w-full xs:w-auto px-8 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-lg shadow-primary/20"
+            >
+              Connect
+            </button>
+          )}
+        </div>
+
         {/* Spotify */}
         <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between p-4 bg-background border border-border rounded-2xl gap-3">
           <div className="flex items-center gap-3 min-w-0 w-full">
