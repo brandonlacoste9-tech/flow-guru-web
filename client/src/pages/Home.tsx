@@ -1106,15 +1106,15 @@ export default function Home() {
                       }} 
                     />
                     {isSpotifyConnected && (
-                      <div className="absolute bottom-4 right-4 z-20">
+                      <div className="absolute bottom-3.5 left-4 z-20">
                         <button 
                           onClick={() => window.open('https://open.spotify.com', '_blank')}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-all text-[10px] font-bold border border-green-500/20 shadow-sm"
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-all text-[9px] font-bold border border-green-500/20 shadow-sm"
                         >
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.306c-.215.353-.673.464-1.026.249-2.853-1.743-6.444-2.138-10.672-1.173-.404.092-.81-.157-.902-.561-.092-.404.157-.81.561-.902 4.629-1.059 8.6-0.598 11.79 1.353.353.215.464.673.249 1.026h-.001zm1.464-3.262c-.271.442-.846.582-1.288.311-3.266-2.008-8.243-2.593-12.103-1.42-.499.151-1.03-.131-1.181-.63-.151-.499.131-1.03.63-1.181 4.41-1.338 9.897-.686 13.642 1.619.442.271.582.846.311 1.288l-.001.013zm.126-3.411c-3.918-2.327-10.375-2.542-14.135-1.402-.6.182-1.239-.161-1.421-.761-.182-.6.161-1.239.761-1.421 4.316-1.31 11.439-1.042 15.962 1.644.538.319.717 1.015.398 1.553-.319.538-1.015.717-1.553.398l-.052-.03z"/>
                           </svg>
-                          OPEN SPOTIFY
+                          SPOTIFY
                         </button>
                       </div>
                     )}
