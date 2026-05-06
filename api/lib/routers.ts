@@ -191,6 +191,7 @@ const ASSISTANT_TOOLS: Tool[] = [
         required: ["action", "listName"],
       },
     },
+  },
   {
     type: "function",
     function: {

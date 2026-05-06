@@ -2004,6 +2004,7 @@ async function executeKnowledgeSearch(
       title: "Knowledge search failed",
       summary: "I couldn't query your knowledge base right now. Try again shortly.",
       provider: "vertex-ai-search",
+    };
   }
 }
 
