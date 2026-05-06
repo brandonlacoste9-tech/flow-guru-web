@@ -2,12 +2,23 @@
  * audioEngine.ts
  *
  * Lightweight audio manager for Flow Guru.
- * Uses plain HTMLAudioElement for playback (avoids CORS issues).
+ * Uses singleton HTMLAudioElements for reliable playback and autoplay unlocking.
  */
 
-// ─── State ───────────────────────────────────────────────────────────────────
+// ─── Singletons ──────────────────────────────────────────────────────────────
 let musicAudio: HTMLAudioElement | null = null;
 let voiceAudio: HTMLAudioElement | null = null;
+
+// Initialize singletons (client-side only)
+if (typeof window !== 'undefined') {
+  musicAudio = new Audio();
+  musicAudio.preload = 'auto';
+  (musicAudio as any).playsInline = true;
+  
+  voiceAudio = new Audio();
+  voiceAudio.preload = 'auto';
+  (voiceAudio as any).playsInline = true;
+}
 
 let musicVolume = 0.8;
 let musicMuted  = false;
@@ -34,46 +45,42 @@ export function playUrl(
   onEnded?: () => void,
 ): HTMLAudioElement {
   console.log(`[audioEngine] playUrl: ${url} on ${channel}`);
-  const audio = new Audio();
   
-  // CORS: Do NOT set anonymous for radio streams unless visualizing, 
-  // as it triggers strict CORS checks which SomaFM fails.
-  // audio.crossOrigin = 'anonymous'; 
+  const audio = channel === 'music' ? musicAudio : voiceAudio;
+  if (!audio) {
+    console.error('[audioEngine] Audio singletons not initialized');
+    return new Audio(); // Fallback to avoid crashes
+  }
+
+  // Stop current
+  audio.pause();
+  audio.src = url;
+  audio.load();
 
   if (channel === 'music') {
-    if (musicAudio) {
-      musicAudio.pause();
-      musicAudio.src = '';
-    }
-    musicAudio = audio;
     audio.volume = effectiveMusicVolume();
     audio.onended = () => {
       console.log('[audioEngine] music ended');
-      if (musicAudio === audio) musicAudio = null;
       onEnded?.();
     };
   } else {
-    if (voiceAudio) {
-      voiceAudio.pause();
-      voiceAudio.src = '';
-    }
-    voiceAudio = audio;
     audio.volume = 1.0;
     duckMusic(true);
     audio.onended = () => {
       console.log('[audioEngine] voice ended');
-      if (voiceAudio === audio) voiceAudio = null;
       duckMusic(false);
       onEnded?.();
     };
   }
 
-  audio.src = url;
-  audio.play().catch((err) => {
-    console.warn('[audioEngine] playback failed:', err);
-    if (channel === 'voice') duckMusic(false);
-    onEnded?.();
-  });
+  const playPromise = audio.play();
+  if (playPromise !== undefined) {
+    playPromise.catch((err) => {
+      console.warn('[audioEngine] playback failed:', err);
+      if (channel === 'voice') duckMusic(false);
+      onEnded?.();
+    });
+  }
 
   return audio;
 }
@@ -97,17 +104,32 @@ export function stopMusic(): void {
   if (musicAudio) {
     musicAudio.pause();
     musicAudio.src = '';
-    musicAudio = null;
+    musicAudio.load(); // Forces cleanup of stream
   }
 }
 
 /** Unlock audio on iOS / Chrome — plays a silent buffer. */
 export function unlockAudio(): void {
-  // Valid 1-second silent MP3
+  // We play the silent buffer on both singletons to "prime" them
   const silentSrc = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
-  const silent = new Audio(silentSrc);
-  silent.volume = 0.01;
-  silent.play().catch(() => {});
+  
+  if (musicAudio) {
+    const oldSrc = musicAudio.src;
+    musicAudio.src = silentSrc;
+    musicAudio.play().then(() => {
+       musicAudio!.pause();
+       musicAudio!.src = oldSrc;
+    }).catch(() => {});
+  }
+  
+  if (voiceAudio) {
+    const oldSrc = voiceAudio.src;
+    voiceAudio.src = silentSrc;
+    voiceAudio.play().then(() => {
+       voiceAudio!.pause();
+       voiceAudio!.src = oldSrc;
+    }).catch(() => {});
+  }
 }
 
 import { useEffect } from 'react';
@@ -117,17 +139,18 @@ export function useAudioUnlock(): void {
     const handler = () => {
       console.log('[audioEngine] Unlocking audio via user gesture');
       unlockAudio();
-      window.removeEventListener('click', handler);
-      window.removeEventListener('keydown', handler);
-      window.removeEventListener('touchstart', handler);
+      window.removeEventListener('click', handler, true);
+      window.removeEventListener('keydown', handler, true);
+      window.removeEventListener('touchstart', handler, true);
     };
-    window.addEventListener('click', handler);
-    window.addEventListener('keydown', handler);
-    window.addEventListener('touchstart', handler);
+    // Use capture phase to ensure we run before other handlers
+    window.addEventListener('click', handler, true);
+    window.addEventListener('keydown', handler, true);
+    window.addEventListener('touchstart', handler, true);
     return () => {
-      window.removeEventListener('click', handler);
-      window.removeEventListener('keydown', handler);
-      window.removeEventListener('touchstart', handler);
+      window.removeEventListener('click', handler, true);
+      window.removeEventListener('keydown', handler, true);
+      window.removeEventListener('touchstart', handler, true);
     };
   }, []);
 }

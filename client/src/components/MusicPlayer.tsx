@@ -107,17 +107,19 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
     setBuffering(true);
     const url = urls[urlIdx];
     const audio = playUrl(url, 'music');
-    audio.addEventListener("playing", () => {
+
+    // Use on-event properties to ensure only one listener exists (since it's a singleton)
+    audio.onplaying = () => {
       setIsPlaying(true);
       setBuffering(false);
       const currentStation = STATIONS.find((s) => s.id === activeIdRef.current)!;
       onStateChange?.(true, currentStation.label);
-    });
-    audio.addEventListener("waiting", () => setBuffering(true));
-    audio.addEventListener("canplay", () => setBuffering(false));
-    audio.addEventListener("error", () => {
+    };
+    audio.onwaiting = () => setBuffering(true);
+    audio.oncanplay = () => setBuffering(false);
+    audio.onerror = () => {
       startAudio(urls, urlIdx + 1);
-    });
+    };
   };
 
   const toggle = () => {
