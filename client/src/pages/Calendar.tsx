@@ -1278,8 +1278,8 @@ export default function Calendar() {
 
   return (
     <div
-      className="min-h-[100dvh] min-h-screen flex flex-col font-['Outfit'] overflow-hidden"
-      style={{ ...themeStyle, background: "var(--cal-bg)", color: "var(--cal-text)" }}
+      className="flex flex-col font-['Outfit'] overflow-hidden"
+      style={{ ...themeStyle, background: "var(--cal-bg)", color: "var(--cal-text)", minHeight: "100dvh", height: "100vh" }}
     >
       {/* ── Top Header ── */}
       <header className="px-2 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1 sm:gap-2 z-30 shrink-0 backdrop-blur-md"
