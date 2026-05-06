@@ -13,7 +13,7 @@ const PricingCard = ({ userId, isPremium = false }: { userId?: number, isPremium
 
     setLoading(true);
     try {
-      const endpoint = isPremium ? '/api/stripe/create-portal' : '/api/stripe/create-checkout';
+      const endpoint = isPremium ? '/api/billing/portal' : '/api/billing/checkout';
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
