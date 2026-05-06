@@ -141,6 +141,7 @@ export default function Home() {
   const [todayEvents, setTodayEvents] = useState<any[]>([]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [isMicrosoftConnected, setIsMicrosoftConnected] = useState(false);
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [memoryFacts, setMemoryFacts] = useState<any[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [view, setView] = useState<'dashboard' | 'chat'>('dashboard');
@@ -318,6 +319,8 @@ export default function Home() {
       setIsGoogleConnected(!!gcal);
       const mcal = (data.providerConnections as any[]).find(c => c.provider === "microsoft-calendar" && c.status === "connected");
       setIsMicrosoftConnected(!!mcal);
+      const spot = (data.providerConnections as any[]).find(c => c.provider === "spotify" && c.status === "connected");
+      setIsSpotifyConnected(!!spot);
     }
     if (data.proactiveGreeting && (!data.messages || data.messages.length === 0) && messages.length === 0) {
       const greetingMsg: Message = { id: 'proactive', role: 'assistant', content: data.proactiveGreeting };
@@ -748,6 +751,11 @@ export default function Home() {
           <div className="hidden md:flex gap-1.5 mr-2">
             {isGoogleConnected && <Calendar className="w-3.5 h-3.5 text-primary/60" />}
             {isMicrosoftConnected && <Globe className="w-3.5 h-3.5 text-primary/60" />}
+            {isSpotifyConnected && (
+              <svg className="w-3.5 h-3.5 text-primary/60" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.306c-.215.353-.673.464-1.026.249-2.853-1.743-6.444-2.138-10.672-1.173-.404.092-.81-.157-.902-.561-.092-.404.157-.81.561-.902 4.629-1.059 8.6-0.598 11.79 1.353.353.215.464.673.249 1.026h-.001zm1.464-3.262c-.271.442-.846.582-1.288.311-3.266-2.008-8.243-2.593-12.103-1.42-.499.151-1.03-.131-1.181-.63-.151-.499.131-1.03.63-1.181 4.41-1.338 9.897-.686 13.642 1.619.442.271.582.846.311 1.288l-.001.013zm.126-3.411c-3.918-2.327-10.375-2.542-14.135-1.402-.6.182-1.239-.161-1.421-.761-.182-.6.161-1.239.761-1.421 4.316-1.31 11.439-1.042 15.962 1.644.538.319.717 1.015.398 1.553-.319.538-1.015.717-1.553.398l-.052-.03z"/>
+              </svg>
+            )}
           </div>
 
           {view === 'chat' && (
@@ -1097,6 +1105,19 @@ export default function Home() {
                         setCurrentStation(label);
                       }} 
                     />
+                    {isSpotifyConnected && (
+                      <div className="absolute bottom-4 right-4 z-20">
+                        <button 
+                          onClick={() => window.open('https://open.spotify.com', '_blank')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-all text-[10px] font-bold border border-green-500/20 shadow-sm"
+                        >
+                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.306c-.215.353-.673.464-1.026.249-2.853-1.743-6.444-2.138-10.672-1.173-.404.092-.81-.157-.902-.561-.092-.404.157-.81.561-.902 4.629-1.059 8.6-0.598 11.79 1.353.353.215.464.673.249 1.026h-.001zm1.464-3.262c-.271.442-.846.582-1.288.311-3.266-2.008-8.243-2.593-12.103-1.42-.499.151-1.03-.131-1.181-.63-.151-.499.131-1.03.63-1.181 4.41-1.338 9.897-.686 13.642 1.619.442.271.582.846.311 1.288l-.001.013zm.126-3.411c-3.918-2.327-10.375-2.542-14.135-1.402-.6.182-1.239-.161-1.421-.761-.182-.6.161-1.239.761-1.421 4.316-1.31 11.439-1.042 15.962 1.644.538.319.717 1.015.398 1.553-.319.538-1.015.717-1.553.398l-.052-.03z"/>
+                          </svg>
+                          OPEN SPOTIFY
+                        </button>
+                      </div>
+                    )}
                   </motion.div>
 
                   {/* Memory Spark Card */}
