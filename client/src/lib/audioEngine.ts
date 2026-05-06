@@ -53,48 +53,7 @@ export function duckMusic(ducked: boolean) {
 const sourceCache = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>();
 
 /** Play an audio URL through the shared AudioContext. Returns the HTMLAudioElement for further control. */
-export function playUrl(url: string, channel: 'music' | 'voice' = 'music', onEnded?: () => void) {
-  ensureContext();
-  
-  const audio = new Audio(url);
-  audio.crossOrigin = "anonymous"; // Important for cross-origin streams like SomaFM
-  
-  let source = sourceCache.get(audio);
-  if (!source) {
-    source = audioContext!.createMediaElementSource(audio);
-    sourceCache.set(audio, source);
-  }
 
-  const targetGain = channel === 'music' ? musicGain : voiceGain;
-  source.disconnect();
-  source.connect(targetGain!);
-
-  if (channel === 'voice') {
-    duckMusic(true);
-    audio.addEventListener('ended', () => {
-      duckMusic(false);
-      onEnded?.();
-    }, { once: true });
-  } else {
-    // For music, we track the current one to allow stopping it
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.src = '';
-    }
-    currentAudio = audio;
-    audio.onended = () => {
-      if (currentAudio === audio) currentAudio = null;
-      onEnded?.();
-    };
-  }
-
-  audio.play().catch((err) => {
-    console.warn(`Audio playback failed for ${url}:`, err);
-    if (channel === 'voice') duckMusic(false);
-  });
-  
-  return audio;
-}
 
 /** Stop the currently playing music audio, if any */
 export function stopMusic() {
