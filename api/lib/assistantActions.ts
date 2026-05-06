@@ -27,6 +27,7 @@ const ACTION_NAMES = [
   "list.manage",
   "knowledge.search",
   "contact.open",
+  "automation.trigger",
 ] as const;
 
 const NEWS_ISSUE_SLUGS = [
@@ -97,6 +98,13 @@ const plannerSchema = z.object({
       newName: z.string().optional().nullable(),
       time: z.string().optional().nullable(),
       location: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
+  automation: z
+    .object({
+      task: z.string().optional().nullable(),
+      data: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
@@ -1996,6 +2004,69 @@ async function executeKnowledgeSearch(
       title: "Knowledge search failed",
       summary: "I couldn't query your knowledge base right now. Try again shortly.",
       provider: "vertex-ai-search",
+  }
+}
+
+async function executeAutomationAction(
+  plan: AssistantActionPlan,
+  options: { userId: number }
+): Promise<AssistantActionResult> {
+  const { task, data } = plan.automation ?? {};
+  if (!task) {
+    return {
+      action: "automation.trigger",
+      status: "needs_input",
+      title: "Automation task needed",
+      summary: "What automation would you like me to trigger?",
+    };
+  }
+
+  try {
+    const { getUserMemoryProfile } = await import("./db.js");
+    const profile = await getUserMemoryProfile(options.userId);
+    const webhookUrl = profile?.automationWebhookUrl;
+
+    if (!webhookUrl) {
+      return {
+        action: "automation.trigger",
+        status: "needs_connection",
+        title: "Webhook not configured",
+        summary: "You haven't set up an automation webhook yet. Please add one in your Settings to use Zapier or IFTTT.",
+        provider: "zapier",
+      };
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        task,
+        data,
+        userId: options.userId,
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Automation trigger failed with status ${response.status}`);
+    }
+
+    return {
+      action: "automation.trigger",
+      status: "executed",
+      title: "Automation Triggered",
+      summary: `I've sent the request to ${task} via your automation webhook.`,
+      provider: "zapier",
+      data: { task, webhookUrl },
+    };
+  } catch (err: any) {
+    console.error("[Flow Guru] automation.trigger failed:", err.message);
+    return {
+      action: "automation.trigger",
+      status: "failed",
+      title: "Automation failed",
+      summary: "I couldn't trigger that automation right now. Please check your webhook URL in Settings.",
+      provider: "zapier",
     };
   }
 }
@@ -2094,6 +2165,8 @@ export async function executeAssistantAction(
           summary: `I'm handling that task in the background.`,
           data: { task: plan.subagent?.task },
         };
+      case "automation.trigger":
+        return await executeAutomationAction(plan, options);
       case "none":
       default:
         return {

@@ -17,7 +17,7 @@ export const vector = customType<{ data: number[], config: { dimensions: number 
 export const roleEnum = pgEnum("fg_role", ["user", "admin"]);
 export const memoryCategoryEnum = pgEnum("fg_memory_category", ["wake_up_time", "daily_routine", "preference", "recurring_event", "general"]);
 export const roleMessageEnum = pgEnum("fg_message_role", ["system", "user", "assistant"]);
-export const providerTypeEnum = pgEnum("fg_provider_type", ["google-calendar", "spotify"]);
+export const providerTypeEnum = pgEnum("fg_provider_type", ["google-calendar", "microsoft-calendar", "spotify"]);
 export const connectionStatusEnum = pgEnum("fg_connection_status", ["not_connected", "pending", "connected", "error"]);
 
 export const users = pgTable("fg_users", {
@@ -54,6 +54,7 @@ export const userMemoryProfiles = pgTable("fg_profiles", {
   alarmDays: varchar("alarmDays", { length: 32 }).default("0,1,2,3,4,5,6"),
   voiceId: varchar("voiceId", { length: 64 }),
   buddyPersonality: text("buddyPersonality"),
+  automationWebhookUrl: text("automationWebhookUrl"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

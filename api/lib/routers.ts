@@ -191,6 +191,20 @@ const ASSISTANT_TOOLS: Tool[] = [
         required: ["action", "listName"],
       },
     },
+  {
+    type: "function",
+    function: {
+      name: "triggerAutomation",
+      description: "Trigger an external automation (Zapier, IFTTT, etc.) with custom data",
+      parameters: {
+        type: "object",
+        properties: {
+          task: { type: "string", description: "The specific task or action to trigger (e.g., 'Turn on office lights')" },
+          data: { type: "string", description: "Additional details or context for the automation" },
+        },
+        required: ["task"],
+      },
+    },
   },
 ];
 
@@ -1206,6 +1220,7 @@ export const appRouter = router({
         alarmDays: (profile as any)?.alarmDays ?? '0,1,2,3,4,5,6',
         voiceId: (profile as any)?.voiceId ?? '',
         buddyPersonality: (profile as any)?.buddyPersonality ?? '',
+        automationWebhookUrl: (profile as any)?.automationWebhookUrl ?? '',
       };
     }),
     saveProfile: publicProcedure
@@ -1217,6 +1232,7 @@ export const appRouter = router({
         alarmDays: z.string().optional(),
         voiceId: z.string().optional(),
         buddyPersonality: z.string().optional(),
+        automationWebhookUrl: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const userId = await resolveAssistantUserId(ctx.user);
@@ -1228,6 +1244,7 @@ export const appRouter = router({
           alarmDays: input.alarmDays ?? null,
           voiceId: input.voiceId ?? null,
           buddyPersonality: input.buddyPersonality ?? null,
+          automationWebhookUrl: input.automationWebhookUrl ?? null,
         });
         return { success: true };
       }),

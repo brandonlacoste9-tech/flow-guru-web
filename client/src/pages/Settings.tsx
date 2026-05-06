@@ -98,6 +98,7 @@ export function Settings() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState<string>('');
   const [pushSubscribed, setPushSubscribed] = useState<boolean | null>(null);
+  const [automationWebhookUrl, setAutomationWebhookUrl] = useState('');
   const [lastAlarmSignalAt, setLastAlarmSignalAt] = useState<string | null>(null);
   const [waterBreakEnabled, setWaterBreakEnabled] = useState<boolean>(() => localStorage.getItem('fg_water_break_enabled') === '1');
   const [waterBreakIntervalMinutes, setWaterBreakIntervalMinutes] = useState<number>(() => {
@@ -166,6 +167,7 @@ export function Settings() {
     setInstructions(data.customInstructions ?? '');
     setVoiceId(data.voiceId ?? '');
     setBuddyPersonality(data.buddyPersonality ?? '');
+    setAutomationWebhookUrl(data.automationWebhookUrl ?? '');
   }, [profileQuery.data]);
 
   const factsQuery = trpc.settings.getMemoryFacts.useQuery();
@@ -630,7 +632,7 @@ export function Settings() {
                 </div>
                 <button disabled={!profileDirty || saveProfileMutation.isPending}
                   onClick={() => saveProfileMutation.mutate({ 
-                    wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays, voiceId, buddyPersonality 
+                    wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays, voiceId, buddyPersonality, automationWebhookUrl 
                   } as any)}
                   className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
                     profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
@@ -1239,6 +1241,32 @@ function IntegrationsPanel() {
             </button>
           )}
         </div>
+
+        {/* Automation Webhook */}
+        <div className="flex flex-col p-4 bg-background border border-border rounded-2xl gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-purple-500" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold">Automation Webhook</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Zapier / IFTTT / Custom</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <input 
+              type="url" 
+              value={automationWebhookUrl} 
+              onChange={e => { setAutomationWebhookUrl(e.target.value); setProfileDirty(true); }}
+              placeholder="https://hooks.zapier.com/v1/..."
+              className="w-full bg-secondary/30 border border-border rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-primary/50 transition-colors"
+            />
+            <p className="text-[9px] text-muted-foreground leading-relaxed">
+              When you ask the AI to "trigger an automation", it will send a JSON payload to this URL.
+            </p>
+          </div>
+        </div>
+      </div>
       </div>
 
       <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
