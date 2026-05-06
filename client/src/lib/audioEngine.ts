@@ -2,14 +2,7 @@
  * audioEngine.ts
  *
  * Lightweight audio manager for Flow Guru.
- * Uses plain HTMLAudioElement for playback (avoids CORS issues with
- * createMediaElementSource on cross-origin streams like SomaFM).
- *
- * Provides:
- *  - Separate music / voice channels
- *  - Volume control per channel
- *  - Auto-ducking of music while voice plays
- *  - iOS / Chrome autoplay-unlock helper
+ * Uses plain HTMLAudioElement for playback (avoids CORS issues).
  */
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -40,11 +33,14 @@ export function playUrl(
   channel: 'music' | 'voice' = 'music',
   onEnded?: () => void,
 ): HTMLAudioElement {
-  const audio = new Audio(url);
-  audio.crossOrigin = 'anonymous';
+  console.log(`[audioEngine] playUrl: ${url} on ${channel}`);
+  const audio = new Audio();
+  
+  // CORS: Do NOT set anonymous for radio streams unless visualizing, 
+  // as it triggers strict CORS checks which SomaFM fails.
+  // audio.crossOrigin = 'anonymous'; 
 
   if (channel === 'music') {
-    // Stop previous music
     if (musicAudio) {
       musicAudio.pause();
       musicAudio.src = '';
@@ -52,24 +48,11 @@ export function playUrl(
     musicAudio = audio;
     audio.volume = effectiveMusicVolume();
     audio.onended = () => {
+      console.log('[audioEngine] music ended');
       if (musicAudio === audio) musicAudio = null;
       onEnded?.();
     };
-    audio.onerror = () => {
-      // Retry without crossOrigin (some streams reject it)
-      if (audio.crossOrigin) {
-        const retry = new Audio(url);
-        retry.volume = effectiveMusicVolume();
-        retry.onended = audio.onended;
-        retry.onerror = () => { onEnded?.(); };
-        musicAudio = retry;
-        retry.play().catch(() => { onEnded?.(); });
-        return;
-      }
-      onEnded?.();
-    };
   } else {
-    // Voice channel
     if (voiceAudio) {
       voiceAudio.pause();
       voiceAudio.src = '';
@@ -78,18 +61,16 @@ export function playUrl(
     audio.volume = 1.0;
     duckMusic(true);
     audio.onended = () => {
+      console.log('[audioEngine] voice ended');
       if (voiceAudio === audio) voiceAudio = null;
-      duckMusic(false);
-      onEnded?.();
-    };
-    audio.onerror = () => {
       duckMusic(false);
       onEnded?.();
     };
   }
 
+  audio.src = url;
   audio.play().catch((err) => {
-    console.warn('[audioEngine] playback failed:', url, err);
+    console.warn('[audioEngine] playback failed:', err);
     if (channel === 'voice') duckMusic(false);
     onEnded?.();
   });
@@ -97,25 +78,21 @@ export function playUrl(
   return audio;
 }
 
-/** Set music volume (0–1). */
 export function setMusicVolume(vol: number, muted: boolean): void {
   musicVolume = vol;
   musicMuted  = muted;
   applyMusicVolume();
 }
 
-/** Set voice volume (0–1). */
 export function setVoiceVolume(vol: number, _muted: boolean): void {
   if (voiceAudio) voiceAudio.volume = _muted ? 0 : vol;
 }
 
-/** Duck (lower) music while voice is playing. */
 export function duckMusic(duck: boolean): void {
   ducked = duck;
   applyMusicVolume();
 }
 
-/** Stop the currently playing music. */
 export function stopMusic(): void {
   if (musicAudio) {
     musicAudio.pause();
@@ -124,21 +101,21 @@ export function stopMusic(): void {
   }
 }
 
-/** Unlock audio on iOS / Chrome — plays a silent buffer. Must be called after a user gesture. */
+/** Unlock audio on iOS / Chrome — plays a silent buffer. */
 export function unlockAudio(): void {
-  const silent = new Audio(
-    'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
-  );
+  // Valid 1-second silent MP3
+  const silentSrc = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
+  const silent = new Audio(silentSrc);
   silent.volume = 0.01;
   silent.play().catch(() => {});
 }
 
-/** React hook — registers a one-time click/keydown listener to unlock audio. */
 import { useEffect } from 'react';
 
 export function useAudioUnlock(): void {
   useEffect(() => {
     const handler = () => {
+      console.log('[audioEngine] Unlocking audio via user gesture');
       unlockAudio();
       window.removeEventListener('click', handler);
       window.removeEventListener('keydown', handler);

@@ -129,14 +129,11 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   };
 
   const switchStation = (id: StationId) => {
-    const wasActive = isPlaying || buffering;
     setActiveId(id);
     activeIdRef.current = id;
-    const s = STATIONS.find((st) => st.id === id)!;
-    if (wasActive) {
+    if (isPlaying || buffering) {
+      const s = STATIONS.find((st) => st.id === id)!;
       startAudio(s.urls);
-    } else {
-      stopAudio();
     }
   };
 
