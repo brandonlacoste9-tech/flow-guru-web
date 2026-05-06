@@ -20,6 +20,7 @@ export const ENV = {
   elevenLabsApiKey: clean(process.env.ELEVENLABS_API_KEY),
   localAiUrl: process.env.LOCAL_AI_URL || "http://localhost:8080",
   useLocalAi: process.env.USE_LOCAL_AI === "true",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_SECRET_KEY ?? "",
   microsoftClientId: process.env.MICROSOFT_CLIENT_ID ?? "",
   microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
