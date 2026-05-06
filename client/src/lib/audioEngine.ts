@@ -1,119 +1,142 @@
-import { useEffect } from 'react';
+/**
+ * audioEngine.ts
+ *
+ * Lightweight audio manager for Flow Guru.
+ * Uses plain HTMLAudioElement for playback (avoids CORS issues with
+ * createMediaElementSource on cross-origin streams like SomaFM).
+ *
+ * Provides:
+ *  - Separate music / voice channels
+ *  - Volume control per channel
+ *  - Auto-ducking of music while voice plays
+ *  - iOS / Chrome autoplay-unlock helper
+ */
 
-let audioContext: AudioContext | null = null;
-let masterGain: GainNode | null = null;
-let musicGain: GainNode | null = null;
-let voiceGain: GainNode | null = null;
-let currentAudio: HTMLAudioElement | null = null;
+// ─── State ───────────────────────────────────────────────────────────────────
+let musicAudio: HTMLAudioElement | null = null;
+let voiceAudio: HTMLAudioElement | null = null;
 
-function ensureContext() {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    
-    masterGain = audioContext.createGain();
-    masterGain.connect(audioContext.destination);
+let musicVolume = 0.8;
+let musicMuted  = false;
+let ducked      = false;
 
-    musicGain = audioContext.createGain();
-    musicGain.connect(masterGain);
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function effectiveMusicVolume(): number {
+  if (musicMuted) return 0;
+  return ducked ? musicVolume * 0.2 : musicVolume;
+}
 
-    voiceGain = audioContext.createGain();
-    voiceGain.connect(masterGain);
-  }
-  // Ensure the context is resumed (required after user interaction)
-  if (audioContext.state === 'suspended') {
-    audioContext.resume().catch(() => {});
+function applyMusicVolume(): void {
+  if (musicAudio) {
+    musicAudio.volume = effectiveMusicVolume();
   }
 }
 
-/** Set the music volume (0‑1) */
-export function setMusicVolume(volume: number, muted: boolean) {
-  ensureContext();
-  if (musicGain) {
-    musicGain.gain.setTargetAtTime(muted ? 0 : volume, audioContext!.currentTime, 0.05);
-  }
-}
+// ─── Public API ──────────────────────────────────────────────────────────────
 
-/** Set the voice volume (0‑1) */
-export function setVoiceVolume(volume: number, muted: boolean) {
-  ensureContext();
-  if (voiceGain) {
-    voiceGain.gain.setTargetAtTime(muted ? 0 : volume, audioContext!.currentTime, 0.05);
-  }
-}
-
-/** Duck music volume for voice playback */
-export function duckMusic(ducked: boolean) {
-  ensureContext();
-  if (musicGain) {
-    musicGain.gain.setTargetAtTime(ducked ? 0.2 : 1.0, audioContext!.currentTime, 0.2);
-  }
-}
-
-// Track sources to prevent "MediaElementAudioSourceNode has already been connected" errors
-const sourceCache = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>();
-
-export function playUrl(url: string, channel: 'music' | 'voice' = 'music', onEnded?: () => void) {
-  ensureContext();
+/** Play a URL on either the music or voice channel. Returns the HTMLAudioElement. */
+export function playUrl(
+  url: string,
+  channel: 'music' | 'voice' = 'music',
+  onEnded?: () => void,
+): HTMLAudioElement {
   const audio = new Audio(url);
   audio.crossOrigin = 'anonymous';
 
-  // Reuse or create source node
-  let source = sourceCache.get(audio);
-  if (!source) {
-    source = audioContext!.createMediaElementSource(audio);
-    sourceCache.set(audio, source);
-  }
-
-  const targetGain = channel === 'music' ? musicGain! : voiceGain!;
-  source.disconnect();
-  source.connect(targetGain);
-
-  if (channel === 'voice') {
+  if (channel === 'music') {
+    // Stop previous music
+    if (musicAudio) {
+      musicAudio.pause();
+      musicAudio.src = '';
+    }
+    musicAudio = audio;
+    audio.volume = effectiveMusicVolume();
+    audio.onended = () => {
+      if (musicAudio === audio) musicAudio = null;
+      onEnded?.();
+    };
+    audio.onerror = () => {
+      // Retry without crossOrigin (some streams reject it)
+      if (audio.crossOrigin) {
+        const retry = new Audio(url);
+        retry.volume = effectiveMusicVolume();
+        retry.onended = audio.onended;
+        retry.onerror = () => { onEnded?.(); };
+        musicAudio = retry;
+        retry.play().catch(() => { onEnded?.(); });
+        return;
+      }
+      onEnded?.();
+    };
+  } else {
+    // Voice channel
+    if (voiceAudio) {
+      voiceAudio.pause();
+      voiceAudio.src = '';
+    }
+    voiceAudio = audio;
+    audio.volume = 1.0;
     duckMusic(true);
-    audio.addEventListener('ended', () => {
+    audio.onended = () => {
+      if (voiceAudio === audio) voiceAudio = null;
       duckMusic(false);
       onEnded?.();
-    }, { once: true });
-  } else {
-    // stop previous music if any
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.src = '';
-    }
-    currentAudio = audio;
-    audio.onended = () => {
-      if (currentAudio === audio) currentAudio = null;
+    };
+    audio.onerror = () => {
+      duckMusic(false);
       onEnded?.();
     };
   }
 
-  audio.play().catch(err => {
-    console.warn('Audio playback failed for', url, err);
+  audio.play().catch((err) => {
+    console.warn('[audioEngine] playback failed:', url, err);
     if (channel === 'voice') duckMusic(false);
+    onEnded?.();
   });
 
   return audio;
 }
 
+/** Set music volume (0–1). */
+export function setMusicVolume(vol: number, muted: boolean): void {
+  musicVolume = vol;
+  musicMuted  = muted;
+  applyMusicVolume();
+}
 
-/** Stop the currently playing music audio, if any */
-export function stopMusic() {
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.src = '';
-    currentAudio = null;
+/** Set voice volume (0–1). */
+export function setVoiceVolume(vol: number, _muted: boolean): void {
+  if (voiceAudio) voiceAudio.volume = _muted ? 0 : vol;
+}
+
+/** Duck (lower) music while voice is playing. */
+export function duckMusic(duck: boolean): void {
+  ducked = duck;
+  applyMusicVolume();
+}
+
+/** Stop the currently playing music. */
+export function stopMusic(): void {
+  if (musicAudio) {
+    musicAudio.pause();
+    musicAudio.src = '';
+    musicAudio = null;
   }
 }
 
-/** Unlock audio on iOS/Windows by playing a silent buffer – must be called after a user interaction */
-export function unlockAudio() {
-  ensureContext();
-  const silent = new Audio('data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq');
+/** Unlock audio on iOS / Chrome — plays a silent buffer. Must be called after a user gesture. */
+export function unlockAudio(): void {
+  const silent = new Audio(
+    'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  );
+  silent.volume = 0.01;
   silent.play().catch(() => {});
 }
 
-/** React hook – registers a one‑time click/keydown listener to unlock audio */
-export function useAudioUnlock() {
+/** React hook — registers a one-time click/keydown listener to unlock audio. */
+import { useEffect } from 'react';
+
+export function useAudioUnlock(): void {
   useEffect(() => {
     const handler = () => {
       unlockAudio();

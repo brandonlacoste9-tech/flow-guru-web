@@ -94,9 +94,6 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
 
   const station = STATIONS.find((s) => s.id === activeId)!;
 
-  // Remove direct audioRef usage; use shared audioEngine
-  const audioRef = null; // placeholder not used
-
   const stopAudio = () => {
     stopMusic();
     setIsPlaying(false);
@@ -105,7 +102,7 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   };
 
   const startAudio = (urls: string[], urlIdx = 0) => {
-    stopCurrent();
+    stopAudio();
     if (urlIdx >= urls.length) return;
     setBuffering(true);
     const url = urls[urlIdx];
