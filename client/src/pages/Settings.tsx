@@ -982,7 +982,19 @@ export function Settings() {
 
           {activeTab === 'integrations' && (
             <motion.div key="integrations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-              <IntegrationsPanel />
+              <IntegrationsPanel 
+                automationWebhookUrl={automationWebhookUrl}
+                setAutomationWebhookUrl={setAutomationWebhookUrl}
+                setProfileDirty={setProfileDirty}
+              />
+              <button disabled={!profileDirty || saveProfileMutation.isPending}
+                onClick={() => saveProfileMutation.mutate({ 
+                  wakeUpTime, dailyRoutine, preferencesSummary, alarmSound, alarmDays, voiceId, buddyPersonality, automationWebhookUrl 
+                } as any)}
+                className={cn('w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold transition-all',
+                  profileDirty ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-secondary text-muted-foreground cursor-not-allowed')}>
+                <Save size={14} />{saveProfileMutation.isPending ? 'Saving...' : 'Save All Changes'}
+              </button>
             </motion.div>
           )}
 
@@ -1099,7 +1111,15 @@ export function Settings() {
 }
 
 /* ── Integrations Panel (fetches live status) ──────────────────────── */
-function IntegrationsPanel() {
+function IntegrationsPanel({ 
+  automationWebhookUrl, 
+  setAutomationWebhookUrl, 
+  setProfileDirty 
+}: { 
+  automationWebhookUrl: string; 
+  setAutomationWebhookUrl: (v: string) => void; 
+  setProfileDirty: (v: boolean) => void; 
+}) {
   const [status, setStatus] = React.useState<{ 
     googleCalendar: boolean; 
     googleCalendarLabel?: string;
@@ -1266,7 +1286,6 @@ function IntegrationsPanel() {
             </p>
           </div>
         </div>
-      </div>
       </div>
 
       <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
