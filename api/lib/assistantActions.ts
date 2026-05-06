@@ -1892,11 +1892,41 @@ async function executeListAction(plan: AssistantActionPlan, options: { userId: n
 
 async function executeMusicAction(
   plan: AssistantActionPlan,
-  _options: { userId: number }
+  options: { userId: number, language?: string }
 ): Promise<AssistantActionResult> {
   const query = (plan.music?.query || "lofi").toLowerCase();
+  const lang = options.language || "en";
+
+  // 1. Try Spotify if connected
+  try {
+    const { getProviderConnection } = await import("./db.js");
+    const connection = await getProviderConnection(options.userId, "spotify");
+    
+    if (connection && connection.status === "connected") {
+      const { playSpotifyTrack } = await import("./_core/spotify.js");
+      const result = await playSpotifyTrack(options.userId, query);
+      
+      return {
+        action: "music.play",
+        status: "executed",
+        title: `Playing on Spotify`,
+        summary: lang === "fr" 
+          ? `Lecture de « ${result.title} » par ${result.artist} sur Spotify.`
+          : `Now playing "${result.title}" by ${result.artist} on Spotify.`,
+        provider: "spotify",
+        data: {
+          title: result.title,
+          artist: result.artist,
+          uri: result.uri,
+        },
+      };
+    }
+  } catch (error: any) {
+    console.warn("[Flow Guru] Spotify playback failed:", error.message);
+    // Fallback to radio if Spotify fails
+  }
   
-  // Simple mapping from query to internal station IDs
+  // 2. Fallback to internal radio
   let stationId = "focus";
   let label = "Focus";
   
@@ -1921,7 +1951,9 @@ async function executeMusicAction(
     action: "music.play",
     status: "executed",
     title: `Switching to ${label} Radio`,
-    summary: `I've started the ${label} station for you.`,
+    summary: lang === "fr"
+      ? `J'ai lancé la station ${label} pour toi.`
+      : `I've started the ${label} station for you.`,
     provider: "internal-radio",
     data: {
       stationId,
