@@ -22,7 +22,7 @@ import PricingCard from "@/components/PricingCard";
 import { trackConversion } from "@/lib/telemetry";
 import type { TranslationKeys } from "@/lib/translations";
 import { displayFirstName, displayFirstNameOrNeutral } from "@shared/userDisplay";
-import { playUrl, setVoiceVolume, stopMusic, duckMusic } from "@/lib/audioEngine";
+import { playUrl, setVoiceVolume, stopMusic, duckMusic, useAudioUnlock } from "@/lib/audioEngine";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],

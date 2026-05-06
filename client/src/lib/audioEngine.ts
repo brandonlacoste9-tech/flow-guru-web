@@ -5,6 +5,8 @@
  * Uses singleton HTMLAudioElements for reliable playback and autoplay unlocking.
  */
 
+import { useEffect } from 'react';
+
 // ─── Singletons ──────────────────────────────────────────────────────────────
 let musicAudio: HTMLAudioElement | null = null;
 let voiceAudio: HTMLAudioElement | null = null;
@@ -44,16 +46,22 @@ export function playUrl(
   channel: 'music' | 'voice' = 'music',
   onEnded?: () => void,
 ): HTMLAudioElement {
-  console.log(`[audioEngine] playUrl: ${url} on ${channel}`);
+  console.log(`[audioEngine] playUrl: ${channel} -> ${url.substring(0, 50)}...`);
   
   const audio = channel === 'music' ? musicAudio : voiceAudio;
   if (!audio) {
     console.error('[audioEngine] Audio singletons not initialized');
-    return new Audio(); // Fallback to avoid crashes
+    return new Audio();
   }
 
-  // Stop current
+  // Clear previous handlers to avoid leaks/double-calls
   audio.pause();
+  audio.onended = null;
+  audio.onplaying = null;
+  audio.onwaiting = null;
+  audio.onerror = null;
+  audio.oncanplay = null;
+
   audio.src = url;
   audio.load();
 
@@ -71,12 +79,17 @@ export function playUrl(
       duckMusic(false);
       onEnded?.();
     };
+    audio.onerror = (e) => {
+      console.error('[audioEngine] voice error:', e);
+      duckMusic(false);
+      onEnded?.();
+    };
   }
 
   const playPromise = audio.play();
   if (playPromise !== undefined) {
     playPromise.catch((err) => {
-      console.warn('[audioEngine] playback failed:', err);
+      console.warn('[audioEngine] playback rejected (likely autoplay policy):', err);
       if (channel === 'voice') duckMusic(false);
       onEnded?.();
     });
@@ -104,46 +117,38 @@ export function stopMusic(): void {
   if (musicAudio) {
     musicAudio.pause();
     musicAudio.src = '';
-    musicAudio.load(); // Forces cleanup of stream
+    musicAudio.onended = null;
+    musicAudio.load();
   }
 }
 
-/** Unlock audio on iOS / Chrome — plays a silent buffer. */
+/** Unlock audio session — plays a silent buffer. */
 export function unlockAudio(): void {
-  // We play the silent buffer on both singletons to "prime" them
+  console.log('[audioEngine] Attempting session unlock...');
   const silentSrc = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
   
-  if (musicAudio) {
-    const oldSrc = musicAudio.src;
+  // Only prime if no source is set, otherwise we might interrupt playback
+  if (musicAudio && !musicAudio.src) {
     musicAudio.src = silentSrc;
-    musicAudio.play().then(() => {
-       musicAudio!.pause();
-       musicAudio!.src = oldSrc;
-    }).catch(() => {});
+    musicAudio.play().catch(() => {});
   }
   
-  if (voiceAudio) {
-    const oldSrc = voiceAudio.src;
+  if (voiceAudio && !voiceAudio.src) {
     voiceAudio.src = silentSrc;
-    voiceAudio.play().then(() => {
-       voiceAudio!.pause();
-       voiceAudio!.src = oldSrc;
-    }).catch(() => {});
+    voiceAudio.play().catch(() => {});
   }
 }
 
-import { useEffect } from 'react';
-
+/** React hook — registers a one-time click/keydown listener to unlock audio. */
 export function useAudioUnlock(): void {
   useEffect(() => {
     const handler = () => {
-      console.log('[audioEngine] Unlocking audio via user gesture');
+      console.log('[audioEngine] User gesture detected -> Unlocking');
       unlockAudio();
       window.removeEventListener('click', handler, true);
       window.removeEventListener('keydown', handler, true);
       window.removeEventListener('touchstart', handler, true);
     };
-    // Use capture phase to ensure we run before other handlers
     window.addEventListener('click', handler, true);
     window.addEventListener('keydown', handler, true);
     window.addEventListener('touchstart', handler, true);
