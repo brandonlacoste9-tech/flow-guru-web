@@ -201,14 +201,8 @@ ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "automationWebhookUrl" TEXT;
 ALTER TABLE fg_lists ADD COLUMN IF NOT EXISTS "icon" VARCHAR(64);
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "reminderAt" TIMESTAMP;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "locationTrigger" TEXT;
-DO $$ 
-BEGIN 
-    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'fg_provider_type') THEN
-        IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'fg_provider_type' AND e.enumlabel = 'spotify') THEN
-            ALTER TYPE fg_provider_type ADD VALUE 'spotify';
-        END IF;
-    END IF;
-END $$;
+ALTER TYPE fg_provider_type ADD VALUE IF NOT EXISTS 'spotify';
+ALTER TYPE fg_provider_type ADD VALUE IF NOT EXISTS 'microsoft-calendar';
 
 CREATE TABLE IF NOT EXISTS fg_waitlist (
     id SERIAL PRIMARY KEY,
