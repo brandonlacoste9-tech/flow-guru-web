@@ -31,6 +31,8 @@ AVAILABLE AGENTS:
 - research: Handles fetching real-time information, weather, news, and general knowledge questions.
 - email: Handles drafting, summarizing, and sending formal emails.
 
+IMPORTANT: If the user asks to "trigger an automation", "run an automation", "zapier", "ifttt", or anything about webhooks/automations, return { "agents": [] }. These are handled by a separate automation system, NOT by any of the agents above.
+
 RESPONSE FORMAT: Return a JSON object with an "agents" key containing an array of agent names to invoke.
 Example: { "agents": ["calendar"] } or { "agents": ["calendar", "email"] }.
 If no agent fits, return { "agents": [] }.`,
