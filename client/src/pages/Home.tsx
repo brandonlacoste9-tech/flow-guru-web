@@ -246,14 +246,7 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  // Pre-warm AudioContext on first user interaction so alarm sounds can play without gesture
-  useEffect(() => {
-    const unlock = () => { prewarmAudio(); window.removeEventListener('click', unlock); window.removeEventListener('keydown', unlock); window.removeEventListener('touchstart', unlock); };
-    window.addEventListener('click', unlock);
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('touchstart', unlock);
-    return () => { window.removeEventListener('click', unlock); window.removeEventListener('keydown', unlock); window.removeEventListener('touchstart', unlock); };
-  }, []);
+  useAudioUnlock();
 
   const addMemoryFactMutation = trpc.settings.addMemoryFact.useMutation();
 
