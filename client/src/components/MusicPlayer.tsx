@@ -9,6 +9,7 @@ import { Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAudioUnlock, setMusicVolume, playUrl, stopMusic } from "@/lib/audioEngine";
 
 /* ── SomaFM fallback stations ─────────────────────────────────────── */
 type StationId = "focus" | "chill" | "energy" | "sleep" | "space";
@@ -85,64 +86,34 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
   const [buffering, setBuffering] = useState(false);
-  
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Unlock audio on first user interaction (iOS/Windows)
+  useAudioUnlock();
   const activeIdRef = useRef<StationId>("focus");
   const prevVolumeRef = useRef(0.8);
 
-  // Web Audio API refs for iOS volume control bypass
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const gainNodeRef = useRef<GainNode | null>(null);
-  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
-
   const station = STATIONS.find((s) => s.id === activeId)!;
 
+  // Remove direct audioRef usage; use shared audioEngine
+  const audioRef = null; // placeholder not used
+
   const stopAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
-      audioRef.current = null;
-    }
-    if (sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
-      sourceNodeRef.current = null;
-    }
+    stopMusic();
     setIsPlaying(false);
     setBuffering(false);
     onStateChange?.(false, "");
   };
 
   const startAudio = (urls: string[], urlIdx = 0) => {
-    stopAudio();
+    stopCurrent();
     if (urlIdx >= urls.length) return;
     setBuffering(true);
-
-    const currentStation = STATIONS.find((s) => s.id === activeIdRef.current)!;
-    const audio = new Audio(urls[urlIdx]);
-    
-    // Required for Web Audio API with external streams
-    audio.crossOrigin = "anonymous";
-    
-    // Setup AudioContext if not exists
-    if (!audioCtxRef.current) {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      audioCtxRef.current = new AudioContextClass();
-      gainNodeRef.current = audioCtxRef.current.createGain();
-      gainNodeRef.current.connect(audioCtxRef.current.destination);
-    }
-    
-    // Connect new audio element to the existing GainNode
-    sourceNodeRef.current = audioCtxRef.current.createMediaElementSource(audio);
-    sourceNodeRef.current.connect(gainNodeRef.current!);
-
-    // Apply current volume
-    gainNodeRef.current!.gain.value = isMuted ? 0 : volume;
-    audio.volume = isMuted ? 0 : volume; // Fallback for non-iOS
-    audio.muted = isMuted;
-
+    const url = urls[urlIdx];
+    const audio = playUrl(url, 'music');
     audio.addEventListener("playing", () => {
       setIsPlaying(true);
       setBuffering(false);
+      const currentStation = STATIONS.find((s) => s.id === activeIdRef.current)!;
       onStateChange?.(true, currentStation.label);
     });
     audio.addEventListener("waiting", () => setBuffering(true));
@@ -150,19 +121,9 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
     audio.addEventListener("error", () => {
       startAudio(urls, urlIdx + 1);
     });
-
-    audioRef.current = audio;
-    audio.play().catch(() => startAudio(urls, urlIdx + 1));
-  };
-
-  const resumeAudioContext = () => {
-    if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
-      audioCtxRef.current.resume();
-    }
   };
 
   const toggle = () => {
-    resumeAudioContext();
     if (isPlaying || buffering) {
       stopAudio();
     } else {
@@ -171,7 +132,6 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   };
 
   const switchStation = (id: StationId) => {
-    resumeAudioContext();
     const wasActive = isPlaying || buffering;
     setActiveId(id);
     activeIdRef.current = id;
@@ -184,50 +144,29 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
-    setVolume(val);
-    if (val === 0) {
-      setIsMuted(true);
-      if (audioRef.current) audioRef.current.muted = true;
-      if (gainNodeRef.current) gainNodeRef.current.gain.value = 0;
-    } else {
-      setIsMuted(false);
-      if (audioRef.current) {
-        audioRef.current.muted = false;
-        audioRef.current.volume = val;
-      }
-      if (gainNodeRef.current && audioCtxRef.current) {
-        // Use setTargetAtTime for a smooth, pop-free volume transition
-        gainNodeRef.current.gain.setTargetAtTime(val, audioCtxRef.current.currentTime, 0.05);
-      }
-    }
-    prevVolumeRef.current = val > 0 ? val : prevVolumeRef.current;
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    setMusicVolume(newVolume, false);
+    setIsMuted(newVolume === 0);
+    prevVolumeRef.current = newVolume || prevVolumeRef.current;
   };
 
   const toggleMute = () => {
     if (isMuted) {
-      const restored = prevVolumeRef.current || 0.8;
+      const newVolume = prevVolumeRef.current > 0 ? prevVolumeRef.current : 0.8;
+      setVolume(newVolume);
+      setMusicVolume(newVolume, false);
       setIsMuted(false);
-      setVolume(restored);
-      if (audioRef.current) {
-        audioRef.current.muted = false;
-        audioRef.current.volume = restored;
-      }
-      if (gainNodeRef.current && audioCtxRef.current) {
-        gainNodeRef.current.gain.setTargetAtTime(restored, audioCtxRef.current.currentTime, 0.05);
-      }
     } else {
       prevVolumeRef.current = volume;
-      setIsMuted(true);
       setVolume(0);
-      if (audioRef.current) audioRef.current.muted = true;
-      if (gainNodeRef.current) gainNodeRef.current.gain.value = 0;
+      setMusicVolume(0, true);
+      setIsMuted(true);
     }
   };
 
   useImperativeHandle(ref, () => ({
     play: (stationId) => {
-      resumeAudioContext();
       const id = stationId ?? activeId;
       const s = STATIONS.find((st) => st.id === id)!;
       if (id !== activeId) { setActiveId(id); activeIdRef.current = id; }
@@ -297,7 +236,15 @@ export const MusicPlayer = forwardRef<MusicPlayerHandle, MusicPlayerProps>(
           <button onClick={toggleMute} className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
             {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
           </button>
-          <input type="range" min={0} max={1} step={0.02} value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="w-12 sm:w-16 h-1 accent-primary cursor-pointer rounded-full appearance-none bg-secondary [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary" style={{ background: `linear-gradient(to right, hsl(var(--primary)) ${(isMuted ? 0 : volume) * 100}%, hsl(var(--secondary)) ${(isMuted ? 0 : volume) * 100}%)` }} />
+          <input 
+            type="range" 
+            min="0" 
+            max="1" 
+            step="0.01" 
+            value={isMuted ? 0 : volume} 
+            onChange={handleVolumeChange} 
+            className="w-16 h-2 accent-primary cursor-pointer rounded-full" 
+          />
         </div>
       </div>
 

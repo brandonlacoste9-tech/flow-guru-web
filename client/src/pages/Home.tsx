@@ -22,6 +22,7 @@ import PricingCard from "@/components/PricingCard";
 import { trackConversion } from "@/lib/telemetry";
 import type { TranslationKeys } from "@/lib/translations";
 import { displayFirstName, displayFirstNameOrNeutral } from "@shared/userDisplay";
+import { playUrl, setVoiceVolume, stopMusic, duckMusic } from "@/lib/audioEngine";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -340,26 +341,9 @@ export default function Home() {
   });
 
   const playAudioStream = (audioSrc: string, cleanText: string) => {
-    const audio = new Audio(audioSrc);
-    audio.onended = () => setIsSpeaking(false);
-    audio.onerror = () => {
+    setIsSpeaking(true);
+    playUrl(audioSrc, 'voice', () => {
       setIsSpeaking(false);
-      if (!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(cleanText);
-      utt.rate = 1.05;
-      utt.pitch = 1.0;
-      window.speechSynthesis.speak(utt);
-    };
-    audio.play().catch(() => {
-      setIsSpeaking(false);
-      // Fallback
-      if (!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(cleanText);
-      utt.rate = 1.05;
-      utt.pitch = 1.0;
-      window.speechSynthesis.speak(utt);
     });
   };
 
@@ -438,8 +422,19 @@ export default function Home() {
 
   const toggleListening = () => {
     if (!recognitionRef.current) { toast.error("Voice not supported."); return; }
-    if (isListening) recognitionRef.current.stop();
-    else { setIsListening(true); recognitionRef.current.start(); }
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      try {
+        setIsListening(true);
+        recognitionRef.current.start();
+      } catch (err) {
+        console.error("Speech recognition start failed:", err);
+        setIsListening(false);
+        toast.error("Could not start microphone.");
+      }
+    }
   };
 
   const handleSend = async (text: string) => {

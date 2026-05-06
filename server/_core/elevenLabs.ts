@@ -9,8 +9,9 @@ export type { TtsOptions, SoundGenerationOptions } from "../../api/lib/_core/ele
 export function registerElevenLabsRoutes(app: Express) {
   app.get("/api/speak", async (req, res) => {
     try {
+      const DEFAULT_VOICE_ID = "pNInz6obpgDQGcFmaJgB"; // Adam - free-tier safe voice
       const text = req.query.text as string;
-      const voiceId = req.query.voiceId as string | undefined;
+      const voiceId = (req.query.voiceId as string | undefined) ?? DEFAULT_VOICE_ID;
 
       if (!text) {
         return res.status(400).send("Text query parameter is required");
