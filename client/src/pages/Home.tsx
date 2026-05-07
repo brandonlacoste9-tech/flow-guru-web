@@ -23,6 +23,7 @@ import { trackConversion } from "@/lib/telemetry";
 import type { TranslationKeys } from "@/lib/translations";
 import { displayFirstName, displayFirstNameOrNeutral } from "@shared/userDisplay";
 import { playUrl, setVoiceVolume, stopMusic, duckMusic, useAudioUnlock } from "@/lib/audioEngine";
+import { Footer } from "@/components/Footer";
 
 const WEATHER_CODE_LABELS: [number, string][] = [
   [1, "clear"], [3, "partly cloudy"], [48, "foggy"], [57, "drizzle"],
@@ -1342,6 +1343,7 @@ export default function Home() {
               <div ref={messagesEndRef} className="h-32" />
             </div>
           )}
+          <Footer />
         </div>
       </main>
 

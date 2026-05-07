@@ -17,8 +17,8 @@ const Settings = lazy(() => import("./pages/Settings").then(m => ({ default: m.S
 const Blog = lazy(() => import("./pages/Blog"));
 const BlogPost = lazy(() => import("./pages/BlogPost"));
 const Pricing = lazy(() => import("./pages/LegalPages").then(m => ({ default: m.PricingPage })));
-const Terms = lazy(() => import("./pages/LegalPages").then(m => ({ default: m.TermsPage })));
-const Privacy = lazy(() => import("./pages/LegalPages").then(m => ({ default: m.PrivacyPage })));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 
 function Router() {
   return (

@@ -93,10 +93,14 @@ const trpcClient = trpc.createClient({
   ],
 });
 
+import { ErrorBoundary } from "./components/ErrorBoundary";
+
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
       <Analytics />
       <SpeedInsights />
     </QueryClientProvider>
