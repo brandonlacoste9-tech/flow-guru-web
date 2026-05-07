@@ -4,7 +4,7 @@
   "description": "Your premium, private, and autonomous AI lifestyle companion.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f1ea",
+  "background_color": "#1a1208",
   "theme_color": "#d4a017",
   "orientation": "portrait-primary",
   "icons": [
