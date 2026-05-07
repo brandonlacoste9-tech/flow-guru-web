@@ -73,6 +73,7 @@
     { "source": "/api/billing/portal", "destination": "/api/billing-portal.ts" },
     { "source": "/api/stripe/webhook", "destination": "/api/stripe-webhook.ts" },
     { "source": "/api/speak", "destination": "/api/speak.ts" },
+    { "source": "/api/telegram-webhook", "destination": "/api/telegram-webhook.ts" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
