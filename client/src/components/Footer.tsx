@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation } from "wouter";
-import { Github, Twitter, Shield, FileText } from "lucide-react";
+import { Globe, Share2, Shield, FileText } from "lucide-react";
 
 export function Footer() {
   const [, navigate] = useLocation();
@@ -35,10 +35,10 @@ export function Footer() {
             <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Social</h4>
             <div className="flex flex-col gap-2">
               <a href="https://x.com/floguru" target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
-                <Twitter size={12} /> Twitter / X
+                <Share2 size={12} /> Twitter / X
               </a>
               <a href="https://github.com/brandonlacoste9-tech/flow-guru-web" target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
-                <Github size={12} /> GitHub
+                <Globe size={12} /> GitHub
               </a>
             </div>
           </div>
