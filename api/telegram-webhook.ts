@@ -78,6 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         userName: user.name || "User",
         memoryContext: "",
         message: text,
+        language: "en",
       });
       const result = await executeAssistantAction(plannedAction, { userId: user.id });
       reply = result.summary;

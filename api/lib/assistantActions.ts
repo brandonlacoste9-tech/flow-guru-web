@@ -1,7 +1,7 @@
 import fs from "fs";
 import * as chrono from "chrono-node";
 import { z } from "zod";
-import { getProviderConnection, createLocalEvent, listUserMemoryFacts } from "./db.js";
+import { getProviderConnection, createLocalEvent, listUserMemoryFacts, listLocalEvents } from "./db.js";
 import {
   createGoogleCalendarEvent,
   listGoogleCalendarEvents,

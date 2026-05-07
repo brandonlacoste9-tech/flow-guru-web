@@ -1154,7 +1154,8 @@ export async function recordStripeEvent(eventId: string, type: string | null): P
 }
 
 export async function resolveUserByTelegramChatId(chatId: string) {
-  const { db } = await ensureSchema();
+  const db = await getDb();
+  if (!db) return null;
   const profile = await db.query.userMemoryProfiles.findFirst({
     where: eq(schema.userMemoryProfiles.telegramChatId, chatId),
   });
