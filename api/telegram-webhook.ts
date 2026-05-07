@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).send("OK");
       }
 
-      await db.updateUserMemoryProfile(userId, { telegramChatId: String(chatId) });
+      await db.upsertUserMemoryProfile(userId, { telegramChatId: String(chatId) });
       await sendTelegramMessage(chatId, "✅ *Account Linked!* I am now your Flow Guru assistant on Telegram. You can talk to me just like on the web app.");
       return res.status(200).send("OK");
     }
@@ -89,7 +89,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (err: any) {
     console.error("[Telegram Webhook] Error:", err);
-    await sendTelegramMessage(chatId, "⚠️ Sorry, I encountered an error processing your request.");
+    const errorMessage = err?.message || String(err);
+    await sendTelegramMessage(chatId, `⚠️ Sorry, I encountered an error: ${errorMessage}`);
     return res.status(200).send("OK");
   }
 }
