@@ -181,6 +181,8 @@ export default function Home() {
   const voiceGenderRef = useRef<'male' | 'female'>(voiceGender);
   useEffect(() => { voiceGenderRef.current = voiceGender; }, [voiceGender]);
 
+  const [telegramChatId, setTelegramChatId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -204,6 +206,12 @@ export default function Home() {
     if (data.alarmDays) {
       setAlarmDays(data.alarmDays);
       localStorage.setItem('alarmDays', data.alarmDays);
+    }
+    if (data.telegramChatId) {
+      setTelegramChatId(data.telegramChatId);
+    }
+    if (data.userId) {
+      localStorage.setItem('fg_user_id', String(data.userId));
     }
   }, [profileQuery.data]);
 
@@ -939,6 +947,40 @@ export default function Home() {
                     )}
                   </motion.h2>
                 </div>
+
+                {/* Telegram Connection Nudge */}
+                {user && !telegramChatId && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="mb-6 p-4 rounded-3xl bg-sky-500/10 border border-sky-500/20 flex flex-col xs:flex-row items-center justify-between gap-4 leather-glow shadow-lg shadow-sky-500/5"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-sky-500/20 flex items-center justify-center shrink-0">
+                        <svg className="w-6 h-6 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.56 8.18l-1.92 9.06c-.14.65-.53.81-1.08.5l-2.92-2.15-1.41 1.36c-.16.16-.29.29-.59.29l.21-3.01 5.48-4.95c.24-.22-.05-.34-.37-.13l-6.77 4.26-2.92-.91c-.63-.2-0.64-.63.13-.93l11.41-4.4c.53-.19.99.13.79.91z"/>
+                        </svg>
+                      </div>
+                      <div className="text-center xs:text-left">
+                        <p className="text-sm font-bold text-foreground">Connect Telegram</p>
+                        <p className="text-[11px] text-muted-foreground leading-tight">Chat with your assistant anywhere, anytime.</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const uid = localStorage.getItem('fg_user_id');
+                        if (uid) {
+                          window.open(`https://t.me/flogurubot?start=link_${uid}`, '_blank');
+                        } else {
+                          navigate('/settings');
+                        }
+                      }}
+                      className="px-6 py-2.5 rounded-full bg-sky-500 text-white text-xs font-bold hover:bg-sky-600 transition-all shadow-md shadow-sky-500/20 shrink-0"
+                    >
+                      Connect Now
+                    </button>
+                  </motion.div>
+                )}
 
                 {/* Live cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-8">
