@@ -983,6 +983,8 @@ export function Settings() {
           {activeTab === 'integrations' && (
             <motion.div key="integrations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
               <IntegrationsPanel 
+                userId={(profileQuery.data as any)?.userId}
+                telegramChatId={(profileQuery.data as any)?.telegramChatId}
                 automationWebhookUrl={automationWebhookUrl}
                 setAutomationWebhookUrl={setAutomationWebhookUrl}
                 setProfileDirty={setProfileDirty}
@@ -1112,10 +1114,14 @@ export function Settings() {
 
 /* ── Integrations Panel (fetches live status) ──────────────────────── */
 function IntegrationsPanel({ 
+  userId,
+  telegramChatId,
   automationWebhookUrl, 
   setAutomationWebhookUrl, 
   setProfileDirty 
 }: { 
+  userId?: number;
+  telegramChatId?: string | null;
   automationWebhookUrl: string; 
   setAutomationWebhookUrl: (v: string) => void; 
   setProfileDirty: (v: boolean) => void; 
@@ -1255,6 +1261,46 @@ function IntegrationsPanel({
           ) : (
             <button
               onClick={() => window.location.href = '/api/integrations/spotify/start'}
+              className="w-full xs:w-auto px-8 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-lg shadow-primary/20"
+            >
+              Connect
+            </button>
+          )}
+        </div>
+
+        {/* Telegram Bot */}
+        <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between p-4 bg-background border border-border rounded-2xl gap-3">
+          <div className="flex items-center gap-3 min-w-0 w-full">
+            <div className="w-10 h-10 rounded-full bg-sky-500/10 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.56 8.18l-1.92 9.06c-.14.65-.53.81-1.08.5l-2.92-2.15-1.41 1.36c-.16.16-.29.29-.59.29l.21-3.01 5.48-4.95c.24-.22-.05-.34-.37-.13l-6.77 4.26-2.92-.91c-.63-.2-0.64-.63.13-.93l11.41-4.4c.53-.19.99.13.79.91z"/>
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold">Telegram Assistant</p>
+              {telegramChatId ? (
+                <p className="text-[10px] text-sky-500 uppercase tracking-wider font-semibold break-words">Linked via Telegram</p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Chat with your assistant on Telegram</p>
+              )}
+            </div>
+          </div>
+          {telegramChatId ? (
+            <button
+              onClick={() => window.open('https://t.me/flogurubot', '_blank')}
+              className="w-full xs:w-auto px-6 py-3 rounded-2xl bg-sky-500/10 text-sky-500 text-xs font-bold hover:bg-sky-500/20 transition-all shrink-0"
+            >
+              Open Bot
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (!userId) {
+                  toast.error("Please wait for your profile to load.");
+                  return;
+                }
+                window.open(`https://t.me/FlowGuruBot?start=link_${userId}`, '_blank');
+              }}
               className="w-full xs:w-auto px-8 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-lg shadow-primary/20"
             >
               Connect

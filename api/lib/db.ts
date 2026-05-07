@@ -198,6 +198,7 @@ ALTER TABLE fg_threads ADD COLUMN IF NOT EXISTS "shareToken" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "voiceId" VARCHAR(64);
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "buddyPersonality" TEXT;
 ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "automationWebhookUrl" TEXT;
+ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "telegramChatId" TEXT;
 ALTER TABLE fg_lists ADD COLUMN IF NOT EXISTS "icon" VARCHAR(64);
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "reminderAt" TIMESTAMP;
 ALTER TABLE fg_list_items ADD COLUMN IF NOT EXISTS "locationTrigger" TEXT;
@@ -1150,4 +1151,15 @@ export async function recordStripeEvent(eventId: string, type: string | null): P
     RETURNING id
   `);
   return Boolean((rows.rows || rows)[0]);
+}
+
+export async function resolveUserByTelegramChatId(chatId: string) {
+  const { db } = await ensureSchema();
+  const profile = await db.query.userMemoryProfiles.findFirst({
+    where: eq(schema.userMemoryProfiles.telegramChatId, chatId),
+  });
+  if (!profile) return null;
+  return await db.query.users.findFirst({
+    where: eq(schema.users.id, profile.userId),
+  });
 }

@@ -55,6 +55,7 @@ export const userMemoryProfiles = pgTable("fg_profiles", {
   voiceId: varchar("voiceId", { length: 64 }),
   buddyPersonality: text("buddyPersonality"),
   automationWebhookUrl: text("automationWebhookUrl"),
+  telegramChatId: text("telegramChatId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

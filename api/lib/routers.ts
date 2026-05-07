@@ -1213,6 +1213,7 @@ export const appRouter = router({
       const facts = await listUserMemoryFacts(userId);
       const customInstructions = facts.find((f: any) => f.factKey === 'custom_instructions')?.factValue ?? '';
       return {
+        userId,
         wakeUpTime: (profile as any)?.wakeUpTime ?? '',
         dailyRoutine: (profile as any)?.dailyRoutine ?? '',
         preferencesSummary: (profile as any)?.preferencesSummary ?? '',
@@ -1222,6 +1223,7 @@ export const appRouter = router({
         voiceId: (profile as any)?.voiceId ?? '',
         buddyPersonality: (profile as any)?.buddyPersonality ?? '',
         automationWebhookUrl: (profile as any)?.automationWebhookUrl ?? '',
+        telegramChatId: (profile as any)?.telegramChatId ?? null,
       };
     }),
     saveProfile: publicProcedure

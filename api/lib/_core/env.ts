@@ -29,4 +29,5 @@ export const ENV = {
   theNewsApiKey: clean(process.env.THENEWSAPI_API_KEY),
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+  telegramBotToken: clean(process.env.TELEGRAM_BOT_TOKEN),
 };
