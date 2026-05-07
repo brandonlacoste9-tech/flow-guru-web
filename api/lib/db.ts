@@ -137,9 +137,13 @@ CREATE TABLE IF NOT EXISTS fg_profiles (
     "alarmDays" varchar(32) DEFAULT '0,1,2,3,4,5,6',
     "voiceId" varchar(64),
     "buddyPersonality" text,
+    "automationWebhookUrl" text,
+    "telegramChatId" text,
     "createdAt" timestamp DEFAULT now() NOT NULL,
     "updatedAt" TIMESTAMP DEFAULT NOW() NOT NULL
 );
+ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "automationWebhookUrl" text;
+ALTER TABLE fg_profiles ADD COLUMN IF NOT EXISTS "telegramChatId" text;
 CREATE TABLE IF NOT EXISTS fg_facts (
     id SERIAL PRIMARY KEY,
     "userId" INTEGER NOT NULL,
