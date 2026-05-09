@@ -10,11 +10,11 @@ importers:
     dependencies:
       '@cursor/sdk':
         specifier: ^1.0.7
-        version: 1.0.7
+        version: 1.0.12
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
-        version: 25.6.0
+        version: 25.6.2
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -39,33 +39,33 @@ packages:
     peerDependencies:
       '@bufbuild/protobuf': ^1.10.0
 
-  '@cursor/sdk-darwin-arm64@1.0.7':
-    resolution: {integrity: sha512-oI8ptQ3MrHonM+OnjfCqM8sKC3V1UjQ3ZISrTK4RyrGdNrOl2YP1lsynSltlK+jr1E5XWEaPnX6UHTCjw5iKtg==}
+  '@cursor/sdk-darwin-arm64@1.0.12':
+    resolution: {integrity: sha512-AOFx+aX+4SntAeC66YncHACXk5duxp+HzDrxxF4Tl93N6nLjHaHEKSAXbt87ivL34MCHop4v/3c70QzBhamB2g==}
     cpu: [arm64]
     os: [darwin]
 
-  '@cursor/sdk-darwin-x64@1.0.7':
-    resolution: {integrity: sha512-PLCluuNGKUw4aCsup00tmvcjL+c0/bsf0zwIK9q864JmIkiYt+o6He3gQHvRaryqWqwpk30tvhG9EFDT8PTGyw==}
+  '@cursor/sdk-darwin-x64@1.0.12':
+    resolution: {integrity: sha512-/ZDAYFUrnPd8hAGRky9ZGcROqZSZ2b5W+aEjTdINzLhJ8x5ZNXtjaz0ZYSHabOn2BeErjXgTcq+4bX2/To4C1A==}
     cpu: [x64]
     os: [darwin]
 
-  '@cursor/sdk-linux-arm64@1.0.7':
-    resolution: {integrity: sha512-nhlxxRO/QYCjv1C6ynjJkaxNpEQkqygwFXcdlbjsBf52LJQTPEcfoP05b6Y+3KkTQGR6t3bxaua3A+zeYYY87w==}
+  '@cursor/sdk-linux-arm64@1.0.12':
+    resolution: {integrity: sha512-kAxNqiB3dPtlW9fVjjIZEdbIGEGLA9moOM3zYwsXh8J1Qw942nJYMGDGR4o8x0zglwZ24a1JpovvZamrCaC3Yw==}
     cpu: [arm64]
     os: [linux]
 
-  '@cursor/sdk-linux-x64@1.0.7':
-    resolution: {integrity: sha512-Bd0k/AZ1U3l3fn0vy5hjFLUXGjLd03VFzdon39tE+lM0HuhxvBE45L5uGeZqkEFTNGbsjsah7Q6zuSKARQbMbg==}
+  '@cursor/sdk-linux-x64@1.0.12':
+    resolution: {integrity: sha512-RmBiBCPKMZC5McDerGk2Rk4P47xz2A+uzRoRgH6sMoOjklc33ry11iAZC0D5F5xH85chgY878086A/Q8+XrAuA==}
     cpu: [x64]
     os: [linux]
 
-  '@cursor/sdk-win32-x64@1.0.7':
-    resolution: {integrity: sha512-0Xd2Sf8gq6y81fB9CMn8xha+AaL37lsOB045Z1MyNoEIphB95wiJ6vWdQZII4NLKUFhivuTuLsf6sGQdYHl9rw==}
+  '@cursor/sdk-win32-x64@1.0.12':
+    resolution: {integrity: sha512-uH4shdHrKOdtNLapy1uuScJ9lL2Pc8zc9I9ZKC6b6bx+0UX6xLAqjPP7dqVPfO6D9u61yLq1Hs86XOLs5ZVkPA==}
     cpu: [x64]
     os: [win32]
 
-  '@cursor/sdk@1.0.7':
-    resolution: {integrity: sha512-lDaGdsg5Vzvr/eW53C6S5wXc83aHoF5QrcCF3eqkr+2wzS7DQFiviH3HA5EmiZ2PJDhU2/0O77v6pwhjSAcDDA==}
+  '@cursor/sdk@1.0.12':
+    resolution: {integrity: sha512-jGx0wFY1N9uIdIKr303CfM6m/dLXmRCUnU/0yNP/oiOpkBXqgqaThGbgYbcOeVrYonMZc/DZJ9EydXOEPJLcbg==}
     engines: {node: '>=18'}
 
   '@esbuild/aix-ppc64@0.27.7':
@@ -239,12 +239,18 @@ packages:
     engines: {node: '>=10'}
     deprecated: This functionality has been moved to @npmcli/fs
 
+  '@statsig/client-core@3.31.0':
+    resolution: {integrity: sha512-SuxQD6TmVszPG7FoMKwTk/uyBuVFk7XnxI3T/E0uyb7PL7GNjONtfsoh+NqBBVUJVse0CUeSFfgJPoZy1ZOslQ==}
+
+  '@statsig/js-client@3.31.0':
+    resolution: {integrity: sha512-LFa5E0LjT6sTfZv3sNGoyRLSZ1078+agdgOA+Vm1ecjG+KbSOfBLTW7hMwimrJ29slRwbYDzbtKaPJo/R37N2g==}
+
   '@tootallnate/once@1.1.2':
     resolution: {integrity: sha512-RbzJvlNzmRq5c3O09UipeuXno4tA1FE6ikOjxZK0tuxVv3412l64l5t1W5pj4+rJq9vpkm/kwiR07aZXnsKPxw==}
     engines: {node: '>= 6'}
 
-  '@types/node@25.6.0':
-    resolution: {integrity: sha512-+qIYRKdNYJwY3vRCZMdJbPLJAtGjQBudzZzdzwQYkEPQd+PJGixUL5QfvCLDaULoLv+RhT3LDkwEfKaAkgSmNQ==}
+  '@types/node@25.6.2':
+    resolution: {integrity: sha512-sokuT28dxf9JT5Kady1fsXOvI4HVpjZa95NKT5y9PNTIrs2AsobR4GFAA90ZG8M+nxVRLysCXsVj6eGC7Vbrlw==}
 
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
@@ -446,8 +452,8 @@ packages:
   ini@1.3.8:
     resolution: {integrity: sha512-JV/yugV2uzW5iMRSiZAyDtQd+nxtUnjeLt0acNdw98kKLrvuRVyB80tsREOE7yvGVgalhZ6RNXCmEHkUKBKxew==}
 
-  ip-address@10.1.1:
-    resolution: {integrity: sha512-1FMu8/N15Ck1BL551Jf42NYIoin2unWjLQ2Fze/DXryJRl5twqtwNHlO39qERGbIOcKYWHdgRryhOC+NG4eaLw==}
+  ip-address@10.2.0:
+    resolution: {integrity: sha512-/+S6j4E9AHvW9SWMSEY9Xfy66O5PWvVEJ08O0y5JGyEKQpojb0K0GKpz/v5HJ/G0vi3D2sjGK78119oXZeE0qA==}
     engines: {node: '>= 12'}
 
   is-fullwidth-code-point@3.0.0:
@@ -731,34 +737,35 @@ snapshots:
     dependencies:
       '@bufbuild/protobuf': 1.10.0
 
-  '@cursor/sdk-darwin-arm64@1.0.7':
+  '@cursor/sdk-darwin-arm64@1.0.12':
     optional: true
 
-  '@cursor/sdk-darwin-x64@1.0.7':
+  '@cursor/sdk-darwin-x64@1.0.12':
     optional: true
 
-  '@cursor/sdk-linux-arm64@1.0.7':
+  '@cursor/sdk-linux-arm64@1.0.12':
     optional: true
 
-  '@cursor/sdk-linux-x64@1.0.7':
+  '@cursor/sdk-linux-x64@1.0.12':
     optional: true
 
-  '@cursor/sdk-win32-x64@1.0.7':
+  '@cursor/sdk-win32-x64@1.0.12':
     optional: true
 
-  '@cursor/sdk@1.0.7':
+  '@cursor/sdk@1.0.12':
     dependencies:
       '@bufbuild/protobuf': 1.10.0
       '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.0)
       '@connectrpc/connect-node': 1.7.0(@bufbuild/protobuf@1.10.0)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0))
+      '@statsig/js-client': 3.31.0
       sqlite3: 5.1.7
       zod: 3.25.76
     optionalDependencies:
-      '@cursor/sdk-darwin-arm64': 1.0.7
-      '@cursor/sdk-darwin-x64': 1.0.7
-      '@cursor/sdk-linux-arm64': 1.0.7
-      '@cursor/sdk-linux-x64': 1.0.7
-      '@cursor/sdk-win32-x64': 1.0.7
+      '@cursor/sdk-darwin-arm64': 1.0.12
+      '@cursor/sdk-darwin-x64': 1.0.12
+      '@cursor/sdk-linux-arm64': 1.0.12
+      '@cursor/sdk-linux-x64': 1.0.12
+      '@cursor/sdk-win32-x64': 1.0.12
     transitivePeerDependencies:
       - bluebird
       - supports-color
@@ -858,10 +865,16 @@ snapshots:
       rimraf: 3.0.2
     optional: true
 
+  '@statsig/client-core@3.31.0': {}
+
+  '@statsig/js-client@3.31.0':
+    dependencies:
+      '@statsig/client-core': 3.31.0
+
   '@tootallnate/once@1.1.2':
     optional: true
 
-  '@types/node@25.6.0':
+  '@types/node@25.6.2':
     dependencies:
       undici-types: 7.19.2
 
@@ -1128,7 +1141,7 @@ snapshots:
 
   ini@1.3.8: {}
 
-  ip-address@10.1.1:
+  ip-address@10.2.0:
     optional: true
 
   is-fullwidth-code-point@3.0.0:
@@ -1364,7 +1377,7 @@ snapshots:
 
   socks@2.8.8:
     dependencies:
-      ip-address: 10.1.1
+      ip-address: 10.2.0
       smart-buffer: 4.2.0
     optional: true
 
