@@ -16,7 +16,7 @@ const chatProvider = createOpenAICompatible({
   apiKey: (xaiKey || deepseekKey)!,
 });
 const chatModelId = xaiKey
-  ? (process.env.XAI_MODEL?.trim() || 'grok-3')
+  ? (process.env.XAI_MODEL?.trim() || 'grok-4.3')
   : 'deepseek-chat';
 
 const ANONYMOUS_OPEN_ID = '__flow_guru_anonymous__';

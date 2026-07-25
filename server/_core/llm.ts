@@ -284,15 +284,88 @@ const normalizeResponseFormat = ({
   };
 };
 
+type LlmProvider = {
+  name: "xai" | "deepseek" | "moonshot" | "forge";
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  stripJsonSchema: boolean;
+};
+
+function resolveChatProvider(): LlmProvider | null {
+  // Always re-read xAI key live (Vercel/env timing)
+  const xaiKey = ENV.xaiApiKey;
+  if (xaiKey) {
+    return {
+      name: "xai",
+      apiUrl: "https://api.x.ai/v1/chat/completions",
+      apiKey: xaiKey,
+      model: ENV.xaiModel || "grok-4.3",
+      stripJsonSchema: true,
+    };
+  }
+  if (ENV.deepSeekApiKey) {
+    return {
+      name: "deepseek",
+      apiUrl: "https://api.deepseek.com/v1/chat/completions",
+      apiKey: ENV.deepSeekApiKey,
+      model: "deepseek-chat",
+      stripJsonSchema: true,
+    };
+  }
+  if (ENV.moonshotApiKey) {
+    return {
+      name: "moonshot",
+      apiUrl: "https://api.moonshot.cn/v1/chat/completions",
+      apiKey: ENV.moonshotApiKey,
+      model: "moonshot-v1-8k",
+      stripJsonSchema: false,
+    };
+  }
+  if (ENV.forgeApiKey) {
+    const base =
+      ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+        ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
+        : "https://forge.manus.im";
+    const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
+    return {
+      name: "forge",
+      apiUrl: `${base}${versionPrefix}/chat/completions`,
+      apiKey: ENV.forgeApiKey,
+      model: "gemini-1.5-flash",
+      stripJsonSchema: false,
+    };
+  }
+  return null;
+}
+
+async function postChatCompletions(
+  provider: LlmProvider,
+  payload: Record<string, unknown>
+): Promise<{ ok: true; data: InvokeResult } | { ok: false; status: number; body: string }> {
+  const response = await fetch(provider.apiUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${provider.apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    return { ok: false, status: response.status, body };
+  }
+  return { ok: true, data: (await response.json()) as InvokeResult };
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  const hasXai = ENV.xaiApiKey && ENV.xaiApiKey.trim().length > 0;
-  const hasDeepSeek = ENV.deepSeekApiKey && ENV.deepSeekApiKey.trim().length > 0;
-  const hasMoonshot = ENV.moonshotApiKey && ENV.moonshotApiKey.trim().length > 0;
-  const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
+  const provider = resolveChatProvider();
 
   // --- Creative Mock Fallback ---
-  if (!hasXai && !hasDeepSeek && !hasMoonshot && !hasForge) {
-    console.warn("[Flow Guru] Operating in Simulation Mode (No API keys found)");
+  if (!provider) {
+    console.warn(
+      "[Flow Guru] Simulation Mode: no XAI_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY / BUILT_IN_FORGE_API_KEY"
+    );
     return {
       id: "mock-" + Date.now(),
       created: Math.floor(Date.now() / 1000),
@@ -301,7 +374,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         index: 0,
         message: {
           role: "assistant",
-          content: "I'm awake! I'm currently running in **Simulation Mode** because no AI API keys (XAI/Grok, DeepSeek, Moonshot, or Forge) have been detected yet. Once you add one, I'll be able to use my full intelligence to help you!",
+          content:
+            "I'm in simulation mode — no AI API key is configured on this server. Set XAI_API_KEY (Grok) in Vercel Environment Variables (Production + Preview), redeploy, and try again.",
         },
         finish_reason: "stop",
       }],
@@ -320,17 +394,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  const model = hasXai
-    ? ENV.xaiModel || "grok-3"
-    : hasDeepSeek
-      ? "deepseek-chat"
-      : hasMoonshot
-        ? "moonshot-v1-8k"
-        : "gemini-1.5-flash";
-
   const payload: Record<string, unknown> = {
-    model,
+    model: provider.model,
     messages: messages.map(normalizeMessage),
+    max_tokens: 4096,
   };
 
   if (tools && tools.length > 0) {
@@ -345,11 +412,6 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  // Cap completion length for chat providers
-  if (hasXai || hasDeepSeek) {
-    payload.max_tokens = 4096;
-  }
-
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
     response_format,
@@ -358,65 +420,73 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   });
 
   if (normalizedResponseFormat) {
-    // DeepSeek / some gateways don't support json_schema — strip entirely
-    if (
-      (hasDeepSeek || hasXai) &&
-      normalizedResponseFormat.type === "json_schema"
-    ) {
-      // Don't set response_format; rely on prompt for JSON output
+    if (provider.stripJsonSchema && normalizedResponseFormat.type === "json_schema") {
+      // Rely on prompt for JSON — many gateways reject json_schema
     } else {
       payload.response_format = normalizedResponseFormat;
     }
   }
 
-  const apiUrl = resolveApiUrl("chat");
-  const apiKey =
-    ENV.xaiApiKey || ENV.deepSeekApiKey || ENV.moonshotApiKey || ENV.forgeApiKey;
-
   try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    console.info(
+      `[Flow Guru] LLM provider=${provider.name} model=${provider.model} url=${provider.apiUrl}`
+    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[Flow Guru] LLM API failed (${response.status}) at ${apiUrl}:`, errorText.slice(0, 300));
+    let result = await postChatCompletions(provider, payload);
 
-      // If json_schema was rejected, retry WITHOUT response_format
-      if (normalizedResponseFormat && response.status === 400) {
-        console.warn("[Flow Guru] Retrying LLM call without response_format...");
-        const retryPayload = { ...payload };
-        delete retryPayload.response_format;
-        
-        const retryResponse = await fetch(apiUrl, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify(retryPayload),
-        });
-
-        if (retryResponse.ok) {
-          return (await retryResponse.json()) as InvokeResult;
-        }
-        
-        const retryError = await retryResponse.text();
-        console.error(`[Flow Guru] LLM API retry also failed (${retryResponse.status}):`, retryError.slice(0, 200));
-      }
-
-      throw new Error(`LLM API failed (${response.status})`);
+    // Retry without response_format on 400
+    if (!result.ok && result.status === 400 && payload.response_format) {
+      console.warn("[Flow Guru] Retrying LLM without response_format…");
+      const retryPayload = { ...payload };
+      delete retryPayload.response_format;
+      result = await postChatCompletions(provider, retryPayload);
     }
 
-    return (await response.json()) as InvokeResult;
+    // xAI model alias / not found → fall back to grok-4.3
+    if (
+      !result.ok &&
+      provider.name === "xai" &&
+      result.status === 400 &&
+      /model/i.test(result.body) &&
+      provider.model !== "grok-4.3"
+    ) {
+      console.warn(`[Flow Guru] Retrying xAI with grok-4.3 (was ${provider.model})…`);
+      result = await postChatCompletions(provider, {
+        ...payload,
+        model: "grok-4.3",
+      });
+    }
+
+    if (!result.ok) {
+      console.error(
+        `[Flow Guru] LLM API failed (${result.status}) provider=${provider.name}:`,
+        result.body.slice(0, 400)
+      );
+      const hint =
+        result.status === 401 || result.status === 403
+          ? "API key rejected — check XAI_API_KEY in Vercel."
+          : result.status === 429
+            ? "Rate limited — try again in a moment."
+            : `Provider ${provider.name} returned ${result.status}.`;
+      return {
+        id: "error-fallback-" + Date.now(),
+        created: Math.floor(Date.now() / 1000),
+        model: "fallback-guru-1.0",
+        choices: [{
+          index: 0,
+          message: {
+            role: "assistant",
+            content: `I'm having trouble reaching Grok right now. ${hint}`,
+          },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      };
+    }
+
+    return result.data;
   } catch (error) {
-    console.error(`[Flow Guru] LLM API Exception at ${apiUrl}:`, error);
-    // Return a graceful mock response instead of crashing
+    console.error(`[Flow Guru] LLM API Exception provider=${provider.name}:`, error);
     return {
       id: "error-fallback-" + Date.now(),
       created: Math.floor(Date.now() / 1000),
@@ -425,7 +495,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         index: 0,
         message: {
           role: "assistant",
-          content: "I'm having a bit of trouble connecting to my brain right now. I'll be back in a second!",
+          content:
+            "I'm having trouble reaching Grok right now (network error). Check server logs and that XAI_API_KEY is set for this deployment.",
         },
         finish_reason: "stop",
       }],

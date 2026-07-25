@@ -1,4 +1,16 @@
-const clean = (val: string | undefined) => val?.trim().replace(/^["']|["']$/g, "") ?? "";
+const clean = (val: string | undefined) =>
+  (val ?? "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+
+/** Live env reads (safe on Vercel cold starts / late dotenv load). */
+export function getXaiApiKey() {
+  return clean(process.env.XAI_API_KEY || process.env.GROK_API_KEY);
+}
+export function getXaiModel() {
+  return clean(process.env.XAI_MODEL) || "grok-4.3";
+}
 
 export const ENV = {
   /** Canonical site URL (no trailing slash). Used for Google OAuth redirect_uri so apex vs www matches Google Console. */
@@ -14,8 +26,12 @@ export const ENV = {
   /** Geocoding + Directions on maps.googleapis.com — enable both APIs in Google Cloud. */
   googleMapsApiKey: clean(process.env.GOOGLE_MAPS_API_KEY),
   /** xAI Grok (OpenAI-compatible). Preferred chat provider when set. */
-  xaiApiKey: clean(process.env.XAI_API_KEY || process.env.GROK_API_KEY),
-  xaiModel: clean(process.env.XAI_MODEL) || "grok-3",
+  get xaiApiKey() {
+    return getXaiApiKey();
+  },
+  get xaiModel() {
+    return getXaiModel();
+  },
   deepSeekApiKey: clean(process.env.DEEPSEEK_API_KEY || process.env.DeepSeek_API_KEY || process.env.DEEP_SEEK_API_KEY),
   moonshotApiKey: clean(process.env.MOONSHOT_API_KEY),
   tavilyApiKey: clean(process.env.TAVILY_API_KEY),
