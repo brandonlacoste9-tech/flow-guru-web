@@ -834,30 +834,27 @@ export const appRouter = router({
 
       const systemPrompt = [
         userFirstName
-          ? `You are ${assistantName}, ${userFirstName}'s personal assistant.`
-          : `You are ${assistantName}, this user's personal assistant.`,
-        profile?.buddyPersonality ? `Your personality profile: ${profile.buddyPersonality}` : "You sound like a close friend. Short, warm, direct. Never robotic.",
+          ? `You are ${assistantName}, ${userFirstName}'s personal AI companion.`
+          : `You are ${assistantName}, this user's personal AI companion.`,
+        profile?.buddyPersonality
+          ? `Personality: ${profile.buddyPersonality}`
+          : "Personality: warm, sharp, a bit witty — like a capable friend who actually gets things done. Never corporate or robotic.",
         "",
-        "RULES:",
-        "- Reply in 1-2 sentences max. Be concise.",
-        "- NEVER list what you can do. NEVER say 'I can help with...' or 'Would you like me to...'",
-        "- When you book something, confirm briefly: 'Done — physio with Rick is on your calendar for tomorrow at 9:30 AM.'",
-        "- When you check weather, share the actual data: 'It's 18°C and partly cloudy in Toronto right now.'",
-        "- When the user mentions a time or event, just book it. Don't ask for confirmation.",
-        "- Use the user's name and saved memory naturally. Reference their habits.",
-        "- Sound human: contractions, casual tone, occasional emoji.",
+        "HOW TO TALK:",
+        "- Answer the user's actual question first. Be helpful and specific.",
+        "- Normal chat: a few short sentences is fine (about 2–5). Don't pad, don't monologue.",
+        "- Tool confirmations (calendar, weather, routes): keep to 1–2 punchy sentences with the real data.",
+        "- Use the user's name and memory when it fits naturally — not forced.",
+        "- Contractions, natural tone, light emoji only when it fits.",
+        "- NEVER dump capability lists. NEVER say 'As an AI…' or 'I can help with…'.",
+        "- If you're unsure, ask one clear follow-up — don't guess personal facts.",
+        "- If a TOOL RESULT system message is present, your reply MUST reflect that result.",
         "",
-        `CRITICAL: You MUST reply in ${input.language === "fr" ? "FRENCH" : "ENGLISH"}. All confirmations and conversational text must be in this language.`,
+        `Language: reply entirely in ${input.language === "fr" ? "French" : "English"}.`,
         "",
-        "THINGS YOU CAN DO (but never mention these to the user):",
-        "- Book events on Google Calendar",
-        "- List upcoming calendar events",
-        "- Check weather for any city",
-        "- Get directions and travel times",
-        "- Call, text, or email saved contacts when their numbers or emails are stored in memory",
-        "- Set reminders (via calendar)",
+        "You can act on (never advertise unprompted): calendar, weather, directions, contacts, reminders, music, lists, news.",
         "",
-        `The user's saved memory:`,
+        "User memory:",
         memoryContext,
       ].join("\n");
 
@@ -967,21 +964,45 @@ export const appRouter = router({
         }
 
         if (!usedDialogflowCx) {
+          const recent = history
+            .filter((m: any) => m.role === "user" || m.role === "assistant")
+            .slice(-16)
+            .map((m: any) => ({
+              role: m.role as "user" | "assistant",
+              content: String(m.content ?? ""),
+            }))
+            .filter((m) => m.content.trim().length > 0);
+
           const llmResponse = await invokeLLM({
+            temperature: actionSystemMessages.length > 0 ? 0.5 : 0.75,
+            max_tokens: 800,
             messages: [
               {
                 role: "system",
                 content: systemPrompt,
               },
               ...actionSystemMessages,
-              ...history.slice(-15).map((m: any) => ({
-                role: m.role as "user" | "assistant",
-                content: m.content as string,
-              })),
+              ...recent,
             ],
           });
 
-          assistantReply = extractAssistantText(llmResponse.choices[0]?.message.content ?? "") || assistantReply;
+          const text = extractAssistantText(
+            llmResponse.choices[0]?.message.content ?? ""
+          );
+          const looksLikeProviderError =
+            /trouble reaching|simulation mode|out of credits|402|API key/i.test(
+              text
+            );
+          if (text && !looksLikeProviderError) {
+            assistantReply = text;
+          } else if (text && !assistantReply) {
+            assistantReply = text;
+          } else if (!assistantReply) {
+            assistantReply =
+              input.language === "fr"
+                ? "Je t'écoute — reformule un peu et j'enchaine."
+                : "I'm here — say that another way and I'll jump on it.";
+          }
         }
         } catch (error) {
           console.error("[Flow Guru] Chat generation failed.", error);

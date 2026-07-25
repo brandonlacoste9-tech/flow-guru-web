@@ -63,6 +63,8 @@ export type InvokeParams = {
   tool_choice?: ToolChoice;
   maxTokens?: number;
   max_tokens?: number;
+  /** Sampling temperature (chat-friendly defaults to provider default if omitted). */
+  temperature?: number;
   outputSchema?: OutputSchema;
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
@@ -423,12 +425,18 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
     responseFormat,
     response_format,
+    temperature,
+    maxTokens,
+    max_tokens,
   } = params;
 
   const basePayload: Record<string, unknown> = {
     messages: messages.map(normalizeMessage),
-    max_tokens: 4096,
+    max_tokens: maxTokens ?? max_tokens ?? 4096,
   };
+  if (typeof temperature === "number" && Number.isFinite(temperature)) {
+    basePayload.temperature = Math.min(2, Math.max(0, temperature));
+  }
 
   if (tools && tools.length > 0) {
     basePayload.tools = tools;
