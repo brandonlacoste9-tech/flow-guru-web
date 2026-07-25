@@ -7,11 +7,17 @@ import { userMemoryFacts } from './lib/drizzle/schema.js';
 
 export const config = { maxDuration: 60 };
 
-const deepseek = createOpenAICompatible({
-  name: 'deepseek',
-  baseURL: 'https://api.deepseek.com/v1',
-  apiKey: process.env.DEEPSEEK_API_KEY!,
+// Prefer xAI Grok; fall back to DeepSeek if only that key is present
+const xaiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY;
+const deepseekKey = process.env.DEEPSEEK_API_KEY;
+const chatProvider = createOpenAICompatible({
+  name: xaiKey ? 'xai' : 'deepseek',
+  baseURL: xaiKey ? 'https://api.x.ai/v1' : 'https://api.deepseek.com/v1',
+  apiKey: (xaiKey || deepseekKey)!,
 });
+const chatModelId = xaiKey
+  ? (process.env.XAI_MODEL?.trim() || 'grok-3')
+  : 'deepseek-chat';
 
 const ANONYMOUS_OPEN_ID = '__flow_guru_anonymous__';
 const normalizeMemoryText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -52,7 +58,7 @@ export default async function handler(req: Request) {
     const modelMessages = await convertToModelMessages(body.messages);
 
     const result = streamText({
-      model: deepseek('deepseek-chat'),
+      model: chatProvider(chatModelId),
       system: `You are Flow Guru, a concise voice-first personal assistant.
 Keep responses brief and conversational — they will be spoken aloud.
 Use recallMemory before answering personal questions.

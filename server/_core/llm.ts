@@ -215,6 +215,8 @@ const normalizeToolChoice = (
 };
 
 const resolveApiUrl = (type: "chat" | "embeddings") => {
+  // Prefer xAI Grok when configured
+  if (ENV.xaiApiKey && type === "chat") return "https://api.x.ai/v1/chat/completions";
   if (ENV.deepSeekApiKey && type === "chat") return "https://api.deepseek.com/v1/chat/completions";
   if (ENV.moonshotApiKey && type === "chat") return "https://api.moonshot.cn/v1/chat/completions";
 
@@ -230,8 +232,10 @@ const resolveApiUrl = (type: "chat" | "embeddings") => {
 };
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey && !ENV.deepSeekApiKey && !ENV.moonshotApiKey) {
-    throw new Error("API Key is not configured. Please set BUILT_IN_FORGE_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY.");
+  if (!ENV.xaiApiKey && !ENV.forgeApiKey && !ENV.deepSeekApiKey && !ENV.moonshotApiKey) {
+    throw new Error(
+      "API Key is not configured. Please set XAI_API_KEY (Grok), DEEPSEEK_API_KEY, MOONSHOT_API_KEY, or BUILT_IN_FORGE_API_KEY."
+    );
   }
 };
 
@@ -281,12 +285,13 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
+  const hasXai = ENV.xaiApiKey && ENV.xaiApiKey.trim().length > 0;
   const hasDeepSeek = ENV.deepSeekApiKey && ENV.deepSeekApiKey.trim().length > 0;
   const hasMoonshot = ENV.moonshotApiKey && ENV.moonshotApiKey.trim().length > 0;
   const hasForge = ENV.forgeApiKey && ENV.forgeApiKey.trim().length > 0;
 
   // --- Creative Mock Fallback ---
-  if (!hasDeepSeek && !hasMoonshot && !hasForge) {
+  if (!hasXai && !hasDeepSeek && !hasMoonshot && !hasForge) {
     console.warn("[Flow Guru] Operating in Simulation Mode (No API keys found)");
     return {
       id: "mock-" + Date.now(),
@@ -296,7 +301,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         index: 0,
         message: {
           role: "assistant",
-          content: "I'm awake! I'm currently running in **Simulation Mode** because no AI API keys (DeepSeek, Moonshot, or Forge) have been detected yet. Once you add one, I'll be able to use my full intelligence to help you!",
+          content: "I'm awake! I'm currently running in **Simulation Mode** because no AI API keys (XAI/Grok, DeepSeek, Moonshot, or Forge) have been detected yet. Once you add one, I'll be able to use my full intelligence to help you!",
         },
         finish_reason: "stop",
       }],
@@ -315,8 +320,16 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
+  const model = hasXai
+    ? ENV.xaiModel || "grok-3"
+    : hasDeepSeek
+      ? "deepseek-chat"
+      : hasMoonshot
+        ? "moonshot-v1-8k"
+        : "gemini-1.5-flash";
+
   const payload: Record<string, unknown> = {
-    model: hasDeepSeek ? "deepseek-chat" : (hasMoonshot ? "moonshot-v1-8k" : "gemini-1.5-flash"),
+    model,
     messages: messages.map(normalizeMessage),
   };
 
@@ -332,8 +345,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  // Optimize for DeepSeek if present
-  if (hasDeepSeek) {
+  // Cap completion length for chat providers
+  if (hasXai || hasDeepSeek) {
     payload.max_tokens = 4096;
   }
 
@@ -345,8 +358,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   });
 
   if (normalizedResponseFormat) {
-    // DeepSeek doesn't support json_schema — strip entirely
-    if (hasDeepSeek && normalizedResponseFormat.type === "json_schema") {
+    // DeepSeek / some gateways don't support json_schema — strip entirely
+    if (
+      (hasDeepSeek || hasXai) &&
+      normalizedResponseFormat.type === "json_schema"
+    ) {
       // Don't set response_format; rely on prompt for JSON output
     } else {
       payload.response_format = normalizedResponseFormat;
@@ -354,7 +370,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   const apiUrl = resolveApiUrl("chat");
-  const apiKey = ENV.deepSeekApiKey || ENV.moonshotApiKey || ENV.forgeApiKey;
+  const apiKey =
+    ENV.xaiApiKey || ENV.deepSeekApiKey || ENV.moonshotApiKey || ENV.forgeApiKey;
 
   try {
     const response = await fetch(apiUrl, {
