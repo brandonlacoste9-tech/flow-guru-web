@@ -291,34 +291,39 @@ type LlmProvider = {
   stripJsonSchema: boolean;
 };
 
-function resolveChatProvider(): LlmProvider | null {
+function listChatProviders(): LlmProvider[] {
+  const providers: LlmProvider[] = [];
   const xaiKey = getXaiApiKey();
   if (xaiKey) {
-    return {
+    providers.push({
       name: "xai",
       apiUrl: "https://api.x.ai/v1/chat/completions",
       apiKey: xaiKey,
       model: getXaiModel(),
       stripJsonSchema: true,
-    };
+    });
   }
-  if (ENV.deepSeekApiKey) {
-    return {
+
+  // Skip DeepSeek when unpaid / explicitly disabled — 402 is common when credits are empty
+  const skipDeepseek =
+    process.env.SKIP_DEEPSEEK === "true" || process.env.LLM_SKIP_DEEPSEEK === "true";
+  if (ENV.deepSeekApiKey && !skipDeepseek) {
+    providers.push({
       name: "deepseek",
       apiUrl: "https://api.deepseek.com/v1/chat/completions",
       apiKey: ENV.deepSeekApiKey,
       model: "deepseek-chat",
       stripJsonSchema: true,
-    };
+    });
   }
   if (ENV.moonshotApiKey) {
-    return {
+    providers.push({
       name: "moonshot",
       apiUrl: "https://api.moonshot.cn/v1/chat/completions",
       apiKey: ENV.moonshotApiKey,
       model: "moonshot-v1-8k",
       stripJsonSchema: false,
-    };
+    });
   }
   if (ENV.forgeApiKey) {
     const base =
@@ -326,15 +331,44 @@ function resolveChatProvider(): LlmProvider | null {
         ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
         : "https://forge.manus.im";
     const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
-    return {
+    providers.push({
       name: "forge",
       apiUrl: `${base}${versionPrefix}/chat/completions`,
       apiKey: ENV.forgeApiKey,
       model: "gemini-1.5-flash",
       stripJsonSchema: false,
-    };
+    });
   }
-  return null;
+  return providers;
+}
+
+function resolveChatProvider(): LlmProvider | null {
+  return listChatProviders()[0] ?? null;
+}
+
+function providerFailureHint(
+  provider: LlmProvider,
+  status: number,
+  tried: string[]
+): string {
+  if (status === 402) {
+    if (provider.name === "deepseek") {
+      return (
+        "DeepSeek returned 402 (payment / out of credits). " +
+        (getXaiApiKey()
+          ? "Grok key is present but was not used first — check logs."
+          : "Grok is not configured on this server yet. In Vercel → Environment Variables add XAI_API_KEY (and XAI_MODEL=grok-4.3), enable Production, then Redeploy.")
+      );
+    }
+    return `${provider.name} returned 402 (billing). Tried: ${tried.join(" → ")}.`;
+  }
+  if (status === 401 || status === 403) {
+    return `${provider.name} rejected the API key (${status}). Check that key in Vercel.`;
+  }
+  if (status === 429) {
+    return `${provider.name} rate-limited the request. Try again shortly.`;
+  }
+  return `Provider ${provider.name} returned ${status}. Tried: ${tried.join(" → ") || provider.name}.`;
 }
 
 async function postChatCompletions(
@@ -357,9 +391,9 @@ async function postChatCompletions(
 }
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  const provider = resolveChatProvider();
+  const providers = listChatProviders();
 
-  if (!provider) {
+  if (providers.length === 0) {
     console.warn(
       "[Flow Guru] Simulation Mode: no XAI_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY / BUILT_IN_FORGE_API_KEY"
     );
@@ -391,14 +425,13 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  const payload: Record<string, unknown> = {
-    model: provider.model,
+  const basePayload: Record<string, unknown> = {
     messages: messages.map(normalizeMessage),
     max_tokens: 4096,
   };
 
   if (tools && tools.length > 0) {
-    payload.tools = tools;
+    basePayload.tools = tools;
   }
 
   const normalizedToolChoice = normalizeToolChoice(
@@ -406,7 +439,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     tools
   );
   if (normalizedToolChoice) {
-    payload.tool_choice = normalizedToolChoice;
+    basePayload.tool_choice = normalizedToolChoice;
   }
 
   const normalizedResponseFormat = normalizeResponseFormat({
@@ -416,88 +449,99 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
   });
 
-  if (normalizedResponseFormat) {
-    if (provider.stripJsonSchema && normalizedResponseFormat.type === "json_schema") {
-      // rely on prompt
-    } else {
-      payload.response_format = normalizedResponseFormat;
-    }
-  }
+  const tried: string[] = [];
+  let lastFailure: { provider: LlmProvider; status: number; body: string } | null =
+    null;
 
-  try {
-    console.info(
-      `[Flow Guru] LLM provider=${provider.name} model=${provider.model} url=${provider.apiUrl}`
-    );
+  for (const provider of providers) {
+    const payload: Record<string, unknown> = {
+      ...basePayload,
+      model: provider.model,
+    };
 
-    let result = await postChatCompletions(provider, payload);
-
-    if (!result.ok && result.status === 400 && payload.response_format) {
-      console.warn("[Flow Guru] Retrying LLM without response_format…");
-      const retryPayload = { ...payload };
-      delete retryPayload.response_format;
-      result = await postChatCompletions(provider, retryPayload);
+    if (normalizedResponseFormat) {
+      if (provider.stripJsonSchema && normalizedResponseFormat.type === "json_schema") {
+        // rely on prompt
+      } else {
+        payload.response_format = normalizedResponseFormat;
+      }
     }
 
-    if (
-      !result.ok &&
-      provider.name === "xai" &&
-      result.status === 400 &&
-      /model/i.test(result.body) &&
-      provider.model !== "grok-4.3"
-    ) {
-      console.warn(`[Flow Guru] Retrying xAI with grok-4.3 (was ${provider.model})…`);
-      result = await postChatCompletions(provider, {
-        ...payload,
-        model: "grok-4.3",
-      });
-    }
-
-    if (!result.ok) {
-      console.error(
-        `[Flow Guru] LLM API failed (${result.status}) provider=${provider.name}:`,
-        result.body.slice(0, 400)
+    try {
+      console.info(
+        `[Flow Guru] LLM try provider=${provider.name} model=${provider.model}`
       );
-      const hint =
-        result.status === 401 || result.status === 403
-          ? "API key rejected — check XAI_API_KEY in Vercel."
-          : result.status === 429
-            ? "Rate limited — try again in a moment."
-            : `Provider ${provider.name} returned ${result.status}.`;
-      return {
-        id: "error-fallback-" + Date.now(),
-        created: Math.floor(Date.now() / 1000),
-        model: "fallback-guru-1.0",
-        choices: [{
-          index: 0,
-          message: {
-            role: "assistant",
-            content: `I'm having trouble reaching Grok right now. ${hint}`,
-          },
-          finish_reason: "stop",
-        }],
-        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      tried.push(provider.name);
+
+      let result = await postChatCompletions(provider, payload);
+
+      if (!result.ok && result.status === 400 && payload.response_format) {
+        const retryPayload = { ...payload };
+        delete retryPayload.response_format;
+        result = await postChatCompletions(provider, retryPayload);
+      }
+
+      if (
+        !result.ok &&
+        provider.name === "xai" &&
+        result.status === 400 &&
+        /model/i.test(result.body) &&
+        provider.model !== "grok-4.3"
+      ) {
+        result = await postChatCompletions(provider, {
+          ...payload,
+          model: "grok-4.3",
+        });
+      }
+
+      if (result.ok) {
+        return result.data;
+      }
+
+      lastFailure = {
+        provider,
+        status: result.status,
+        body: result.body,
+      };
+      console.error(
+        `[Flow Guru] LLM failed provider=${provider.name} status=${result.status}:`,
+        result.body.slice(0, 300)
+      );
+
+      // Billing / auth failures: try next provider
+      if ([402, 401, 403, 429].includes(result.status)) {
+        continue;
+      }
+      // Other errors: still try next if available
+      continue;
+    } catch (error) {
+      console.error(`[Flow Guru] LLM exception provider=${provider.name}:`, error);
+      lastFailure = {
+        provider,
+        status: 0,
+        body: error instanceof Error ? error.message : String(error),
       };
     }
-
-    return result.data;
-  } catch (error) {
-    console.error(`[Flow Guru] LLM API Exception provider=${provider.name}:`, error);
-    return {
-      id: "error-fallback-" + Date.now(),
-      created: Math.floor(Date.now() / 1000),
-      model: "fallback-guru-1.0",
-      choices: [{
-        index: 0,
-        message: {
-          role: "assistant",
-          content:
-            "I'm having trouble reaching Grok right now (network error). Check server logs and that XAI_API_KEY is set for this deployment.",
-        },
-        finish_reason: "stop",
-      }],
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    };
   }
+
+  const hint = lastFailure
+    ? providerFailureHint(lastFailure.provider, lastFailure.status, tried)
+    : "No LLM provider succeeded.";
+
+  return {
+    id: "error-fallback-" + Date.now(),
+    created: Math.floor(Date.now() / 1000),
+    model: "fallback-guru-1.0",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `I'm having trouble reaching an AI provider right now. ${hint}`,
+      },
+      finish_reason: "stop",
+    }],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  };
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {

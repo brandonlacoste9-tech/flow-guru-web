@@ -7,16 +7,21 @@ import { userMemoryFacts } from './lib/drizzle/schema.js';
 
 export const config = { maxDuration: 60 };
 
-// Prefer xAI Grok; fall back to DeepSeek if only that key is present
-const xaiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY;
+// Prefer xAI Grok only — do not silently fall back to DeepSeek here (402 when unpaid).
+const xaiKey =
+  process.env.XAI_API_KEY ||
+  process.env.GROK_API_KEY ||
+  process.env.XAI_KEY ||
+  process.env.GROK_KEY;
 const deepseekKey = process.env.DEEPSEEK_API_KEY;
+const useXai = Boolean(xaiKey);
 const chatProvider = createOpenAICompatible({
-  name: xaiKey ? 'xai' : 'deepseek',
-  baseURL: xaiKey ? 'https://api.x.ai/v1' : 'https://api.deepseek.com/v1',
-  apiKey: (xaiKey || deepseekKey)!,
+  name: useXai ? 'xai' : 'deepseek',
+  baseURL: useXai ? 'https://api.x.ai/v1' : 'https://api.deepseek.com/v1',
+  apiKey: (useXai ? xaiKey : deepseekKey) || '',
 });
-const chatModelId = xaiKey
-  ? (process.env.XAI_MODEL?.trim() || 'grok-4.3')
+const chatModelId = useXai
+  ? (process.env.XAI_MODEL?.trim() || process.env.GROK_MODEL?.trim() || 'grok-4.3')
   : 'deepseek-chat';
 
 const ANONYMOUS_OPEN_ID = '__flow_guru_anonymous__';
@@ -35,6 +40,16 @@ type MemoryFactRow = { id: number; factValue: string; factKey: string | null };
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
+  }
+
+  if (!xaiKey && !deepseekKey) {
+    return Response.json(
+      {
+        error:
+          'No AI API key configured. Set XAI_API_KEY (Grok) in Vercel Environment Variables and redeploy.',
+      },
+      { status: 503 }
+    );
   }
 
   try {

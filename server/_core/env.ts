@@ -6,10 +6,16 @@ const clean = (val: string | undefined) =>
 
 /** Live env reads (safe on Vercel cold starts / late dotenv load). */
 export function getXaiApiKey() {
-  return clean(process.env.XAI_API_KEY || process.env.GROK_API_KEY);
+  return clean(
+    process.env.XAI_API_KEY ||
+      process.env.GROK_API_KEY ||
+      process.env.XAI_KEY ||
+      process.env.GROK_KEY ||
+      process.env.X_AI_API_KEY
+  );
 }
 export function getXaiModel() {
-  return clean(process.env.XAI_MODEL) || "grok-4.3";
+  return clean(process.env.XAI_MODEL || process.env.GROK_MODEL) || "grok-4.3";
 }
 
 export const ENV = {
