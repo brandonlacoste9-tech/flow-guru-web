@@ -1,4 +1,4 @@
-import { ENV } from "./env";
+import { ENV, getXaiApiKey, getXaiModel } from "./env";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -294,13 +294,13 @@ type LlmProvider = {
 
 function resolveChatProvider(): LlmProvider | null {
   // Always re-read xAI key live (Vercel/env timing)
-  const xaiKey = ENV.xaiApiKey;
+  const xaiKey = getXaiApiKey();
   if (xaiKey) {
     return {
       name: "xai",
       apiUrl: "https://api.x.ai/v1/chat/completions",
       apiKey: xaiKey,
-      model: ENV.xaiModel || "grok-4.3",
+      model: getXaiModel(),
       stripJsonSchema: true,
     };
   }

@@ -5,14 +5,19 @@ import { getProviderConnection } from "./lib/db.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const user = await sdk.authenticateRequest(req);
+    let user;
+    try {
+      user = await sdk.authenticateRequest(req);
+    } catch {
+      return res.status(200).json({ connected: false, events: [] });
+    }
     if (!user) {
-      return res.status(401).json({ connected: false, events: [] });
+      return res.status(200).json({ connected: false, events: [] });
     }
 
     const connection = await getProviderConnection(user.id, "microsoft-calendar");
     if (!connection || connection.status !== "connected") {
-      return res.json({ connected: false, events: [] });
+      return res.status(200).json({ connected: false, events: [] });
     }
 
     // Compute today boundaries
@@ -38,10 +43,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.json({ connected: true, events });
   } catch (err: any) {
-    console.error("[Microsoft Calendar Events]", err.message);
-    if (err.message?.includes("reconnected") || err.message?.includes("not connected")) {
-      return res.json({ connected: false, events: [] });
-    }
-    return res.status(500).json({ connected: false, events: [], error: err.message });
+    console.error("[Microsoft Calendar Events]", err?.message || err);
+    return res.status(200).json({
+      connected: false,
+      events: [],
+      error: err?.message || "calendar_unavailable",
+    });
   }
 }

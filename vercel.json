@@ -15,7 +15,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://lh3.googleusercontent.com https://*.google.com https://img.clerk.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.elevenlabs.io https://api.openai.com https://api.x.ai https://vitals.vercel-insights.com; media-src 'self' data: blob: https://ice1.somafm.com https://ice2.somafm.com https://ice3.somafm.com https://ice4.somafm.com https://ice5.somafm.com https://api.elevenlabs.io; frame-src 'self';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com https://cdn.weglot.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.weglot.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://api.elevenlabs.io https://api.openai.com https://api.x.ai https://api.deepseek.com https://vitals.vercel-insights.com https://cdn.weglot.com https://*.weglot.com https://www.google-analytics.com https://*.googleapis.com https://*.gstatic.com wss: https:; media-src 'self' data: blob: https://ice1.somafm.com https://ice2.somafm.com https://ice3.somafm.com https://ice4.somafm.com https://ice5.somafm.com https://api.elevenlabs.io; frame-src 'self' https://js.stripe.com; worker-src 'self' blob:"
         },
         {
           "key": "Strict-Transport-Security",
@@ -35,7 +35,7 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(self), geolocation=()"
+          "value": "camera=(), microphone=(self), geolocation=(self)"
         }
       ]
     }

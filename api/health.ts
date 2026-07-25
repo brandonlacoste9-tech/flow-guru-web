@@ -7,6 +7,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     status: "live_diagnostic",
     timestamp: new Date().toISOString(),
     env_db: !!process.env.DATABASE_URL,
+    env_xai: !!(process.env.XAI_API_KEY || process.env.GROK_API_KEY),
+    env_xai_model: process.env.XAI_MODEL || "grok-4.3",
     env_deepseek: !!(process.env.DEEPSEEK_API_KEY || process.env.DeepSeek_API_KEY || process.env.DEEP_SEEK_API_KEY),
     env_moonshot: !!process.env.MOONSHOT_API_KEY,
     env_elevenlabs: !!process.env.ELEVENLABS_API_KEY,

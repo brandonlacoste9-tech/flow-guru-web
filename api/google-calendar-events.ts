@@ -5,14 +5,20 @@ import { getProviderConnection } from "./lib/db.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const user = await sdk.authenticateRequest(req);
+    let user;
+    try {
+      user = await sdk.authenticateRequest(req);
+    } catch {
+      // Not signed in / invalid session — soft-fail so the dashboard never hard-errors
+      return res.status(200).json({ connected: false, events: [] });
+    }
     if (!user) {
-      return res.status(401).json({ connected: false, events: [] });
+      return res.status(200).json({ connected: false, events: [] });
     }
 
     const connection = await getProviderConnection(user.id, "google-calendar");
     if (!connection || connection.status !== "connected") {
-      return res.json({ connected: false, events: [] });
+      return res.status(200).json({ connected: false, events: [] });
     }
 
     // Compute today boundaries in user TZ (default America/Toronto)
@@ -59,10 +65,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.json({ connected: true, events });
   } catch (err: any) {
-    console.error("[Google Calendar Events]", err.message);
-    if (err.message?.includes("reconnected") || err.message?.includes("not connected")) {
-      return res.json({ connected: false, events: [] });
-    }
-    return res.status(500).json({ connected: false, events: [], error: err.message });
+    console.error("[Google Calendar Events]", err?.message || err);
+    // Soft-fail: never break the home dashboard for calendar issues
+    return res.status(200).json({
+      connected: false,
+      events: [],
+      error: err?.message || "calendar_unavailable",
+    });
   }
 }
