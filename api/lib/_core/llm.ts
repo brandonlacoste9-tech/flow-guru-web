@@ -293,55 +293,93 @@ type LlmProvider = {
   stripJsonSchema: boolean;
 };
 
+/**
+ * Provider policy (Grok-first):
+ * - Default: **xAI Grok only** when XAI_API_KEY is set.
+ * - Fallbacks (DeepSeek / Moonshot / Forge) only if LLM_ALLOW_FALLBACKS=true
+ *   OR LLM_PROVIDER=auto with no XAI key.
+ * - LLM_PROVIDER=xai|deepseek|moonshot|forge forces a single provider.
+ */
 function listChatProviders(): LlmProvider[] {
-  const providers: LlmProvider[] = [];
-  const xaiKey = getXaiApiKey();
-  if (xaiKey) {
-    providers.push({
+  const forced = cleanProviderName(process.env.LLM_PROVIDER);
+  const allowFallbacks =
+    process.env.LLM_ALLOW_FALLBACKS === "true" || forced === "auto";
+
+  const xai: LlmProvider | null = (() => {
+    const xaiKey = getXaiApiKey();
+    if (!xaiKey) return null;
+    return {
       name: "xai",
       apiUrl: "https://api.x.ai/v1/chat/completions",
       apiKey: xaiKey,
       model: getXaiModel(),
       stripJsonSchema: true,
-    });
+    };
+  })();
+
+  const deepseek: LlmProvider | null =
+    ENV.deepSeekApiKey &&
+    process.env.SKIP_DEEPSEEK !== "true" &&
+    process.env.LLM_SKIP_DEEPSEEK !== "true"
+      ? {
+          name: "deepseek",
+          apiUrl: "https://api.deepseek.com/v1/chat/completions",
+          apiKey: ENV.deepSeekApiKey,
+          model: "deepseek-chat",
+          stripJsonSchema: true,
+        }
+      : null;
+
+  const moonshot: LlmProvider | null = ENV.moonshotApiKey
+    ? {
+        name: "moonshot",
+        apiUrl: "https://api.moonshot.cn/v1/chat/completions",
+        apiKey: ENV.moonshotApiKey,
+        model: "moonshot-v1-8k",
+        stripJsonSchema: false,
+      }
+    : null;
+
+  const forge: LlmProvider | null = ENV.forgeApiKey
+    ? (() => {
+        const base =
+          ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+            ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
+            : "https://forge.manus.im";
+        const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
+        return {
+          name: "forge" as const,
+          apiUrl: `${base}${versionPrefix}/chat/completions`,
+          apiKey: ENV.forgeApiKey,
+          model: "gemini-1.5-flash",
+          stripJsonSchema: false,
+        };
+      })()
+    : null;
+
+  if (forced && forced !== "auto") {
+    const map = { xai, deepseek, moonshot, forge } as const;
+    const one = map[forced as keyof typeof map];
+    return one ? [one] : [];
   }
 
-  // Skip DeepSeek when unpaid / explicitly disabled — 402 is common when credits are empty
-  const skipDeepseek =
-    process.env.SKIP_DEEPSEEK === "true" || process.env.LLM_SKIP_DEEPSEEK === "true";
-  if (ENV.deepSeekApiKey && !skipDeepseek) {
-    providers.push({
-      name: "deepseek",
-      apiUrl: "https://api.deepseek.com/v1/chat/completions",
-      apiKey: ENV.deepSeekApiKey,
-      model: "deepseek-chat",
-      stripJsonSchema: true,
-    });
+  // Grok-first product mode: if Grok is configured, use only Grok unless fallbacks allowed
+  if (xai && !allowFallbacks) {
+    return [xai];
   }
-  if (ENV.moonshotApiKey) {
-    providers.push({
-      name: "moonshot",
-      apiUrl: "https://api.moonshot.cn/v1/chat/completions",
-      apiKey: ENV.moonshotApiKey,
-      model: "moonshot-v1-8k",
-      stripJsonSchema: false,
-    });
-  }
-  if (ENV.forgeApiKey) {
-    const base =
-      ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-        ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
-        : "https://forge.manus.im";
-    const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
-    providers.push({
-      name: "forge",
-      apiUrl: `${base}${versionPrefix}/chat/completions`,
-      apiKey: ENV.forgeApiKey,
-      model: "gemini-1.5-flash",
-      stripJsonSchema: false,
-    });
+
+  const providers: LlmProvider[] = [];
+  if (xai) providers.push(xai);
+  if (allowFallbacks || !xai) {
+    if (deepseek) providers.push(deepseek);
+    if (moonshot) providers.push(moonshot);
+    if (forge) providers.push(forge);
   }
   return providers;
+}
+
+function cleanProviderName(val: string | undefined): string {
+  return (val ?? "").trim().toLowerCase();
 }
 
 function resolveChatProvider(): LlmProvider | null {
@@ -396,8 +434,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const providers = listChatProviders();
 
   if (providers.length === 0) {
+    const hasDeepseekOnly = Boolean(ENV.deepSeekApiKey) && !getXaiApiKey();
     console.warn(
-      "[Flow Guru] Simulation Mode: no XAI_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY / BUILT_IN_FORGE_API_KEY"
+      "[Flow Guru] No usable LLM provider. XAI configured:",
+      Boolean(getXaiApiKey()),
+      "DeepSeek present:",
+      hasDeepseekOnly
     );
     return {
       id: "mock-" + Date.now(),
@@ -407,8 +449,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         index: 0,
         message: {
           role: "assistant",
-          content:
-            "I'm in simulation mode — no AI API key is configured on this server. Set XAI_API_KEY (Grok) in Vercel Environment Variables (Production + Preview), redeploy, and try again.",
+          content: hasDeepseekOnly
+            ? "This build is Grok-first. DeepSeek is installed but disabled unless LLM_ALLOW_FALLBACKS=true. Add XAI_API_KEY (Grok) in Vercel → Environment Variables, set XAI_MODEL=grok-4.3, redeploy — then I can talk properly."
+            : "I'm offline until Grok is configured. Set XAI_API_KEY in Vercel (Production), XAI_MODEL=grok-4.3, redeploy, and try again.",
         },
         finish_reason: "stop",
       }],

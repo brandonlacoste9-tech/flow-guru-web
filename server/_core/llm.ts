@@ -294,52 +294,79 @@ type LlmProvider = {
   stripJsonSchema: boolean;
 };
 
+/**
+ * Grok-first: only xAI when XAI_API_KEY is set (unless LLM_ALLOW_FALLBACKS=true).
+ */
 function listChatProviders(): LlmProvider[] {
-  const providers: LlmProvider[] = [];
+  const forced = (process.env.LLM_PROVIDER ?? "").trim().toLowerCase();
+  const allowFallbacks =
+    process.env.LLM_ALLOW_FALLBACKS === "true" || forced === "auto";
+
   const xaiKey = getXaiApiKey();
-  if (xaiKey) {
-    providers.push({
-      name: "xai",
-      apiUrl: "https://api.x.ai/v1/chat/completions",
-      apiKey: xaiKey,
-      model: getXaiModel(),
-      stripJsonSchema: true,
-    });
-  }
+  const xai: LlmProvider | null = xaiKey
+    ? {
+        name: "xai",
+        apiUrl: "https://api.x.ai/v1/chat/completions",
+        apiKey: xaiKey,
+        model: getXaiModel(),
+        stripJsonSchema: true,
+      }
+    : null;
 
   const skipDeepseek =
     process.env.SKIP_DEEPSEEK === "true" || process.env.LLM_SKIP_DEEPSEEK === "true";
-  if (ENV.deepSeekApiKey && !skipDeepseek) {
-    providers.push({
-      name: "deepseek",
-      apiUrl: "https://api.deepseek.com/v1/chat/completions",
-      apiKey: ENV.deepSeekApiKey,
-      model: "deepseek-chat",
-      stripJsonSchema: true,
-    });
+  const deepseek: LlmProvider | null =
+    ENV.deepSeekApiKey && !skipDeepseek
+      ? {
+          name: "deepseek",
+          apiUrl: "https://api.deepseek.com/v1/chat/completions",
+          apiKey: ENV.deepSeekApiKey,
+          model: "deepseek-chat",
+          stripJsonSchema: true,
+        }
+      : null;
+
+  const moonshot: LlmProvider | null = ENV.moonshotApiKey
+    ? {
+        name: "moonshot",
+        apiUrl: "https://api.moonshot.cn/v1/chat/completions",
+        apiKey: ENV.moonshotApiKey,
+        model: "moonshot-v1-8k",
+        stripJsonSchema: false,
+      }
+    : null;
+
+  const forge: LlmProvider | null = ENV.forgeApiKey
+    ? (() => {
+        const base =
+          ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+            ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
+            : "https://forge.manus.im";
+        const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
+        return {
+          name: "forge" as const,
+          apiUrl: `${base}${versionPrefix}/chat/completions`,
+          apiKey: ENV.forgeApiKey,
+          model: "gemini-1.5-flash",
+          stripJsonSchema: false,
+        };
+      })()
+    : null;
+
+  if (forced && forced !== "auto") {
+    const map = { xai, deepseek, moonshot, forge } as const;
+    const one = map[forced as keyof typeof map];
+    return one ? [one] : [];
   }
-  if (ENV.moonshotApiKey) {
-    providers.push({
-      name: "moonshot",
-      apiUrl: "https://api.moonshot.cn/v1/chat/completions",
-      apiKey: ENV.moonshotApiKey,
-      model: "moonshot-v1-8k",
-      stripJsonSchema: false,
-    });
-  }
-  if (ENV.forgeApiKey) {
-    const base =
-      ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-        ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
-        : "https://forge.manus.im";
-    const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
-    providers.push({
-      name: "forge",
-      apiUrl: `${base}${versionPrefix}/chat/completions`,
-      apiKey: ENV.forgeApiKey,
-      model: "gemini-1.5-flash",
-      stripJsonSchema: false,
-    });
+
+  if (xai && !allowFallbacks) return [xai];
+
+  const providers: LlmProvider[] = [];
+  if (xai) providers.push(xai);
+  if (allowFallbacks || !xai) {
+    if (deepseek) providers.push(deepseek);
+    if (moonshot) providers.push(moonshot);
+    if (forge) providers.push(forge);
   }
   return providers;
 }
@@ -392,9 +419,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const providers = listChatProviders();
 
   if (providers.length === 0) {
-    console.warn(
-      "[Flow Guru] Simulation Mode: no XAI_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY / BUILT_IN_FORGE_API_KEY"
-    );
+    const hasDeepseekOnly = Boolean(ENV.deepSeekApiKey) && !getXaiApiKey();
+    console.warn("[Flow Guru] No usable LLM provider (Grok-first mode).");
     return {
       id: "mock-" + Date.now(),
       created: Math.floor(Date.now() / 1000),
@@ -403,8 +429,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         index: 0,
         message: {
           role: "assistant",
-          content:
-            "I'm in simulation mode — no AI API key is configured on this server. Set XAI_API_KEY (Grok) in Vercel Environment Variables (Production + Preview), redeploy, and try again.",
+          content: hasDeepseekOnly
+            ? "This build is Grok-first. DeepSeek is disabled unless LLM_ALLOW_FALLBACKS=true. Add XAI_API_KEY in Vercel, set XAI_MODEL=grok-4.3, redeploy."
+            : "I'm offline until Grok is configured. Set XAI_API_KEY in Vercel (Production), XAI_MODEL=grok-4.3, redeploy.",
         },
         finish_reason: "stop",
       }],

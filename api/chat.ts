@@ -7,18 +7,20 @@ import { userMemoryFacts } from './lib/drizzle/schema.js';
 
 export const config = { maxDuration: 60 };
 
-// Prefer xAI Grok only — do not silently fall back to DeepSeek here (402 when unpaid).
+// Grok-first streaming chat (DeepSeek only if LLM_ALLOW_FALLBACKS=true and no XAI key)
 const xaiKey =
   process.env.XAI_API_KEY ||
   process.env.GROK_API_KEY ||
   process.env.XAI_KEY ||
   process.env.GROK_KEY;
 const deepseekKey = process.env.DEEPSEEK_API_KEY;
+const allowFallbacks = process.env.LLM_ALLOW_FALLBACKS === 'true';
 const useXai = Boolean(xaiKey);
+const useDeepseek = !useXai && allowFallbacks && Boolean(deepseekKey);
 const chatProvider = createOpenAICompatible({
   name: useXai ? 'xai' : 'deepseek',
   baseURL: useXai ? 'https://api.x.ai/v1' : 'https://api.deepseek.com/v1',
-  apiKey: (useXai ? xaiKey : deepseekKey) || '',
+  apiKey: (useXai ? xaiKey : useDeepseek ? deepseekKey : '') || '',
 });
 const chatModelId = useXai
   ? (process.env.XAI_MODEL?.trim() || process.env.GROK_MODEL?.trim() || 'grok-4.3')
@@ -42,11 +44,11 @@ export default async function handler(req: Request) {
     return new Response('Method Not Allowed', { status: 405 });
   }
 
-  if (!xaiKey && !deepseekKey) {
+  if (!useXai && !useDeepseek) {
     return Response.json(
       {
         error:
-          'No AI API key configured. Set XAI_API_KEY (Grok) in Vercel Environment Variables and redeploy.',
+          'Grok is required. Set XAI_API_KEY (and XAI_MODEL=grok-4.3) in Vercel Environment Variables, then redeploy. DeepSeek is only used if LLM_ALLOW_FALLBACKS=true.',
       },
       { status: 503 }
     );

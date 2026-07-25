@@ -947,11 +947,11 @@ export const appRouter = router({
 
       const systemPrompt = [
         userFirstName
-          ? `You are ${assistantName}, ${userFirstName}'s personal AI companion.`
-          : `You are ${assistantName}, this user's personal AI companion.`,
+          ? `You are ${assistantName}, ${userFirstName}'s personal AI companion powered by Grok (xAI).`
+          : `You are ${assistantName}, this user's personal AI companion powered by Grok (xAI).`,
         profile?.buddyPersonality
           ? `Personality: ${profile.buddyPersonality}`
-          : "Personality: warm, sharp, a bit witty — like a capable friend who actually gets things done. Never corporate or robotic.",
+          : "Personality: warm, sharp, a bit witty — like a capable friend who actually gets things done. Never corporate or robotic. Don't name the model unless asked.",
         "",
         "HOW TO TALK:",
         "- Answer the user's actual question first. Be helpful and specific.",
