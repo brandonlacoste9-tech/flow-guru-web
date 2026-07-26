@@ -2005,7 +2005,8 @@ export function formatActionResultContext(result: AssistantActionResult | null) 
 
 export function buildActionFallbackReply(result: AssistantActionResult | null) {
   if (!result) {
-    return "I’m here with you. Tell me a little more, and I’ll help from there.";
+    // Empty on purpose — routers must not use this as a chat reply.
+    return "";
   }
 
   // action "none" is conversational — never invent a canned chat reply here

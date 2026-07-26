@@ -14,6 +14,7 @@ const dbMocks = vi.hoisted(() => ({
   resolveAssistantUserId: vi.fn(async (user: { id: number } | null, _guestDeviceId?: string | null) => user?.id ?? 1),
   touchConversationThread: vi.fn(),
   upsertUserMemoryProfile: vi.fn(),
+  getSubscriptionStatus: vi.fn(async () => ({ status: "active", plan: "pro" })),
 }));
 
 const llmMocks = vi.hoisted(() => ({
@@ -46,6 +47,7 @@ function createAuthContext(overrides?: Partial<AuthenticatedUser>): TrpcContext 
     req: {
       protocol: "https",
       headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
     } as TrpcContext["req"],
     res: {
       clearCookie: vi.fn(),
@@ -326,9 +328,25 @@ describe("assistant router", () => {
     dbMocks.listUserMemoryFacts.mockResolvedValue([]);
     dbMocks.createConversationMessage.mockResolvedValueOnce(30).mockResolvedValueOnce(31);
     dbMocks.listConversationMessages.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    // 1) orchestrator agent pick  2) optional planAssistantAction  3) chat model
     llmMocks.invokeLLM
       .mockResolvedValueOnce({
-        id: "plan-fallback",
+        id: "orchestrator",
+        created: Date.now(),
+        model: "test-model",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({ agents: [] }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        id: "plan-none",
         created: Date.now(),
         model: "test-model",
         choices: [
@@ -339,7 +357,7 @@ describe("assistant router", () => {
               role: "assistant",
               content: JSON.stringify({
                 action: "none",
-                rationale: "This is a general planning question without an external provider action.",
+                rationale: "general chat",
                 route: null,
                 weather: null,
                 news: null,
@@ -354,7 +372,7 @@ describe("assistant router", () => {
         ],
       })
       .mockRejectedValueOnce(new Error("llm unavailable"))
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         id: "extract-fallback",
         created: Date.now(),
         model: "test-model",
@@ -380,13 +398,13 @@ describe("assistant router", () => {
 
     const result = await caller.assistant.send({ message: "Help me plan tomorrow." });
 
-    expect(result.reply).toBe("I’m here with you. Tell me a little more, and I’ll help from there.");
+    expect(result.reply).toMatch(/couldn'?t reach the AI model|réessaie|try again/i);
     expect(result.memoryUpdate).toEqual({ profileUpdated: false, factsAdded: 0 });
     expect(dbMocks.createConversationMessage).toHaveBeenNthCalledWith(2, {
       threadId: 12,
       userId: ctx.user!.id,
       role: "assistant",
-      content: "I’m here with you. Tell me a little more, and I’ll help from there.",
+      content: result.reply,
     });
   });
 

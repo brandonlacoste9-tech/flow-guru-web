@@ -1036,15 +1036,19 @@ export const appRouter = router({
         console.error("[Flow Guru] ORCHESTRATION ERROR:", error);
       }
 
-      let assistantReply = buildActionFallbackReply(actionResults[0] || null);
+      // Tool results → deterministic copy. Pure chat (no tools) must go through the LLM.
+      // Never seed with buildActionFallbackReply(null) — that was the stuck line:
+      // "I'm here with you. Tell me a little more…"
+      const primaryTool = actionResults.find((r) => r.action !== "none") ?? null;
+      const isToolTurn = Boolean(primaryTool);
+      let assistantReply = isToolTurn
+        ? buildActionFallbackReply(primaryTool)
+        : "";
 
       try {
         // PERF: Dialogflow CX (optional) vs LLM for conversational replies
         let usedDialogflowCx = false;
-        if (
-          isDialogflowCxConfigured() &&
-          actionResults.length === 0
-        ) {
+        if (isDialogflowCxConfigured() && !isToolTurn) {
           const cxReply = await detectDialogflowCxReply({
             threadId,
             message: input.message,
@@ -1056,8 +1060,10 @@ export const appRouter = router({
           }
         }
 
-        if (!usedDialogflowCx) {
-          // Prefer recent turns; history already includes the user message we just saved
+        // Tool turns stay deterministic. Chat turns always call the model.
+        if (!isToolTurn && !usedDialogflowCx) {
+          const deadFallback =
+            /i'?m just chatting with you|i'?m here with you\.?\s*tell me a little more|trouble reaching an ai provider/i;
           const recent = history
             .filter((m: any) => m.role === "user" || m.role === "assistant")
             .slice(-16)
@@ -1065,7 +1071,12 @@ export const appRouter = router({
               role: m.role as "user" | "assistant",
               content: String(m.content ?? ""),
             }))
-            .filter((m) => m.content.trim().length > 0);
+            .filter((m) => {
+              const c = m.content.trim();
+              if (!c) return false;
+              if (m.role === "assistant" && deadFallback.test(c)) return false;
+              return true;
+            });
 
           const llmResponse = await invokeLLM({
             temperature: actionSystemMessages.length > 0 ? 0.5 : 0.75,
@@ -1081,26 +1092,53 @@ export const appRouter = router({
           });
 
           const text = extractAssistantText(
-            llmResponse.choices[0]?.message.content ?? ""
-          );
-          // Ignore soft provider-error copy if we already have a tool fallback
-          const looksLikeProviderError =
-            /trouble reaching|simulation mode|out of credits|402|API key/i.test(
-              text
-            );
-          if (text && !looksLikeProviderError) {
+            llmResponse.choices[0]?.message.content ?? "",
+          ).trim();
+
+          if (text) {
+            // Always surface model output — including soft provider errors
+            // (402 / missing key). Hiding them left users stuck on canned copy.
             assistantReply = text;
-          } else if (text && !assistantReply) {
-            assistantReply = text;
-          } else if (!assistantReply) {
-            assistantReply =
-              input.language === "fr"
-                ? "Je t'écoute — reformule un peu et j'enchaine."
-                : "I'm here — say that another way and I'll jump on it.";
+          }
+        } else if (isToolTurn && actionSystemMessages.length > 0) {
+          // Optional short polish for tool results only when model works;
+          // keep deterministic copy if it fails.
+          try {
+            const llmResponse = await invokeLLM({
+              temperature: 0.5,
+              max_tokens: 400,
+              messages: [
+                { role: "system", content: systemPrompt },
+                ...actionSystemMessages,
+                {
+                  role: "user",
+                  content: input.message,
+                },
+              ],
+            });
+            const text = extractAssistantText(
+              llmResponse.choices[0]?.message.content ?? "",
+            ).trim();
+            const looksLikeProviderError =
+              /trouble reaching|simulation mode|out of credits|402|API key/i.test(
+                text,
+              );
+            if (text && !looksLikeProviderError) {
+              assistantReply = text;
+            }
+          } catch {
+            /* keep deterministic tool reply */
           }
         }
       } catch (error) {
         console.error("[Flow Guru] Chat generation failed.", error);
+      }
+
+      if (!assistantReply.trim()) {
+        assistantReply =
+          input.language === "fr"
+            ? "Je n'ai pas pu joindre le modèle pour l'instant. Réessaie dans un instant — ou vérifie la clé API (Grok / DeepSeek) dans Vercel."
+            : "I couldn't reach the AI model just now. Try again in a moment — or check your Grok/DeepSeek API key (and credits) in Vercel.";
       }
 
       await createConversationMessage({
