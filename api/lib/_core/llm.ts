@@ -1,5 +1,11 @@
 import { ENV, getXaiApiKey, getXaiModel } from "./env.js";
 
+const clean = (val: string | undefined) =>
+  (val ?? "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
 export type TextContent = {
@@ -293,15 +299,30 @@ type LlmProvider = {
   stripJsonSchema: boolean;
 };
 
+/** Live DeepSeek key (don't freeze at module load — Vercel/env timing). */
+function getDeepSeekApiKey() {
+  return clean(
+    process.env.DEEPSEEK_API_KEY ||
+      process.env.DeepSeek_API_KEY ||
+      process.env.DEEP_SEEK_API_KEY ||
+      ENV.deepSeekApiKey,
+  );
+}
+
 /**
- * Provider policy (Grok-first):
- * - Default: **xAI Grok only** when XAI_API_KEY is set.
- * - Fallbacks (DeepSeek / Moonshot / Forge) only if LLM_ALLOW_FALLBACKS=true
- *   OR LLM_PROVIDER=auto with no XAI key.
- * - LLM_PROVIDER=xai|deepseek|moonshot|forge forces a single provider.
+ * Provider policy (Grok-first, DeepSeek backup when Grok missing/fails):
+ * - Prefer xAI when XAI_API_KEY is set.
+ * - If Grok is missing, always use DeepSeek when DEEPSEEK_API_KEY is set.
+ * - If Grok is set and LLM_ALLOW_FALLBACKS=true, try DeepSeek after Grok fails.
+ * - LLM_PROVIDER=xai|deepseek|moonshot|forge|auto (aliases: grok, grok-first → xai)
+ * - Invalid force names do NOT wipe the provider list.
  */
 function listChatProviders(): LlmProvider[] {
-  const forced = cleanProviderName(process.env.LLM_PROVIDER);
+  const forcedRaw = cleanProviderName(process.env.LLM_PROVIDER);
+  const forced =
+    forcedRaw === "grok" || forcedRaw === "grok-first" || forcedRaw === "x-ai"
+      ? "xai"
+      : forcedRaw;
   const allowFallbacks =
     process.env.LLM_ALLOW_FALLBACKS === "true" || forced === "auto";
 
@@ -317,59 +338,69 @@ function listChatProviders(): LlmProvider[] {
     };
   })();
 
+  const skipDeepseek =
+    process.env.SKIP_DEEPSEEK === "true" ||
+    process.env.LLM_SKIP_DEEPSEEK === "true";
+  const deepseekKey = getDeepSeekApiKey();
   const deepseek: LlmProvider | null =
-    ENV.deepSeekApiKey &&
-    process.env.SKIP_DEEPSEEK !== "true" &&
-    process.env.LLM_SKIP_DEEPSEEK !== "true"
+    deepseekKey && !skipDeepseek
       ? {
           name: "deepseek",
           apiUrl: "https://api.deepseek.com/v1/chat/completions",
-          apiKey: ENV.deepSeekApiKey,
+          apiKey: deepseekKey,
           model: "deepseek-chat",
           stripJsonSchema: true,
         }
       : null;
 
-  const moonshot: LlmProvider | null = ENV.moonshotApiKey
-    ? {
-        name: "moonshot",
-        apiUrl: "https://api.moonshot.cn/v1/chat/completions",
-        apiKey: ENV.moonshotApiKey,
-        model: "moonshot-v1-8k",
-        stripJsonSchema: false,
-      }
-    : null;
+  const moonshot: LlmProvider | null = (() => {
+    const key = clean(process.env.MOONSHOT_API_KEY || ENV.moonshotApiKey);
+    if (!key) return null;
+    return {
+      name: "moonshot",
+      apiUrl: "https://api.moonshot.cn/v1/chat/completions",
+      apiKey: key,
+      model: "moonshot-v1-8k",
+      stripJsonSchema: false,
+    };
+  })();
 
-  const forge: LlmProvider | null = ENV.forgeApiKey
-    ? (() => {
-        const base =
-          ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-            ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
-            : "https://forge.manus.im";
-        const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
-        return {
-          name: "forge" as const,
-          apiUrl: `${base}${versionPrefix}/chat/completions`,
-          apiKey: ENV.forgeApiKey,
-          model: "gemini-1.5-flash",
-          stripJsonSchema: false,
-        };
-      })()
-    : null;
+  const forge: LlmProvider | null = (() => {
+    const key = clean(process.env.BUILT_IN_FORGE_API_KEY || ENV.forgeApiKey);
+    if (!key) return null;
+    const base =
+      ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+        ? ENV.forgeApiUrl.trim().replace(/\/$/, "")
+        : "https://forge.manus.im";
+    const versionPrefix = base.endsWith("/v1") ? "" : "/v1";
+    return {
+      name: "forge" as const,
+      apiUrl: `${base}${versionPrefix}/chat/completions`,
+      apiKey: key,
+      model: "gemini-1.5-flash",
+      stripJsonSchema: false,
+    };
+  })();
+
+  const available = { xai, deepseek, moonshot, forge } as const;
 
   if (forced && forced !== "auto") {
-    const map = { xai, deepseek, moonshot, forge } as const;
-    const one = map[forced as keyof typeof map];
-    return one ? [one] : [];
+    const one = available[forced as keyof typeof available];
+    if (one) return [one];
+    // Forced provider missing key → don't return empty; fall through to whatever works
+    console.warn(
+      `[Flow Guru] LLM_PROVIDER=${forced} has no key; using available providers instead.`,
+    );
   }
 
-  // Grok-first product mode: if Grok is configured, use only Grok unless fallbacks allowed
+  // Grok only when present and fallbacks off
   if (xai && !allowFallbacks) {
     return [xai];
   }
 
   const providers: LlmProvider[] = [];
   if (xai) providers.push(xai);
+  // No Grok → always allow DeepSeek/others. With Grok + fallbacks → include them too.
   if (allowFallbacks || !xai) {
     if (deepseek) providers.push(deepseek);
     if (moonshot) providers.push(moonshot);
@@ -380,6 +411,18 @@ function listChatProviders(): LlmProvider[] {
 
 function cleanProviderName(val: string | undefined): string {
   return (val ?? "").trim().toLowerCase();
+}
+
+/** Exported for /api/health diagnostics */
+export function describeLlmProviders() {
+  const list = listChatProviders();
+  return {
+    providers: list.map((p) => ({ name: p.name, model: p.model })),
+    hasXaiKey: Boolean(getXaiApiKey()),
+    hasDeepseekKey: Boolean(getDeepSeekApiKey()),
+    allowFallbacks: process.env.LLM_ALLOW_FALLBACKS === "true",
+    llmProviderEnv: process.env.LLM_PROVIDER || null,
+  };
 }
 
 function resolveChatProvider(): LlmProvider | null {
@@ -434,12 +477,15 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const providers = listChatProviders();
 
   if (providers.length === 0) {
-    const hasDeepseekOnly = Boolean(ENV.deepSeekApiKey) && !getXaiApiKey();
+    const hasDs = Boolean(getDeepSeekApiKey());
+    const hasXai = Boolean(getXaiApiKey());
     console.warn(
-      "[Flow Guru] No usable LLM provider. XAI configured:",
-      Boolean(getXaiApiKey()),
-      "DeepSeek present:",
-      hasDeepseekOnly
+      "[Flow Guru] No usable LLM provider. XAI:",
+      hasXai,
+      "DeepSeek:",
+      hasDs,
+      "LLM_PROVIDER:",
+      process.env.LLM_PROVIDER,
     );
     return {
       id: "mock-" + Date.now(),
@@ -449,9 +495,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         index: 0,
         message: {
           role: "assistant",
-          content: hasDeepseekOnly
-            ? "This build is Grok-first. DeepSeek is installed but disabled unless LLM_ALLOW_FALLBACKS=true. Add XAI_API_KEY (Grok) in Vercel → Environment Variables, set XAI_MODEL=grok-4.3, redeploy — then I can talk properly."
-            : "I'm offline until Grok is configured. Set XAI_API_KEY in Vercel (Production), XAI_MODEL=grok-4.3, redeploy, and try again.",
+          content: !hasXai && !hasDs
+            ? "I'm offline: no AI keys on the server. In Vercel → Environment Variables add XAI_API_KEY (recommended) or DEEPSEEK_API_KEY for Production, then Redeploy."
+            : !hasXai && hasDs
+              ? "Grok key is missing and DeepSeek couldn't be selected. Set XAI_API_KEY or check DEEPSEEK_API_KEY / SKIP_DEEPSEEK in Vercel, then redeploy."
+              : "I'm offline until a chat provider is configured. Set XAI_API_KEY (Grok) in Vercel Production and redeploy.",
         },
         finish_reason: "stop",
       }],
@@ -473,8 +521,32 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     max_tokens,
   } = params;
 
+  let normalizedMessages: ReturnType<typeof normalizeMessage>[];
+  try {
+    normalizedMessages = messages.map(normalizeMessage);
+  } catch (err) {
+    console.error("[Flow Guru] Message normalize failed:", err);
+    return {
+      id: "normalize-error-" + Date.now(),
+      created: Math.floor(Date.now() / 1000),
+      model: "fallback-guru-1.0",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content:
+              "I hit a glitch reading chat history. Start a new chat and try again.",
+          },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+  }
+
   const basePayload: Record<string, unknown> = {
-    messages: messages.map(normalizeMessage),
+    messages: normalizedMessages,
     max_tokens: maxTokens ?? max_tokens ?? 4096,
   };
   if (typeof temperature === "number" && Number.isFinite(temperature)) {

@@ -1132,13 +1132,27 @@ export const appRouter = router({
         }
       } catch (error) {
         console.error("[Flow Guru] Chat generation failed.", error);
+        const msg = error instanceof Error ? error.message : String(error);
+        assistantReply =
+          input.language === "fr"
+            ? `Erreur chat: ${msg}`
+            : `Chat error: ${msg}`;
       }
 
       if (!assistantReply.trim()) {
+        // Pull live provider status so the user sees *why*, not a vague retry.
+        let diag = "";
+        try {
+          const { describeLlmProviders } = await import("./_core/llm.js");
+          const d = describeLlmProviders();
+          diag = ` (xai_key=${d.hasXaiKey ? "yes" : "NO"}, deepseek_key=${d.hasDeepseekKey ? "yes" : "NO"}, providers=${d.providers.map((p) => p.name).join("+") || "none"}, allow_fallbacks=${d.allowFallbacks})`;
+        } catch {
+          /* ignore */
+        }
         assistantReply =
           input.language === "fr"
-            ? "Je n'ai pas pu joindre le modèle pour l'instant. Réessaie dans un instant — ou vérifie la clé API (Grok / DeepSeek) dans Vercel."
-            : "I couldn't reach the AI model just now. Try again in a moment — or check your Grok/DeepSeek API key (and credits) in Vercel.";
+            ? `Je n'ai pas pu joindre le modèle.${diag} Ajoute XAI_API_KEY (Grok) dans Vercel Production, ou assure-toi que DEEPSEEK_API_KEY a des crédits, puis Redeploy.`
+            : `I couldn't reach the AI model.${diag} Add XAI_API_KEY (Grok) in Vercel → Production env, or ensure DEEPSEEK_API_KEY has credits, then Redeploy.`;
       }
 
       await createConversationMessage({

@@ -22,19 +22,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   try {
-    // Stage 1: Check Database module is loaded
     report.db_module = !!db;
-
-    // Stage 2: Check Router module is loaded
     report.router_module = !!router;
+
+    try {
+      const { describeLlmProviders, invokeLLM } = await import("./lib/_core/llm.js");
+      report.llm = describeLlmProviders();
+
+      // Optional live probe: /api/health?probe=1
+      if (req.query?.probe === "1" || req.query?.probe === "true") {
+        const t0 = Date.now();
+        const result = await invokeLLM({
+          max_tokens: 24,
+          temperature: 0,
+          messages: [
+            {
+              role: "user",
+              content: "Reply with exactly: pong",
+            },
+          ],
+        });
+        const content = result.choices?.[0]?.message?.content;
+        report.llm_probe = {
+          ok: true,
+          ms: Date.now() - t0,
+          model: result.model,
+          content:
+            typeof content === "string"
+              ? content.slice(0, 120)
+              : JSON.stringify(content).slice(0, 120),
+        };
+      }
+    } catch (e: any) {
+      report.llm_error = e?.message || String(e);
+    }
 
     res.status(200).json({ success: true, report });
   } catch (error: any) {
-    res.status(500).json({ 
-      success: false, 
-      report, 
+    res.status(500).json({
+      success: false,
+      report,
       error_message: error.message,
-      error_stack: error.stack
+      error_stack: error.stack,
     });
   }
 }

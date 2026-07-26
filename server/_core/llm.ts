@@ -294,11 +294,13 @@ type LlmProvider = {
   stripJsonSchema: boolean;
 };
 
-/**
- * Grok-first: only xAI when XAI_API_KEY is set (unless LLM_ALLOW_FALLBACKS=true).
- */
+/** Mirror of api/lib/_core/llm provider selection (keep in sync). */
 function listChatProviders(): LlmProvider[] {
-  const forced = (process.env.LLM_PROVIDER ?? "").trim().toLowerCase();
+  const forcedRaw = (process.env.LLM_PROVIDER ?? "").trim().toLowerCase();
+  const forced =
+    forcedRaw === "grok" || forcedRaw === "grok-first" || forcedRaw === "x-ai"
+      ? "xai"
+      : forcedRaw;
   const allowFallbacks =
     process.env.LLM_ALLOW_FALLBACKS === "true" || forced === "auto";
 
@@ -314,13 +316,24 @@ function listChatProviders(): LlmProvider[] {
     : null;
 
   const skipDeepseek =
-    process.env.SKIP_DEEPSEEK === "true" || process.env.LLM_SKIP_DEEPSEEK === "true";
+    process.env.SKIP_DEEPSEEK === "true" ||
+    process.env.LLM_SKIP_DEEPSEEK === "true";
+  const deepseekKey = (
+    process.env.DEEPSEEK_API_KEY ||
+    process.env.DeepSeek_API_KEY ||
+    process.env.DEEP_SEEK_API_KEY ||
+    ENV.deepSeekApiKey ||
+    ""
+  )
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
   const deepseek: LlmProvider | null =
-    ENV.deepSeekApiKey && !skipDeepseek
+    deepseekKey && !skipDeepseek
       ? {
           name: "deepseek",
           apiUrl: "https://api.deepseek.com/v1/chat/completions",
-          apiKey: ENV.deepSeekApiKey,
+          apiKey: deepseekKey,
           model: "deepseek-chat",
           stripJsonSchema: true,
         }
@@ -353,10 +366,10 @@ function listChatProviders(): LlmProvider[] {
       })()
     : null;
 
+  const available = { xai, deepseek, moonshot, forge } as const;
   if (forced && forced !== "auto") {
-    const map = { xai, deepseek, moonshot, forge } as const;
-    const one = map[forced as keyof typeof map];
-    return one ? [one] : [];
+    const one = available[forced as keyof typeof available];
+    if (one) return [one];
   }
 
   if (xai && !allowFallbacks) return [xai];
