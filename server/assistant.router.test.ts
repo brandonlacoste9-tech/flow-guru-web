@@ -387,13 +387,15 @@ describe("assistant router", () => {
 
     const result = await caller.assistant.send({ message: "Help me plan tomorrow." });
 
-    expect(result.reply).toBe("Chatting\n\nI'm just chatting with you.");
+    // When the chat model throws, surface a recovery message — not the old
+    // "I'm just chatting with you" dead-end that looked like a working reply.
+    expect(result.reply).toMatch(/couldn'?t reach the AI model|réessaie|try again/i);
     expect(result.memoryUpdate).toEqual({ profileUpdated: false, factsAdded: 0 });
     expect(dbMocks.createConversationMessage).toHaveBeenNthCalledWith(2, {
       threadId: 12,
       userId: ctx.user!.id,
       role: "assistant",
-      content: "Chatting\n\nI'm just chatting with you.",
+      content: result.reply,
     });
   });
 

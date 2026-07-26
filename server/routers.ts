@@ -889,123 +889,89 @@ export const appRouter = router({
         };
       }
 
-      let assistantReply = buildActionFallbackReply(actionResult);
+      // Tool results → deterministic copy. Pure chat (action "none") must go through LLM —
+      // never seed with "I'm just chatting with you." or the model path is a no-op.
+      const isToolAction = Boolean(
+        actionResult && actionResult.action !== "none",
+      );
+      let assistantReply = isToolAction
+        ? buildActionFallbackReply(actionResult)
+        : "";
 
-      if (actionResult && actionResult.action !== "none") {
-        // Tool confirmations should be deterministic; the LLM can otherwise
+      if (isToolAction) {
+        // Tool confirmations stay deterministic; the LLM can otherwise
         // apologize for a tool that actually ran successfully.
         assistantReply = buildActionFallbackReply(actionResult);
       } else {
         try {
-          const actionSystemMessages: Array<{ role: "system"; content: string }> = [];
+          const actionSystemMessages: Array<{ role: "system"; content: string }> =
+            [];
 
-        if (actionResult && actionResult.action !== "none") {
-          const resultJson = formatActionResultContext(actionResult);
-          if (actionResult.status === "executed") {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — YOU MUST ACKNOWLEDGE THIS IN YOUR REPLY:",
-                resultJson,
-                "",
-                "INSTRUCTION: The tool ran successfully. Your reply MUST confirm what happened using the data above.",
-                "Keep it short (1-2 sentences), warm, and enthusiastic. DO NOT ignore the tool result.",
-              ].join("\n"),
+          // PERF: Dialogflow CX (optional) vs LLM for conversational replies
+          let usedDialogflowCx = false;
+          if (isDialogflowCxConfigured()) {
+            const cxReply = await detectDialogflowCxReply({
+              threadId,
+              message: input.message,
+              language: input.language,
             });
-          } else if (actionResult.status === "needs_connection") {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — CONNECTION NEEDED:",
-                resultJson,
-                "",
-                "The user wants to do something that requires connecting an account first.",
-                "Warmly explain they need to connect the service.",
-              ].join("\n"),
-            });
-          } else if (actionResult.status === "needs_input") {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — MORE INFO NEEDED:",
-                resultJson,
-                "",
-                "The tool needs more information. Ask the user for the missing detail in a natural way.",
-              ].join("\n"),
-            });
-          } else {
-            actionSystemMessages.push({
-              role: "system" as const,
-              content: [
-                "TOOL RESULT — FAILED:",
-                resultJson,
-                "",
-                "The tool didn't work. Briefly acknowledge the issue.",
-              ].join("\n"),
-            });
+            if (cxReply) {
+              assistantReply = cxReply;
+              usedDialogflowCx = true;
+            }
           }
-        }
 
-        // PERF: Dialogflow CX (optional) vs LLM for conversational replies
-        let usedDialogflowCx = false;
-        if (
-          isDialogflowCxConfigured() &&
-          (!actionResult || actionResult.action === "none")
-        ) {
-          const cxReply = await detectDialogflowCxReply({
-            threadId,
-            message: input.message,
-            language: input.language,
-          });
-          if (cxReply) {
-            assistantReply = cxReply;
-            usedDialogflowCx = true;
+          if (!usedDialogflowCx) {
+            // Drop the stuck legacy fallback lines from context so they don't
+            // train the model (or us) into a dead loop.
+            const deadFallback =
+              /i'?m just chatting with you|trouble reaching an ai provider/i;
+            const recent = history
+              .filter((m: any) => m.role === "user" || m.role === "assistant")
+              .slice(-16)
+              .map((m: any) => ({
+                role: m.role as "user" | "assistant",
+                content: String(m.content ?? ""),
+              }))
+              .filter((m) => {
+                const c = m.content.trim();
+                if (!c) return false;
+                if (m.role === "assistant" && deadFallback.test(c)) return false;
+                return true;
+              });
+
+            const llmResponse = await invokeLLM({
+              temperature: 0.75,
+              max_tokens: 800,
+              messages: [
+                {
+                  role: "system",
+                  content: systemPrompt,
+                },
+                ...actionSystemMessages,
+                ...recent,
+              ],
+            });
+
+            const text = extractAssistantText(
+              llmResponse.choices[0]?.message.content ?? "",
+            ).trim();
+
+            if (text) {
+              // Always surface model output — including soft provider errors
+              // (402 / missing key). Hiding them left users stuck on a dead phrase.
+              assistantReply = text;
+            }
           }
-        }
-
-        if (!usedDialogflowCx) {
-          const recent = history
-            .filter((m: any) => m.role === "user" || m.role === "assistant")
-            .slice(-16)
-            .map((m: any) => ({
-              role: m.role as "user" | "assistant",
-              content: String(m.content ?? ""),
-            }))
-            .filter((m) => m.content.trim().length > 0);
-
-          const llmResponse = await invokeLLM({
-            temperature: actionSystemMessages.length > 0 ? 0.5 : 0.75,
-            max_tokens: 800,
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt,
-              },
-              ...actionSystemMessages,
-              ...recent,
-            ],
-          });
-
-          const text = extractAssistantText(
-            llmResponse.choices[0]?.message.content ?? ""
-          );
-          const looksLikeProviderError =
-            /trouble reaching|simulation mode|out of credits|402|API key/i.test(
-              text
-            );
-          if (text && !looksLikeProviderError) {
-            assistantReply = text;
-          } else if (text && !assistantReply) {
-            assistantReply = text;
-          } else if (!assistantReply) {
-            assistantReply =
-              input.language === "fr"
-                ? "Je t'écoute — reformule un peu et j'enchaine."
-                : "I'm here — say that another way and I'll jump on it.";
-          }
-        }
         } catch (error) {
           console.error("[Flow Guru] Chat generation failed.", error);
+        }
+
+        if (!assistantReply.trim()) {
+          assistantReply =
+            input.language === "fr"
+              ? "Je n'ai pas pu joindre le modèle pour l'instant. Réessaie dans un instant — ou vérifie la clé API (Grok / DeepSeek) dans Vercel."
+              : "I couldn't reach the AI model just now. Try again in a moment — or check your Grok/DeepSeek API key (and credits) in Vercel.";
         }
       }
 
