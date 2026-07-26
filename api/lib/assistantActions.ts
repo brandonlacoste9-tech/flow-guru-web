@@ -10,7 +10,7 @@ import {
   createMicrosoftCalendarEvent,
   listMicrosoftCalendarEvents,
 } from "./_core/microsoftCalendar.js";
-import { invokeLLM } from "./_core/llm.js";
+import { getChoiceText, invokeLLM } from "./_core/llm.js";
 import { isVertexSearchConfigured, searchKnowledgeBase } from "./_core/vertexSearch.js";
 import { DirectionsResult, GeocodingResult, makeRequest, type TravelMode } from "./_core/map.js";
 
@@ -576,7 +576,7 @@ export async function planAssistantAction(params: {
     ],
   });
 
-  const raw = extractTextContent(response.choices[0]?.message.content ?? "");
+  const raw = getChoiceText(response) || extractTextContent(response?.choices?.[0]?.message?.content ?? "");
   try {
     fs.appendFileSync("server_debug.log", `[${new Date().toISOString()}] Planner Raw: ${raw}\n`);
   } catch (e) {}
@@ -758,7 +758,7 @@ async function resolveCalendarDetails(params: {
       },
     });
 
-    const raw = extractTextContent(response.choices[0]?.message.content ?? "");
+    const raw = getChoiceText(response) || extractTextContent(response?.choices?.[0]?.message?.content ?? "");
     const parsed = calendarResolutionSchema.safeParse(JSON.parse(raw || "{}"));
     if (parsed.success) {
       return parsed.data;

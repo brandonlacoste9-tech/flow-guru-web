@@ -454,6 +454,63 @@ function providerFailureHint(
   return `Provider ${provider.name} returned ${status}. Tried: ${tried.join(" → ") || provider.name}.`;
 }
 
+/** Safe extract of assistant text from any InvokeResult-like payload. */
+export function getChoiceText(
+  result: InvokeResult | null | undefined,
+): string {
+  try {
+    const content = result?.choices?.[0]?.message?.content;
+    if (typeof content === "string") return content.trim();
+    if (Array.isArray(content)) {
+      return content
+        .map((part) =>
+          part && typeof part === "object" && "text" in part
+            ? String((part as { text?: string }).text ?? "")
+            : "",
+        )
+        .join("\n")
+        .trim();
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function ensureInvokeResult(
+  data: InvokeResult,
+  provider: LlmProvider,
+): InvokeResult {
+  if (!data || typeof data !== "object") {
+    return {
+      id: "empty-" + Date.now(),
+      created: Math.floor(Date.now() / 1000),
+      model: provider.model,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: "" },
+          finish_reason: "stop",
+        },
+      ],
+    };
+  }
+  if (!Array.isArray(data.choices) || data.choices.length === 0) {
+    return {
+      ...data,
+      model: data.model || provider.model,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: "" },
+          finish_reason: "stop",
+        },
+      ],
+    };
+  }
+  return data;
+}
+
 async function postChatCompletions(
   provider: LlmProvider,
   payload: Record<string, unknown>
@@ -470,7 +527,20 @@ async function postChatCompletions(
     const body = await response.text();
     return { ok: false, status: response.status, body };
   }
-  return { ok: true, data: (await response.json()) as InvokeResult };
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch (err) {
+    return {
+      ok: false,
+      status: 502,
+      body: `Invalid JSON from ${provider.name}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  return {
+    ok: true,
+    data: ensureInvokeResult(raw as InvokeResult, provider),
+  };
 }
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
@@ -618,7 +688,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       }
 
       if (result.ok) {
-        return result.data;
+        // Always return a shape with choices[0] so callers never crash on [0]
+        return ensureInvokeResult(result.data, provider);
       }
 
       lastFailure = {

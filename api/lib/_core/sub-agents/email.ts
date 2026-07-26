@@ -41,7 +41,7 @@ export class EmailAgent extends BaseAgent {
       tool_choice: "auto",
     });
 
-    const toolCall = response.choices[0]?.message.tool_calls?.[0];
+    const toolCall = response?.choices?.[0]?.message?.tool_calls?.[0];
     if (toolCall && toolCall.function.name === "sendEmail") {
       const args = JSON.parse(toolCall.function.arguments);
       
@@ -65,7 +65,7 @@ export class EmailAgent extends BaseAgent {
       action: "none",
       status: "executed",
       title: "Email Drafted",
-      summary: response.choices[0]?.message.content as string || "I've prepared the draft for you.",
+      summary: (response?.choices?.[0]?.message?.content as string) || "I've prepared the draft for you.",
     };
   }
 }

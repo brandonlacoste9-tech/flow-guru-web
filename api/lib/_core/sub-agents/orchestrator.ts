@@ -4,7 +4,7 @@ import { CommunicationAgent } from "./communication.js";
 import { ResearchAgent } from "./research.js";
 import { EmailAgent } from "./email.js";
 import { BaseAgent, AgentContext } from "./base.js";
-import { invokeLLM, Message } from "../llm.js";
+import { getChoiceText, invokeLLM, Message } from "../llm.js";
 import { AssistantActionResult } from "../../assistantActions.js";
 
 export class MasterOrchestrator {
@@ -45,8 +45,7 @@ If no agent fits, return { "agents": [] }.`,
       response_format: { type: "json_object" }
     });
 
-    const rawContent = identificationResponse.choices[0]?.message.content;
-    const contentText = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+    const contentText = getChoiceText(identificationResponse) || "{}";
     
     let agentNames: string[] = [];
     try {

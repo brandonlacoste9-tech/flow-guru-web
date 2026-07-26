@@ -42,7 +42,7 @@ export class CommunicationAgent extends BaseAgent {
       tool_choice: "auto",
     });
 
-    const toolCall = response.choices[0]?.message.tool_calls?.[0];
+    const toolCall = response?.choices?.[0]?.message?.tool_calls?.[0];
     if (toolCall && toolCall.function.name === "sendPush") {
       const args = JSON.parse(toolCall.function.arguments);
       await sendPushNotification(context.userId, {
@@ -97,7 +97,7 @@ export class CommunicationAgent extends BaseAgent {
       response_format: { type: "json_object" }
     });
 
-    const raw = response.choices[0]?.message.content;
+    const raw = response?.choices?.[0]?.message?.content;
     const result = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw));
 
     if (result.shouldNudge) {

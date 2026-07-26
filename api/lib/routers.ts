@@ -3,7 +3,7 @@ import { displayFirstName } from "../../shared/userDisplay.js";
 import fs from "fs";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies.js";
-import { invokeLLM, type Tool, type ToolCall } from "./_core/llm.js";
+import { getChoiceText, invokeLLM, type Tool, type ToolCall } from "./_core/llm.js";
 import { systemRouter } from "./_core/systemRouter.js";
 import { protectedProcedure, publicProcedure, router, rateLimitedProcedure, protectedRateLimitedProcedure } from "./_core/trpc.js";
 import {
@@ -443,13 +443,7 @@ async function extractAndPersistMemory(params: {
     },
   });
   
-  const rawContent = extractionResponse.choices[0]?.message.content;
-  const extractionText =
-    typeof rawContent === "string"
-      ? rawContent
-      : rawContent
-          .map(part => (part.type === "text" && "text" in part ? part.text : ""))
-          .join("\n");
+  const extractionText = getChoiceText(extractionResponse);
 
   // Robust JSON Extraction
   let jsonString = extractionText;
@@ -1091,9 +1085,7 @@ export const appRouter = router({
             ],
           });
 
-          const text = extractAssistantText(
-            llmResponse.choices[0]?.message.content ?? "",
-          ).trim();
+          const text = getChoiceText(llmResponse);
 
           if (text) {
             // Always surface model output — including soft provider errors
@@ -1116,9 +1108,7 @@ export const appRouter = router({
                 },
               ],
             });
-            const text = extractAssistantText(
-              llmResponse.choices[0]?.message.content ?? "",
-            ).trim();
+            const text = getChoiceText(llmResponse);
             const looksLikeProviderError =
               /trouble reaching|simulation mode|out of credits|402|API key/i.test(
                 text,
