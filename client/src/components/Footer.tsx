@@ -40,13 +40,19 @@ export function Footer() {
               <a href="https://github.com/brandonlacoste9-tech/flow-guru-web" target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                 <Globe size={12} /> GitHub
               </a>
+              <a
+                href="https://hublife.ca/?from=network&via=floguru&utm_source=north_network&utm_medium=cross_app&utm_campaign=floguru_home"
+                className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"
+              >
+                <Globe size={12} /> HubLife · North Network
+              </a>
             </div>
           </div>
         </div>
       </div>
       <div className="mt-12 text-center">
         <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-[0.2em]">
-          © {currentYear} Flow Guru AI. Built with Soul & Intelligence.
+          © {currentYear} Flow Guru AI · Part of North Network
         </p>
       </div>
     </footer>
